@@ -8,8 +8,8 @@ class WZYNetEssay(BasicNN):
 
     required_shape = (256, 256)
 
-    def __init__(self, input_channel, base_channel, out_features, device='cpu', kernel_size=3,
-                 bn_momen=0.95):
+    def __init__(self, input_channel, base_channel, out_features, device='cpu', kernel_size=3, bn_momen=0.95,
+                 init_meth='normal', with_checkpoint=False):
         layers = [
             # cl.Reshape(WZYNetEssay.required_shape),
             nn.Conv2d(input_channel, base_channel, kernel_size=kernel_size, stride=2, padding=1),
@@ -39,4 +39,4 @@ class WZYNetEssay(BasicNN):
             # ('dense', nn.Linear(out_features[0] + out_features[1], out_features[0])),
             # ('softmax', nn.Softmax(dim=1))
         ]
-        super().__init__(device, *layers)
+        super().__init__(device, init_meth, with_checkpoint, *layers)

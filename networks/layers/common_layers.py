@@ -50,20 +50,20 @@ class Reshape(nn.Module):
 
 
 class DualOutputLayer(nn.Module):
-
-    def __init__(self, in_features, fir_out, sec_out, dropout_rate=0.,
+    # TODO：改为多通道输出
+    def __init__(self, in_features, fir_out, sec_out, dropout_rate=0., init_meth='normal',
                  momentum=0.) -> None:
         super().__init__()
         fir = nn.Sequential(
-            *self.__get_layers__(in_features, fir_out, dropout=dropout_rate,
-                                 momentum=momentum)
+            *self.__get_layers(in_features, fir_out, dropout=dropout_rate,
+                               momentum=momentum)
         )
         sec = nn.Sequential(
-            *self.__get_layers__(in_features, sec_out, dropout=dropout_rate,
-                                 momentum=momentum)
+            *self.__get_layers(in_features, sec_out, dropout=dropout_rate,
+                               momentum=momentum)
         )
-        fir.apply(tools.init_wb)
-        sec.apply(tools.init_wb)
+        fir.apply(tools.init_wb(init_meth))
+        sec.apply(tools.init_wb(init_meth))
         self.add_module('fir', fir)
         self.add_module('sec', sec)
 
@@ -80,8 +80,8 @@ class DualOutputLayer(nn.Module):
         sec_out = self[1](feature_batch_es[1])
         return torch.hstack((fir_out, sec_out))
 
-    def __get_layers__(self, in_features: int, out_features: int, dropout=0.,
-                       momentum=0.) -> List[nn.Module]:
+    def __get_layers(self, in_features: int, out_features: int, dropout=0.,
+                     momentum=0.) -> List[nn.Module]:
         assert in_features > 0 and out_features > 0, '输入维度与输出维度均需大于0'
         # layers = [nn.BatchNorm1d(in_features)]
         # # 构造一个三层感知机

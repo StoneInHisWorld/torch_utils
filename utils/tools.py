@@ -129,8 +129,8 @@ def init_wb(func_str: str = 'xavier'):
     """
     assert func_str in init_funcs, f'不支持的初始化方式{func_str}, 当前支持的初始化方式包括{init_funcs}'
     if func_str == 'normal':
-        w_init = lambda m: nn.init.normal_(m.weight, 0, 1)
-        b_init = lambda m: nn.init.normal_(m.bias, 0, 1)
+        w_init = lambda m: init.normal_(m, 0, 1)
+        b_init = lambda m: init.normal_(m, 0, 1)
     elif func_str == 'xavier':
         w_init, b_init = init.xavier_uniform_, init.zeros_
     else:
