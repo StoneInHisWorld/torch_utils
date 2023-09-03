@@ -207,7 +207,7 @@ class BasicNN(nn.Sequential):
         metric = Accumulator(3)
         for features, labels in test_iter:
             preds = self(features)
-            metric.add(loss(preds, labels), acc_func(preds, labels), len(features))
+            metric.add(acc_func(preds, labels), loss(preds, labels), len(features))
         return metric[0] / metric[2], metric[1] / metric[2]
 
     @torch.no_grad()

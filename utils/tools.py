@@ -59,7 +59,7 @@ def try_gpu(i=0):
     return torch.device('cpu')
 
 
-def permutation(res, *args):
+def permutation(res: list, *args):
     """
     生成超参数列表。
     :param res: 结果列表。每个输出的列表都以`res`为前缀。
