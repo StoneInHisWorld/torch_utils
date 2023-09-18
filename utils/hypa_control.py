@@ -10,7 +10,7 @@ from utils.tools import permutation
 
 class ControlPanel:
 
-    def __init__(self, hypa_config_path: str, runtime_config_path: str, datasource, log_path: str = None):
+    def __init__(self, datasource, hypa_config_path: str, runtime_config_path: str, log_path: str = None):
         self.__rcp = runtime_config_path
         self.__hcp = hypa_config_path
         self.__lp = log_path
