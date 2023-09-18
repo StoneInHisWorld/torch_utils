@@ -20,9 +20,10 @@ def single_argmax_accuracy(Y_HAT: torch.Tensor, Y: torch.Tensor) -> float:
 
 
 def split_real_data(features: torch.Tensor, labels: torch.Tensor, train, test, valid=.0,
-               shuffle=True):
+                    shuffle=True, requires_id=False):
     """
     分割数据集为训练集、测试集、验证集（可选）
+    :param requires_id: 是否在数据每条样本前贴上ID
     :param shuffle: 是否打乱数据集
     :param labels: 标签集
     :param features: 特征集
@@ -31,22 +32,24 @@ def split_real_data(features: torch.Tensor, labels: torch.Tensor, train, test, v
     :param valid: 验证集比例
     :return: （训练特征集，训练标签集），（验证特征集，验证标签集），（测试特征集，测试标签集）
     """
-    warnings.warn('分割真实数据集由于设计对大量数据的操作，很容易发生内存溢出，因此建议不要使用本函数！'
+    warnings.warn('分割真实数据集由于涉及对大量数据的操作，很容易发生内存溢出，因此建议不要使用本函数！'
                   '请使用split_data()以获得索引切分，节省计算量以及内存使用', DeprecationWarning)
     assert train + test + valid == 1.0, '训练集、测试集、验证集比例之和须为1'
     data_len = features.shape[0]
     train_len = int(data_len * train)
     valid_len = int(data_len * valid)
     test_len = int(data_len * test)
-    # # 将高维特征数据打上id
-    # features_ids = np.array([
-    #     np.ones((1, *self.__features__.shape[2:])) * i
-    #     for i in range(data_len)
-    # ])
-    # self.__features__ = np.concatenate((features_ids, self.__features__), 1)
+    # 将高维特征数据打上id
+    if requires_id:
+        features_ids = torch.tensor([
+            np.ones((1, features.shape[2:])) * i
+            for i in range(data_len)
+        ])
+        features = torch.cat((features_ids, features), 1)
+        del features_ids
     # 数据集打乱
     if shuffle:
-        index = torch.randint(0, data_len, (data_len, ))
+        index = torch.randint(0, data_len, (data_len,))
         features = features[index]
         labels = labels[index]
     # 数据集分割
@@ -59,6 +62,7 @@ def split_real_data(features: torch.Tensor, labels: torch.Tensor, train, test, v
 def split_data(dataset: DataSet or LazyDataSet, train=0.8, test=0.2, valid=.0, shuffle=True):
     """
     分割数据集为训练集、测试集、验证集
+    :param shuffle: 每次提供的索引是否随机
     :param dataset: 分割数据集
     :param train: 训练集比例
     :param test: 测试集比例
@@ -188,7 +192,7 @@ def k_fold_split(dataset: DataSet or LazyDataSet, k: int = 10, shuffle: bool = T
     assert k > 1, f'k折验证需要k值大于1，而不是{k}'
     data_len = len(dataset)
     fold_size = len(dataset) // k
-    total_ranger = np.random.randint(0, data_len, (data_len, )) if shuffle else np.arange(data_len)
+    total_ranger = np.random.randint(0, data_len, (data_len,)) if shuffle else np.arange(data_len)
     for i in range(k):
         train_range1, valid_range, train_range2 = np.split(
             total_ranger,

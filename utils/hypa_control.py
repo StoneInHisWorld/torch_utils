@@ -1,7 +1,7 @@
 import json
 import time
+import pandas as pd
 
-import torch
 from torchsummary import summary
 
 from utils import tools
@@ -16,18 +16,23 @@ class ControlPanel:
         self.__lp = log_path
         self.__datasource = datasource
         self.__extra_lm = {}
-
+        # 读取运行配置
         with open(self.__rcp, 'r') as config:
             config_dict = json.load(config)
             self.__rck = config_dict.keys()
             for k, v in config_dict.items():
                 setattr(self, k, v)
-        # with open(hypa_config_path, 'r') as config:
-        #     self.__hck = json.load(config).keys()
-        #     for k, v in json.load(config):
-        #         setattr(self, k, v)
-        # with open(hypa_config_path, 'r', encoding='utf-8') as config:
-        #     hypa_s_to_select = json.load(config).values()
+        # 读取实验编号
+        try:
+            log = pd.read_csv(self.__lp)
+            try:
+                self.exp_no = log.iloc[-1]['exp_no'] + 1
+            except:
+                self.exp_no = 1
+        except Exception as e:
+            # TODO: 处理未创建文件错误
+            print('日志文件尚未找到！')
+            pass
 
     def __iter__(self):
         # TODO：提供超参数
@@ -36,8 +41,6 @@ class ControlPanel:
             for hps in permutation([], *hyper_params.values()):
                 hyper_params = {k: v for k, v in zip(hyper_params.keys(), hps)}
                 yield Trainer(hyper_params, self.__lp)
-                # self.__write_log(**dict.fromkeys(hyper_params.keys() + 'duration',
-                #                                  hps.append(time_span)))
                 self.__read_running_config()
 
     def __read_running_config(self):
@@ -46,15 +49,16 @@ class ControlPanel:
             assert config_dict.keys() == self.__rck, '在运行期间，不允许添加新的运行设置参数！'
             for k, v in config_dict.items():
                 setattr(self, k, v)
-            # self.data_portion, self.random_seed, self.pic_mute, self.print_net, self.device = \
-            #     json.load(config).values()
+        # 更新实验编号
+        self.exp_no += 1
 
     def list_net(self, net, input_size, batch_size):
         assert hasattr(self, "print_net"), '设置文件中不存在"print_net"参数！'
-        try:
-            summary(net, input_size=input_size, batch_size=batch_size)
-        except RuntimeError as _:
-            print(net)
+        if self.print_net:
+            try:
+                summary(net, input_size=input_size, batch_size=batch_size)
+            except RuntimeError as _:
+                print(net)
 
     def plot_history(self, history, xlabel='num_epochs', ylabel='loss', title=None, save_path=None):
         assert hasattr(self, 'pic_mute'), '配置文件中缺少参数"pic_mute"'
@@ -71,6 +75,20 @@ class ControlPanel:
         assert hasattr(self, "device"), '设置文件中不存在"device"参数！'
         return self.device
 
+    @property
+    def running_randomseed(self):
+        assert hasattr(self, "random_seed"), '设置文件中不存在"random_seed"参数！'
+        return self.random_seed
+
+    @property
+    def running_dataportion(self):
+        assert hasattr(self, "data_portion"), '设置文件中不存在"data_portion"参数！'
+        return self.data_portion
+
+    @property
+    def running_expno(self):
+        assert hasattr(self, "exp_no"), '设置文件中不存在"exp_no"参数！'
+        return self.exp_no
 
 class Trainer:
 
@@ -89,7 +107,7 @@ class Trainer:
             print(f'exc_val: {exc_val}')
         time_span = time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start))
         self.__hp.update({'exc_val': exc_val, "duration": time_span})
-        if self.__lp is not None:
+        if self.__lp is not None and exc_type != KeyboardInterrupt:
             self.__write_log(**self.__hp)
 
     def __write_log(self, **kwargs):
@@ -97,5 +115,7 @@ class Trainer:
         kwargs.update(self.__extra_lm)
         tools.write_log(self.__lp, **kwargs)
 
-    def add_logMsg(self, **kwargs):
+    def add_logMsg(self, mute=True, **kwargs):
         self.__extra_lm = kwargs
+        if not mute:
+            print(self.__extra_lm)

@@ -1,3 +1,4 @@
+import os.path
 import random
 
 import PIL.Image
@@ -39,6 +40,8 @@ def plot_history(history, mute=False, title=None, xlabel=None,
         plt.ylabel(ylabel)
     if title:
         plt.title(title)
+    if not os.path.exists(os.path.dirname(savefig_as)):
+        os.mkdir(os.path.dirname(savefig_as))
     if savefig_as:
         plt.savefig(savefig_as)
     plt.legend()

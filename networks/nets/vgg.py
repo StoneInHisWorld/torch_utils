@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from typing import Tuple
 
+import networks.layers.multi_output
 from networks.basic_nn import BasicNN
 import networks.layers.common_layers as cl
 
@@ -33,8 +34,8 @@ class VGG(BasicNN):
             nn.Dropout(0.5),
             nn.Linear(4096, 4096), nn.ReLU(),
             nn.Dropout(0.5),
-            cl.DualOutputLayer(4096, out_feature[0], out_feature[1],
-                               dropout_rate=0.5, momentum=0.95)
+            networks.layers.multi_output.DualOutputLayer(4096, out_feature[0], out_feature[1],
+                                                         dropout_rate=0.5, momentum=0.95)
         ]
         super().__init__(device, *conv_blks)
 
