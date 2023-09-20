@@ -1,18 +1,47 @@
+import math
 import warnings
 from typing import List
 
+import numpy as np
 import torch
 from torch import nn
 
 from utils import tools as tools
 
 
+def mlp(in_features, out_features, base=2, bn_momen=0., dropout=0.) -> List[nn.Module]:
+    layers = []
+    # 计算过渡层维度
+    trans_layer_sizes = np.logspace(
+        math.log(in_features, base),
+        math.log(out_features, base),
+        int(math.log(abs(in_features - out_features), base)),
+        base=base
+    )
+    trans_layer_sizes = list(map(int, trans_layer_sizes))
+    # 保证头尾两元素符合输入输出
+    trans_layer_sizes = [in_features, *trans_layer_sizes[1: -1], out_features] \
+        if len(trans_layer_sizes) > 2 else [in_features, out_features]
+    # 对于每个layer_size加入全连接层、BN层以及Dropout层
+    for i in range(len(trans_layer_sizes) - 1):
+        in_size, out_size = trans_layer_sizes[i], trans_layer_sizes[i + 1]
+        layers.append(nn.Linear(in_size, out_size))
+        layers.append(
+            nn.BatchNorm1d(out_size, momentum=bn_momen)
+        )
+        layers.append(nn.LeakyReLU())
+        if dropout > 0.:
+            layers.append(nn.Dropout())
+    return layers
+
+
 def linear_output(in_features: int, out_features: int,
-                  softmax=True, batch_norm=True, mlp=False,
-                  dropout=0., momentum=0.) -> List[nn.Module]:
+                  softmax=True, batch_norm=True, get_mlp=False,
+                  dropout=0., bn_momen=0.) -> List[nn.Module]:
     assert in_features > 0 and out_features > 0, '输入维度与输出维度均需大于0'
-    layers = [nn.Flatten(), nn.BatchNorm1d(in_features, momentum=momentum)] if batch_norm else [nn.Flatten()]
-    layers += [nn.Linear(in_features, out_features)] if mlp else [nn.Linear(in_features, out_features)]
+    layers = [nn.Flatten(), nn.BatchNorm1d(in_features, momentum=bn_momen)] if batch_norm else [nn.Flatten()]
+    layers += [nn.Linear(in_features, out_features)] if get_mlp \
+        else mlp(in_features, out_features, bn_momen=bn_momen, dropout=dropout)
     if dropout > 0:
         layers.append(nn.Dropout(dropout))
     if softmax:
@@ -95,10 +124,10 @@ class DualOutputLayer(nn.Module):
 
 class MultiOutputLayer(nn.Module):
 
-    def __init__(self, in_features,
+    def __init__(self, in_features, out_or_strategy: List,
                  init_meth='normal', self_defined=False,
                  dropout_rate=0., momentum=0.,
-                 *out_or_strategy) -> None:
+                 ) -> None:
         """
         多通道输出层。将单通道输入扩展为多通道输出。
         :param in_features: 输入特征列数。
@@ -111,7 +140,7 @@ class MultiOutputLayer(nn.Module):
         super().__init__()
         self.in_features = in_features
         self._paths = [
-            nn.Sequential(*linear_output(in_features, o, dropout=dropout_rate, momentum=momentum))
+            nn.Sequential(*linear_output(in_features, o, dropout=dropout_rate, bn_momen=momentum))
             for o in out_or_strategy
         ] if not self_defined else [
             nn.Sequential(*s)
@@ -122,47 +151,8 @@ class MultiOutputLayer(nn.Module):
             self.add_module(f'path{i}', p)
 
     def forward(self, features):
-        # in_features_es = [
-        #     child[2].in_features for _, child in self
-        # ]
-        # batch_size = len(features)
-        # feature_batch_es = [
-        #     features.reshape((batch_size, in_fea))
-        #     for in_fea in in_features_es
-        # ]
         outs = [m(features) for _, m in self]
         return torch.hstack(outs)
-
-    # def __get_layers(self, in_features: int, out_features: int, dropout=0.,
-    #                  momentum=0.) -> List[nn.Module]:
-    #     assert in_features > 0 and out_features > 0, '输入维度与输出维度均需大于0'
-    #     # layers = [nn.BatchNorm1d(in_features)]
-    #     # # 构造一个三层感知机
-    #     # trans_layer_sizes = [in_features, (in_features + out_features) // 2, out_features]
-    #     # # 对于每个layer_size加入全连接层、BN层以及Dropout层
-    #     # for i in range(len(trans_layer_sizes) - 1):
-    #     #     in_size, out_size = trans_layer_sizes[i], trans_layer_sizes[i + 1]
-    #     #     layers += [
-    #     #         nn.Linear(in_size, out_size),
-    #     #         # nn.BatchNorm1d(out_size, momentum=momentum),
-    #     #         nn.LeakyReLU()
-    #     #     ]
-    #     #     if dropout > 0.:
-    #     #         layers.append(nn.Dropout())
-    #     # # 去掉最后的Dropout层
-    #     # if type(layers[-1]) == nn.Dropout:
-    #     #     layers.pop(-1)
-    #     # # 将最后的激活函数换成Softmax
-    #     # layers.pop(-1)
-    #     # 加入Softmax层
-    #     layers = [
-    #         nn.Flatten(),
-    #         nn.Linear(in_features, out_features)
-    #     ]
-    #     if dropout > 0:
-    #         layers.append(nn.Dropout(dropout))
-    #     layers.append(nn.Softmax(dim=1))
-    #     return layers
 
     def __iter__(self):
         return self.named_children()
@@ -171,4 +161,4 @@ class MultiOutputLayer(nn.Module):
         children = self.named_children()
         for _ in range(item):
             next(children)
-        return next(children)[1] # next()得到的是（名字，模块）
+        return next(children)[1]  # next()得到的是（名字，模块）

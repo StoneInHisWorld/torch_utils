@@ -31,11 +31,10 @@ class ControlPanel:
                 self.exp_no = 1
         except Exception as e:
             # TODO: 处理未创建文件错误
-            print('日志文件尚未找到！')
+            print(f'日志文件{self.__lp}尚未找到！')
             pass
 
     def __iter__(self):
-        # TODO：提供超参数
         with open(self.__hcp, 'r', encoding='utf-8') as config:
             hyper_params = json.load(config)
             for hps in permutation([], *hyper_params.values()):

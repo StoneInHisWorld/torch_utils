@@ -88,6 +88,6 @@ class GoogLeNet(BasicNN):
             device, init_meth, with_checkpoint,
             b1, b2, b3, b4, b5,
             # nn.Linear(1024, out_features),
-            MultiOutputLayer(1024, init_meth, False, 0., 0., *out_features)
+            MultiOutputLayer(1024, out_features, init_meth=init_meth)
         )
 
