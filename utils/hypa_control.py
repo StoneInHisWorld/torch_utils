@@ -10,7 +10,10 @@ from utils.tools import permutation
 
 class ControlPanel:
 
-    def __init__(self, datasource, hypa_config_path: str, runtime_config_path: str, log_path: str = None):
+    def __init__(self, datasource, 
+                 hypa_config_path: str, 
+                 runtime_config_path: str, 
+                 log_path: str = None):
         self.__rcp = runtime_config_path
         self.__hcp = hypa_config_path
         self.__lp = log_path
@@ -39,7 +42,7 @@ class ControlPanel:
             hyper_params = json.load(config)
             for hps in permutation([], *hyper_params.values()):
                 hyper_params = {k: v for k, v in zip(hyper_params.keys(), hps)}
-                yield Trainer(hyper_params, self.__lp)
+                yield Trainer(self.__datasource.__class__.__name__, hyper_params, self.__lp)
                 self.__read_running_config()
 
     def __read_running_config(self):
@@ -91,10 +94,11 @@ class ControlPanel:
 
 class Trainer:
 
-    def __init__(self, hyper_parameters: dict, log_path: str = None):
+    def __init__(self, datasource, hyper_parameters: dict, log_path: str = None):
         self.__extra_lm = {}
         self.__hp = hyper_parameters
         self.__lp = log_path
+        self.datasource = datasource
 
     def __enter__(self):
         self.start = time.time()
@@ -105,7 +109,7 @@ class Trainer:
             print(f'exc_type: {exc_type}')
             print(f'exc_val: {exc_val}')
         time_span = time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start))
-        self.__hp.update({'exc_val': exc_val, "duration": time_span})
+        self.__hp.update({'exc_val': exc_val, "duration": time_span, "dataset": self.data_source})
         if self.__lp is not None and exc_type != KeyboardInterrupt:
             self.__write_log(**self.__hp)
 
