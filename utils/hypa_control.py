@@ -18,6 +18,9 @@ class ControlPanel:
                  runtime_config_path: str, 
                  log_path: str = None,
                  net_path: str = None):
+        """
+        控制台类。用于读取运行参数设置，设定训练超参数以及自动编写日志文件等一系列与网络构建无关的操作。
+        """
         def init_log(path):
             with open(path, 'w', encoding='utf-8') as log:
                 log.write("exp_no\n1\n")
@@ -115,6 +118,14 @@ class Trainer:
     def __init__(self, datasource, hyper_parameters: dict, 
                  log_path: str = None,
                  net_path: str = None):
+        """
+        训练器。
+        使用with上下文管理器以充分利用其全部功能。
+        with启用时，训练器会计时以记录本次训练所花时间。
+        with退出时，会编写日志记录本次训练的数据。
+        可以向日志文件中加入额外参数。
+        可以对网络进行持久化。
+        """
         self.__extra_lm = {}
         self.__hp = hyper_parameters
         self.__lp = log_path
