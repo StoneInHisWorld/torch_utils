@@ -108,21 +108,7 @@ def get_loss(loss_str: str = 'mse'):
         return nn.MSELoss()
     elif loss_str == 'huber':
         return nn.HuberLoss()
-
-
-# def init_wb(m):
-#     if type(m) == nn.Linear or type(m) == nn.Conv2d:
-#         init.xavier_uniform_(m.weight)
-#         init.zeros_(m.bias)
-#         # init.uniform_(m.weight)
-#         # init.zeros_(m.bias)
-# def init_wb(m):
-#     if type(m) == nn.Linear or type(m) == nn.Conv2d:
-#         init.xavier_uniform_(m.weight)
-#         init.zeros_(m.bias)
-#         # init.uniform_(m.weight)
-#         # init.zeros_(m.bias)
-
+    
 
 def init_wb(func_str: str = 'xavier'):
     """
@@ -174,7 +160,6 @@ def init_wb(func_str: str = 'xavier'):
 
 def resize_img(image: Image, required_shape: Tuple[int, int], img_mode='L') -> Image:
     # 实现将图片进行随机裁剪以达到目标shape的功能
-    # dl = data.shape[0]
     ih, iw = image.size
     h, w = required_shape
 
@@ -198,3 +183,24 @@ def resize_img(image: Image, required_shape: Tuple[int, int], img_mode='L') -> I
         i_w = random.randint(0, -dw) if dw < 0 else 0
         image.crop((i_w, i_w, i_w + new_w, i_h + new_h))
     return image
+
+
+def check_path(path: str, way_to_mkfile=None):
+    """
+    检查指定路径。如果目录不存在，则会创建目录；如果文件不存在，则指定文件初始化方式后才会自动初始化文件
+    """
+    if not os.path.exists(path):
+        if os.path.isfile(path):
+            # 如果是文件
+            path, file = os.path.split(path)
+            if way_to_mkfile is not None:
+                # 如果指定了文件初始化方式，则自动初始化文件
+                if os.path.exists(path):
+                    way_to_mkfile(path)
+                else:
+                    os.mkdir
+            else:
+                raise FileNotFoundError(f'没有在{path}下找到{file}文件！')
+        else:
+            # 如果目录不存在，则新建目录
+            os.mkdir(path)

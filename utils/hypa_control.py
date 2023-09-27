@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import pandas as pd
 
@@ -7,16 +8,27 @@ from torchsummary import summary
 from utils import tools
 from utils.tools import permutation
 
+import torch
+
 
 class ControlPanel:
 
     def __init__(self, datasource, 
                  hypa_config_path: str, 
                  runtime_config_path: str, 
-                 log_path: str = None):
+                 log_path: str = None,
+                 net_path: str = None):
+        def init_log(path):
+            with open(path, 'w', encoding='utf-8') as log:
+                log.write("exp_no\n1\n")
+
+        tools.check_path(hypa_config_path)
+        tools.check_path(runtime_config_path)
+        tools.check_path(log_path, init_log)
         self.__rcp = runtime_config_path
         self.__hcp = hypa_config_path
         self.__lp = log_path
+        self.__np = net_path
         self.__datasource = datasource
         self.__extra_lm = {}
         # 读取运行配置
@@ -26,23 +38,29 @@ class ControlPanel:
             for k, v in config_dict.items():
                 setattr(self, k, v)
         # 读取实验编号
-        try:
+        # try:
+        #     log = pd.read_csv(self.__lp)
+        #     try:
+        #         self.exp_no = log.iloc[-1]['exp_no'] + 1
+        #     except:
+        #         self.exp_no = 1
+        # except Exception as e:
+        #     # TODO: 处理未创建文件错误
+        #     print(f'日志文件{self.__lp}尚未找到！')
+        #     pass
+        if self.__lp is not None:
             log = pd.read_csv(self.__lp)
             try:
                 self.exp_no = log.iloc[-1]['exp_no'] + 1
             except:
                 self.exp_no = 1
-        except Exception as e:
-            # TODO: 处理未创建文件错误
-            print(f'日志文件{self.__lp}尚未找到！')
-            pass
 
     def __iter__(self):
         with open(self.__hcp, 'r', encoding='utf-8') as config:
             hyper_params = json.load(config)
             for hps in permutation([], *hyper_params.values()):
                 hyper_params = {k: v for k, v in zip(hyper_params.keys(), hps)}
-                yield Trainer(self.__datasource.__class__.__name__, hyper_params, self.__lp)
+                yield Trainer(self.__datasource.__class__.__name__, hyper_params, self.__lp, self.__np)
                 self.__read_running_config()
 
     def __read_running_config(self):
@@ -94,10 +112,13 @@ class ControlPanel:
 
 class Trainer:
 
-    def __init__(self, datasource, hyper_parameters: dict, log_path: str = None):
+    def __init__(self, datasource, hyper_parameters: dict, 
+                 log_path: str = None,
+                 net_path: str = None):
         self.__extra_lm = {}
         self.__hp = hyper_parameters
         self.__lp = log_path
+        self.__np = net_path
         self.datasource = datasource
 
     def __enter__(self):
@@ -122,3 +143,12 @@ class Trainer:
         self.__extra_lm = kwargs
         if not mute:
             print(self.__extra_lm)
+
+    def save_net(self, net: torch.nn.Module, entire=False):
+        if self.__np is None:
+            print("未指定模型保存路径，不予保存模型！")
+        if entire:
+            torch.save(net, self.__np + '.ptm')
+        else:
+            torch.save(net.state_dict(), self.__np + '.ptsd')
+
