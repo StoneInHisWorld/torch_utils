@@ -141,7 +141,7 @@ class Trainer:
             print(f'exc_type: {exc_type}')
             print(f'exc_val: {exc_val}')
         time_span = time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start))
-        self.__hp.update({'exc_val': exc_val, "duration": time_span, "dataset": self.data_source})
+        self.__hp.update({'exc_val': exc_val, "duration": time_span, "dataset": self.datasource})
         if self.__lp is not None and exc_type != KeyboardInterrupt:
             self.__write_log(**self.__hp)
 
@@ -155,11 +155,11 @@ class Trainer:
         if not mute:
             print(self.__extra_lm)
 
-    def save_net(self, net: torch.nn.Module, entire=False):
+    def save_net(self, net: torch.nn.Module, exp_no: int, entire=False):
         if self.__np is None:
             print("未指定模型保存路径，不予保存模型！")
         if entire:
-            torch.save(net, self.__np + '.ptm')
+            torch.save(net, self.__np + f'{exp_no}.ptm')
         else:
-            torch.save(net.state_dict(), self.__np + '.ptsd')
+            torch.save(net.state_dict(), self.__np + f'{exp_no}.ptsd')
 

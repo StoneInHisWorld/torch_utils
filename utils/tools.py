@@ -32,6 +32,7 @@ def write_log(path: str, **kwargs):
 
 def plot_history(history, mute=False, title=None, xlabel=None,
                  ylabel=None, savefig_as=None, accumulative=False):
+    # check_path(savefig_as)
     for k, log in history:
         plt.plot(range(len(log)), log, label=k)
     if xlabel:
@@ -40,8 +41,8 @@ def plot_history(history, mute=False, title=None, xlabel=None,
         plt.ylabel(ylabel)
     if title:
         plt.title(title)
-    if not os.path.exists(os.path.dirname(savefig_as)):
-        os.mkdir(os.path.dirname(savefig_as))
+    if not os.path.exists(os.path.split(savefig_as)[0]):
+        os.makedirs(os.path.split(savefig_as)[0])
     if savefig_as:
         plt.savefig(savefig_as)
     plt.legend()
@@ -190,17 +191,18 @@ def check_path(path: str, way_to_mkfile=None):
     检查指定路径。如果目录不存在，则会创建目录；如果文件不存在，则指定文件初始化方式后才会自动初始化文件
     """
     if not os.path.exists(path):
-        if os.path.isfile(path):
+        path, file = os.path.split(path)
+        if file != "":
             # 如果是文件
-            path, file = os.path.split(path)
             if way_to_mkfile is not None:
                 # 如果指定了文件初始化方式，则自动初始化文件
-                if os.path.exists(path):
-                    way_to_mkfile(path)
+                if path == "" or os.path.exists(path):
+                    way_to_mkfile(file)
                 else:
-                    os.mkdir
+                    os.makedirs(path)
+                    way_to_mkfile(os.path.join(path, file))
             else:
                 raise FileNotFoundError(f'没有在{path}下找到{file}文件！')
         else:
             # 如果目录不存在，则新建目录
-            os.mkdir(path)
+            os.makedirs(path)
