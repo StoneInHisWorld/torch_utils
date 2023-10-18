@@ -1,14 +1,12 @@
 import json
-import os
 import time
-import pandas as pd
 
+import pandas as pd
+import torch
 from torchsummary import summary
 
 from utils import tools
 from utils.tools import permutation
-
-import torch
 
 
 class ControlPanel:
@@ -52,8 +50,8 @@ class ControlPanel:
         #     print(f'日志文件{self.__lp}尚未找到！')
         #     pass
         if self.__lp is not None:
-            log = pd.read_csv(self.__lp)
             try:
+                log = pd.read_csv(self.__lp)
                 self.exp_no = log.iloc[-1]['exp_no'] + 1
             except:
                 self.exp_no = 1

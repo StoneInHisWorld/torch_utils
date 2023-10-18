@@ -11,7 +11,8 @@ class AlexNet(BasicNN):
     required_shape = (224, 224)
 
     def __init__(self, in_channels, out_features, init_meth: str = 'xavier',
-                 device: torch.device = torch.device('cpu'), with_checkpoint: bool = False) -> None:
+                 device: torch.device = torch.device('cpu'), regression=False,
+                 with_checkpoint: bool = False) -> None:
         layers = [
             networks.layers.reshape.Reshape(AlexNet.required_shape),
             nn.BatchNorm2d(in_channels),
@@ -25,7 +26,8 @@ class AlexNet(BasicNN):
             nn.MaxPool2d(kernel_size=3, stride=2), nn.Flatten(),
             nn.Linear(6400, 4096), nn.ReLU(), nn.Dropout(p=0.5),
             nn.Linear(4096, 4096), nn.ReLU(), nn.Dropout(p=0.5),
-            nn.Linear(4096, out_features),
-            nn.Softmax(dim=1)
+            nn.Linear(4096, out_features)
         ]
+        if not regression:
+            layers += [nn.Softmax(dim=1)]
         super().__init__(device, init_meth, with_checkpoint, *layers)

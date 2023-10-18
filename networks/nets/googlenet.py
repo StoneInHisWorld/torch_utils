@@ -1,8 +1,10 @@
+from collections.abc import Iterable
+
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-from networks.layers.multi_output import MultiOutputLayer
+from networks.layers.multi_output import MultiOutputLayer, linear_output
 from networks.basic_nn import BasicNN
 
 
@@ -42,8 +44,10 @@ class Inception(nn.Module):
 
 class GoogLeNet(BasicNN):
 
+    required_shape = (224, 224)
+
     def __init__(self, in_channels, out_features, init_meth='xavier', with_checkpoint=False,
-                 device='cpu'):
+                 device='cpu', regression=False):
         """
         构造经典GoogLeNet
         :param in_channels: 输入通道
@@ -87,7 +91,9 @@ class GoogLeNet(BasicNN):
         super().__init__(
             device, init_meth, with_checkpoint,
             b1, b2, b3, b4, b5,
-            # nn.Linear(1024, out_features),
-            MultiOutputLayer(1024, out_features, init_meth=init_meth)
+            MultiOutputLayer(1024, out_features, init_meth=init_meth) if isinstance(out_features, Iterable)
+            else nn.Sequential(*linear_output(1024, out_features, softmax=not regression))
+            # [nn.Linear(1024, out_features)] if regression
+            # else nn.Softmax(dim=1)]
         )
 

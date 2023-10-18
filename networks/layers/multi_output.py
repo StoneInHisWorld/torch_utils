@@ -1,5 +1,6 @@
 import math
 import warnings
+from collections.abc import Iterable
 from typing import List
 
 import numpy as np
@@ -38,9 +39,20 @@ def mlp(in_features, out_features, base=2, bn_momen=0., dropout=0.) -> List[nn.M
 def linear_output(in_features: int, out_features: int,
                   softmax=True, batch_norm=True, get_mlp=False,
                   dropout=0., bn_momen=0.) -> List[nn.Module]:
+    """
+    构造一个线性输出通道。将输入数据展平，利用多层线性层，提取特征，输出指定通道数目的数据。
+    :param in_features: 输入数据特征通道数
+    :param out_features: 输出数据特征通道数
+    :param softmax: 是否使用softmax层，若为true，则在通道最后添加nn.Softmax()
+    :param batch_norm: 是否使用BatchNorm层，若为true，则在通道最后添加nn.BatchNorm1d()
+    :param get_mlp: 是否使用更复杂的多层感知机，若为true，则本输出通道的构造方法将更换为复杂的感知机。
+    :param dropout: 是否使用dropout层，若为所填数值>0，则在通道最后添加nn.Dropout(dropout)（位于softmax层之前）
+    :param bn_momen: BatchNorm层的动量参数，仅在batch_norm为true时有效
+    :return: 构造的输出通道
+    """
     assert in_features > 0 and out_features > 0, '输入维度与输出维度均需大于0'
     layers = [nn.Flatten(), nn.BatchNorm1d(in_features, momentum=bn_momen)] if batch_norm else [nn.Flatten()]
-    layers += [nn.Linear(in_features, out_features)] if get_mlp \
+    layers += [nn.Linear(in_features, out_features)] if not get_mlp \
         else mlp(in_features, out_features, bn_momen=bn_momen, dropout=dropout)
     if dropout > 0:
         layers.append(nn.Dropout(dropout))
@@ -124,7 +136,7 @@ class DualOutputLayer(nn.Module):
 
 class MultiOutputLayer(nn.Module):
 
-    def __init__(self, in_features, out_or_strategy: List,
+    def __init__(self, in_features, out_or_strategy: Iterable,
                  init_meth='normal', self_defined=False,
                  dropout_rate=0., momentum=0.,
                  ) -> None:

@@ -99,8 +99,13 @@ def get_optimizer(net: torch.nn.Module, optim_str, lr=0.1, w_decay=0., momentum=
 
 
 def get_loss(loss_str: str = 'mse'):
+    """
+    获取损失函数。
+    :param loss_str: 损失函数对应字符串
+    :return: 损失函数模块
+    """
     assert loss_str in loss_es, \
-        f'不支持激活函数{loss_str}, 支持的优化器包括{loss_es}'
+        f'不支持损失函数{loss_str}, 支持的损失函数包括{loss_es}'
     if loss_str == 'l1':
         return nn.L1Loss()
     elif loss_str == 'entro':

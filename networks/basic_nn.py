@@ -64,7 +64,6 @@ class BasicNN(nn.Sequential):
                 metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
                 # 训练主循环
                 for X, y in data_iter:
-
                     self.train()
                     optimizer.zero_grad()
                     lo = ls_fn(self(X), y)
