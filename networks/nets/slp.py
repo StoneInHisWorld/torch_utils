@@ -5,6 +5,8 @@ from networks.basic_nn import BasicNN
 
 class SLP(BasicNN):
 
+    # TODO: not suitable to current datasets
+
     def __init__(self, in_features, out_features, device='cpu', init_meth='normal',
                  with_checkpoint=False, regression=True) -> None:
         layers = [

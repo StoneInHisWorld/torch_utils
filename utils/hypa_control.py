@@ -11,14 +11,15 @@ from utils.tools import permutation
 
 class ControlPanel:
 
-    def __init__(self, datasource, 
-                 hypa_config_path: str, 
-                 runtime_config_path: str, 
+    def __init__(self, datasource,
+                 hypa_config_path: str,
+                 runtime_config_path: str,
                  log_path: str = None,
                  net_path: str = None):
         """
         控制台类。用于读取运行参数设置，设定训练超参数以及自动编写日志文件等一系列与网络构建无关的操作。
         """
+
         def init_log(path):
             with open(path, 'w', encoding='utf-8') as log:
                 log.write("exp_no\n1\n")
@@ -39,16 +40,6 @@ class ControlPanel:
             for k, v in config_dict.items():
                 setattr(self, k, v)
         # 读取实验编号
-        # try:
-        #     log = pd.read_csv(self.__lp)
-        #     try:
-        #         self.exp_no = log.iloc[-1]['exp_no'] + 1
-        #     except:
-        #         self.exp_no = 1
-        # except Exception as e:
-        #     # TODO: 处理未创建文件错误
-        #     print(f'日志文件{self.__lp}尚未找到！')
-        #     pass
         if self.__lp is not None:
             try:
                 log = pd.read_csv(self.__lp)
@@ -111,9 +102,10 @@ class ControlPanel:
         assert hasattr(self, "exp_no"), '设置文件中不存在"exp_no"参数！'
         return self.exp_no
 
+
 class Trainer:
 
-    def __init__(self, datasource, hyper_parameters: dict, 
+    def __init__(self, datasource, hyper_parameters: dict,
                  log_path: str = None,
                  net_path: str = None):
         """
@@ -160,4 +152,3 @@ class Trainer:
             torch.save(net, self.__np + f'{exp_no}.ptm')
         else:
             torch.save(net.state_dict(), self.__np + f'{exp_no}.ptsd')
-

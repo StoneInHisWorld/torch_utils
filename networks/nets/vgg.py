@@ -16,6 +16,8 @@ class VGG(BasicNN):
 
     required_shape = (224, 224)
 
+    # TODO: not suitable for current dataset
+
     def __init__(self, in_channels: int, out_features: Iterable | int,
                  conv_arch: Tuple[int, int] = VGG_11, init_meth='xavier',
                  with_checkpoint=False, device: torch.device = 'cpu', regression=False) -> None:

@@ -3,7 +3,6 @@ from torch import nn
 
 import networks.layers.reshape
 from networks.basic_nn import BasicNN
-import networks.layers.common_layers as cl
 
 
 class AlexNet(BasicNN):
@@ -14,7 +13,7 @@ class AlexNet(BasicNN):
                  device: torch.device = torch.device('cpu'), regression=False,
                  with_checkpoint: bool = False) -> None:
         layers = [
-            networks.layers.reshape.Reshape(AlexNet.required_shape),
+            # networks.layers.reshape.Reshape(AlexNet.required_shape),
             nn.BatchNorm2d(in_channels),
             nn.Conv2d(in_channels, 96, kernel_size=11, stride=4, padding=1), nn.ReLU(),
             nn.MaxPool2d(kernel_size=3, stride=2),
