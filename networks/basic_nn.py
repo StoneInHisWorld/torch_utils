@@ -30,14 +30,13 @@ class BasicNN(nn.Sequential):
         """
         super().__init__(*args)
         self.apply(init_wb(init_meth))
-        # self.__init_wb(init_meth)
         self.apply(lambda m: m.to(device))
 
         self.__device = device
         self.__last_backward_data = {}
         self.__last_forward_output = {}
         if with_checkpoint:
-            warnings.warn('使用“检查点机制”虽然会减少前向传播的内存使用，但是会大大增加训练计算量！')
+            warnings.warn('使用“检查点机制”虽然会减少前向传播的内存使用，但是会大大增加反向传播的计算量！')
         self.__checkpoint = with_checkpoint
 
     def __str__(self):
@@ -65,12 +64,11 @@ class BasicNN(nn.Sequential):
                 metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
                 # 训练主循环
                 for X, y in data_iter:
-                    with torch.enable_grad():
-                        self.train()
-                        optimizer.zero_grad()
-                        lo = ls_fn(self(X), y)
-                        lo.backward()
-                        optimizer.step()
+                    self.train()
+                    optimizer.zero_grad()
+                    lo = ls_fn(self(X), y)
+                    lo.backward()
+                    optimizer.step()
                     with torch.no_grad():
                         correct = acc_fn(self(X), y)
                         num_examples = X.shape[0]
@@ -207,7 +205,7 @@ class BasicNN(nn.Sequential):
         metric = Accumulator(3)
         for features, labels in test_iter:
             preds = self(features)
-            metric.add(loss(preds, labels), acc_func(preds, labels), len(features))
+            metric.add(acc_func(preds, labels), loss(preds, labels) * len(features), len(features))
         return metric[0] / metric[2], metric[1] / metric[2]
 
     @torch.no_grad()

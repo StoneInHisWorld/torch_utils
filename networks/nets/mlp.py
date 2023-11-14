@@ -8,7 +8,9 @@ import torch
 
 
 class MLP(BasicNN):
-    def __init__(self, in_features, out_features, device, base=2) -> None:
+
+    def __init__(self, in_features, out_features, device='cpu', base=2, init_meth='normal',
+                 with_checkpoint=False, regression=True) -> None:
         layer_sizes = torch.logspace(
             math.log(in_features, base),
             math.log(out_features, base),
@@ -32,6 +34,7 @@ class MLP(BasicNN):
                 nn.ReLU(),
                 nn.Dropout(),
             ]
-        layers.pop(len(layers) - 1)
-        layers += [nn.Softmax(dim=0)]
-        super().__init__(device, *layers)
+        # layers.pop(len(layers) - 1)
+        if not regression:
+            layers += [nn.Softmax(dim=1)]
+        super().__init__(device, init_meth, with_checkpoint, *layers)
