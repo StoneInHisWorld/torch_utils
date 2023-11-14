@@ -6,14 +6,14 @@ from networks.nets.wzynet_essay import WZYNetEssay
 from utils import tools
 from utils.datasets import DataSet
 from utils.hypa_control import ControlPanel
-from vortex import Vortex
 
 # TODO: 选择选用的模型
 Net = WZYNetEssay
 
 # 调参面板
+_ = None
 # TODO： 请输入配置文件路径
-cp = ControlPanel(Vortex,
+cp = ControlPanel(_,  # 处理的数据集类
                   '',  # 调参json文件路径
                   '',  # 运行配置json文件路径
                   '',  # 结果存储文件路径
@@ -22,7 +22,8 @@ torch.random.manual_seed(cp.running_randomseed)
 
 print('collecting data...')
 # TODO: 读取数据集
-_ = None
+# TODO：数据集需要提供格式为（特征集，标签集）的数据集
+# TODO：自定义数据集需要切分为训练集、验证集、测试集
 data = _
 acc_func = _
 dataset_name = _

@@ -123,7 +123,7 @@ class LazyDataLoader:
         """
         数据懒加载器。对懒加载数据集进行读取，每次供给懒加载数据集中索引对应的数据内容。
         :param index_dataset: 懒加载数据集
-        :param read_fn: 读取方法
+        :param read_fn: 数据读取方法，签名必须为：read_fn(index) -> features: Iterable
         :param batch_size: 批量大小
         :param load_multiple: 每次加载数量
         :param shuffle: 是否进行数据打乱
