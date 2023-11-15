@@ -1,7 +1,7 @@
 import os.path
 import random
+from typing import Tuple
 
-import PIL.Image
 import pandas as pd
 import torch
 from PIL import Image as IMAGE
@@ -9,10 +9,9 @@ from PIL.Image import Image
 from matplotlib import pyplot as plt
 from torch import cuda, nn as nn
 from torch.nn import init as init
-from typing import Tuple
 
 optimizers = ['sgd', 'adam']
-loss_es = ['l1', 'entro', 'mse', 'huber']
+loss_es = ['l1', 'entro', 'mse', 'huber', 'ssim']
 init_funcs = ['normal', 'xavier', 'zero']
 
 
@@ -114,6 +113,8 @@ def get_loss(loss_str: str = 'mse'):
         return nn.MSELoss()
     elif loss_str == 'huber':
         return nn.HuberLoss()
+    elif loss_str == 'ssim':
+        return
     
 
 def init_wb(func_str: str = 'xavier'):

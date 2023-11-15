@@ -52,23 +52,23 @@ class DataSet(torch_ds):
         for call in labels_calls:
             self.__labels = call(self.__labels)
 
-    def to_loader(self, batch_size: int = None, sampler: Iterable = None, shuffle=True,
-                  **kwargs) -> DataLoader:
-        """
-        根据参数生成本数据集的加载器
-        :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
-        :param batch_size: 每次供给的数据量。默认为整个数据集
-        :param shuffle: 是否打乱
-        :param kwargs: DataLoader额外参数
-        :return: 加载器对象
-        """
-        if sampler is not None:
-            shuffle = None
-        if not batch_size:
-            batch_size = self.feature_shape[0]
-        return DataLoader(
-            self, batch_size, shuffle=shuffle, collate_fn=self.collate_fn, sampler=sampler, **kwargs
-        )
+    # def to_loader(self, batch_size: int = None, sampler: Iterable = None, shuffle=True,
+    #               **kwargs) -> DataLoader:
+    #     """
+    #     根据参数生成本数据集的加载器
+    #     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
+    #     :param batch_size: 每次供给的数据量。默认为整个数据集
+    #     :param shuffle: 是否打乱
+    #     :param kwargs: DataLoader额外参数
+    #     :return: 加载器对象
+    #     """
+    #     if sampler is not None:
+    #         shuffle = None
+    #     if not batch_size:
+    #         batch_size = self.feature_shape[0]
+    #     return DataLoader(
+    #         self, batch_size, shuffle=shuffle, collate_fn=self.collate_fn, sampler=sampler, **kwargs
+    #     )
 
     def get_subset(self, indices: Iterable):
         return DataSet(self[indices][0], self[indices][1])
@@ -98,22 +98,22 @@ class LazyDataSet(DataSet):
         self.read_fn = read_fn
         super().__init__(features, labels, collate_fn)
 
-    def to_loader(self, batch_size: int = None, sampler: Iterable = None, shuffle=True,
-                  **kwargs) -> LazyDataLoader:
-        """
-        根据参数生成本数据集的加载器
-        :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
-        :param batch_size: 每次供给的数据量。默认为整个数据集
-        :param shuffle: 是否打乱
-        :param kwargs: DataLoader额外参数
-        :return: 加载器对象
-        """
-        if sampler is not None:
-            shuffle = None
-        if not batch_size:
-            batch_size = self.feature_shape[0]
-        return LazyDataLoader(
-            self, self.read_fn, batch_size, load_multiple=self.load_multiple, shuffle=shuffle,
-            collate_fn=self.collate_fn, sampler=sampler, **kwargs
-        )
+    # def to_loader(self, batch_size: int = None, sampler: Iterable = None, shuffle=True,
+    #               **kwargs) -> LazyDataLoader:
+    #     """
+    #     根据参数生成本数据集的加载器
+    #     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
+    #     :param batch_size: 每次供给的数据量。默认为整个数据集
+    #     :param shuffle: 是否打乱
+    #     :param kwargs: DataLoader额外参数
+    #     :return: 加载器对象
+    #     """
+    #     if sampler is not None:
+    #         shuffle = None
+    #     if not batch_size:
+    #         batch_size = self.feature_shape[0]
+    #     return LazyDataLoader(
+    #         self, self.read_fn, batch_size, load_multiple=self.load_multiple, shuffle=shuffle,
+    #         collate_fn=self.collate_fn, sampler=sampler, **kwargs
+    #     )
 
