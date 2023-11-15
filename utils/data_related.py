@@ -9,6 +9,7 @@ from typing import Tuple, Iterable, Sized
 from torch.utils.data import DataLoader
 
 from utils import tools
+from utils.dataloader import LazyDataLoader
 from utils.datasets import DataSet, LazyDataSet
 
 
@@ -108,51 +109,14 @@ def read_img(path: str, required_shape: Tuple[int, int] = None, mode: str = 'L',
         img_channels = 1
     elif mode == 'RGB':
         img_channels = 3
+    else:
+        img_channels = -1
     img = img.reshape((img_channels, *img.shape[:2]))
     if requires_id:
         # 添加上读取文件名
         print(path.split('/')[-1])
         img = np.hstack((path.split('/')[-1], img))
     return img
-
-
-class LazyDataLoader:
-    def __init__(self, index_dataset: DataSet, read_fn, batch_size: int = None, load_multiple: int = 1,
-                 shuffle=True, collate_fn=None, sampler=None,
-                 **kwargs):
-        """
-        数据懒加载器。对懒加载数据集进行读取，每次供给懒加载数据集中索引对应的数据内容。
-        :param index_dataset: 懒加载数据集
-        :param read_fn: 数据读取方法，签名必须为：read_fn(index) -> features: Iterable
-        :param batch_size: 批量大小
-        :param load_multiple: 每次加载数量
-        :param shuffle: 是否进行数据打乱
-        :param collate_fn: 数据校对方法
-        :param sampler: 数据抽取器
-        :param kwargs: DataLoader()关键字参数
-        """
-        self.__batch_size = batch_size
-        self.__multiple = load_multiple
-        self.__shuffle = shuffle
-        self.__collate_fn = collate_fn
-        self.__read_fn = read_fn
-        self.__sampler = sampler
-        self.__kwargs = kwargs
-
-        self.__index_loader = to_loader(index_dataset, batch_size * load_multiple, shuffle=shuffle)
-        pass
-
-    def __iter__(self):
-        for index, label in self.__index_loader:
-            batch_loader = to_loader(
-                DataSet(self.__read_fn(index), label),
-                self.__batch_size, self.__sampler, self.__shuffle, **self.__kwargs
-            )
-            for X, y in batch_loader:
-                yield X, y
-
-    def __len__(self):
-        return len(self.__index_loader) * self.__multiple
 
 
 def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, sampler: Iterable = None, shuffle=True,
@@ -166,6 +130,7 @@ def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, sampler: 
     :param kwargs: Dataloader额外参数
     :return: 加载器对象
     """
+    warnings.warn('将在未来的版本中删除', DeprecationWarning)
     if sampler is not None:
         shuffle = None
     if not batch_size:
@@ -217,6 +182,13 @@ def k_fold_split(dataset: DataSet or LazyDataSet, k: int = 10, shuffle: bool = T
 #     return data[:int(data_portion * len(data))]
 
 def data_slicer(data_portion=1., shuffle=True, *args: Sized):
+    """
+    数据集切分器
+    :param data_portion: 数据集遍历的比例
+    :param shuffle: 是否进行打乱
+    :param args: 需要进行切分的数据集，可以有多个。
+    :return: 切分出的数据集，具有相同的下标序列
+    """
     assert 0 <= data_portion <= 1.0, '切分的数据集需为源数据集的子集！'
     # 验证每个需要切分的数据集的长度均相同
     data_len = len(args[0])
