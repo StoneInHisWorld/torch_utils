@@ -33,8 +33,8 @@ def write_log(path: str, **kwargs):
 def plot_history(history, mute=False, title=None, xlabel=None,
                  ylabel=None, savefig_as=None, accumulative=False):
     # check_path(savefig_as)
-    for k, log in history:
-        plt.plot(range(len(log)), log, label=k)
+    for label, log in history:
+        plt.plot(range(len(log)), log, label=label)
     if xlabel:
         plt.xlabel(xlabel)
     if ylabel:

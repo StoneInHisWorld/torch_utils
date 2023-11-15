@@ -130,7 +130,7 @@ def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, sampler: 
     :param kwargs: Dataloader额外参数
     :return: 加载器对象
     """
-    warnings.warn('将在未来的版本中删除', DeprecationWarning)
+    # warnings.warn('将在未来的版本中删除', DeprecationWarning)
     if sampler is not None:
         shuffle = None
     if not batch_size:
