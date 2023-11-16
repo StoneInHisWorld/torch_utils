@@ -3,7 +3,7 @@ from typing import Iterable, Callable, List
 import torch
 from torch.utils.data import Dataset as torch_ds, DataLoader
 
-from utils.dataloader import LazyDataLoader
+# from utils.dataloader import LazyDataLoader
 
 
 class DataSet(torch_ds):
@@ -32,8 +32,30 @@ class DataSet(torch_ds):
         :param device: 迁移目标设备
         :return:
         """
-        self.__features = self.__features.to(device)
-        self.__labels = self.__labels.to(device)
+        # migrate_list = []
+        try:
+            self.__features = self.__features.to(device)
+        except Exception:
+            def fea_collate(features: torch.Tensor):
+                features = self.collate_fn(features)
+                return features.to(device)
+
+            self.collate_fn = fea_collate
+        try:
+            self.__labels = self.__labels.to(device)
+        except Exception:
+            def label_collate(labels: torch.Tensor):
+                labels = self.collate_fn(labels)
+                return labels.to(device)
+
+            self.collate_fn = label_collate
+
+        # if len(migrate_list) > 0:
+        #     def migrate():
+        #         for mlist in migrate_list:
+        #             mlist.to(device)
+        #
+        #     self.collate_fn = migrate
 
     def apply(self, features_calls: List[Callable[[torch.Tensor], torch.Tensor]] = None,
               labels_calls: List[Callable[[torch.Tensor], torch.Tensor]] = None):
@@ -52,23 +74,23 @@ class DataSet(torch_ds):
         for call in labels_calls:
             self.__labels = call(self.__labels)
 
-    # def to_loader(self, batch_size: int = None, sampler: Iterable = None, shuffle=True,
-    #               **kwargs) -> DataLoader:
-    #     """
-    #     根据参数生成本数据集的加载器
-    #     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
-    #     :param batch_size: 每次供给的数据量。默认为整个数据集
-    #     :param shuffle: 是否打乱
-    #     :param kwargs: DataLoader额外参数
-    #     :return: 加载器对象
-    #     """
-    #     if sampler is not None:
-    #         shuffle = None
-    #     if not batch_size:
-    #         batch_size = self.feature_shape[0]
-    #     return DataLoader(
-    #         self, batch_size, shuffle=shuffle, collate_fn=self.collate_fn, sampler=sampler, **kwargs
-    #     )
+    def to_loader(self, batch_size: int = None, sampler: Iterable = None, shuffle=True,
+                  **kwargs) -> DataLoader:
+        """
+        根据参数生成本数据集的加载器
+        :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
+        :param batch_size: 每次供给的数据量。默认为整个数据集
+        :param shuffle: 是否打乱
+        :param kwargs: DataLoader额外参数
+        :return: 加载器对象
+        """
+        if sampler is not None:
+            shuffle = None
+        if not batch_size:
+            batch_size = self.feature_shape[0]
+        return DataLoader(
+            self, batch_size, shuffle=shuffle, collate_fn=self.collate_fn, sampler=sampler, **kwargs
+        )
 
     def get_subset(self, indices: Iterable):
         return DataSet(self[indices][0], self[indices][1])
@@ -84,6 +106,7 @@ class DataSet(torch_ds):
 
 class LazyDataSet(DataSet):
 
+    # TODO：将load_multiple改为maxload
     def __init__(self, features, labels, load_multiple, read_fn, collate_fn=None):
         """
         懒加载数据集，只存储数据的索引供LazyDataLoader使用。

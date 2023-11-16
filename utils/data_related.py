@@ -120,7 +120,7 @@ def read_img(path: str, required_shape: Tuple[int, int] = None, mode: str = 'L',
 
 
 def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, sampler: Iterable = None, shuffle=True,
-              **kwargs) -> DataLoader or LazyDataLoader:
+              **kwargs):
     """
     根据数据集类型转化为数据集加载器
     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
@@ -187,7 +187,7 @@ def data_slicer(data_portion=1., shuffle=True, *args: Sized):
     :param data_portion: 数据集遍历的比例
     :param shuffle: 是否进行打乱
     :param args: 需要进行切分的数据集，可以有多个。
-    :return: 切分出的数据集，具有相同的下标序列
+    :return: 切分出的数据集，具有相同的下标序列。注意：返回的数据集为元组！
     """
     assert 0 <= data_portion <= 1.0, '切分的数据集需为源数据集的子集！'
     # 验证每个需要切分的数据集的长度均相同
@@ -198,7 +198,7 @@ def data_slicer(data_portion=1., shuffle=True, *args: Sized):
     if shuffle:
         random.shuffle(args)
     data_portion = int(data_portion * data_len)
-    return zip(*args[: data_portion])
+    return zip(*args[: data_portion])  # 返回值总为元组
 
 
 def normalize(data: torch.Tensor) -> torch.Tensor:
