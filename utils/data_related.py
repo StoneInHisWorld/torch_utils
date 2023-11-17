@@ -137,7 +137,7 @@ def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, sampler: 
         batch_size = dataset.feature_shape[0]
     if type(dataset) == LazyDataSet:
         return LazyDataLoader(
-            dataset, dataset.read_fn, batch_size, load_multiple=dataset.load_multiple, shuffle=shuffle,
+            dataset, dataset.read_fn, batch_size, max_load=dataset.max_load, shuffle=shuffle,
             collate_fn=dataset.collate_fn, sampler=sampler, **kwargs
         )
     elif type(dataset) == DataSet:

@@ -107,17 +107,17 @@ class DataSet(torch_ds):
 class LazyDataSet(DataSet):
 
     # TODO：将load_multiple改为maxload
-    def __init__(self, features, labels, load_multiple, read_fn, collate_fn=None):
+    def __init__(self, features, labels, max_load, read_fn, collate_fn=None):
         """
         懒加载数据集，只存储数据的索引供LazyDataLoader使用。
         LazyDataLoader取该数据集中实际的数据内容时，会使用`read_fn`方法进行数据内容的读取。
         :param features: 数据特征集
         :param labels: 数据标签集
-        :param load_multiple: 懒加载单次加载的倍数，懒加载每次读取数据量规定为`load_multiple * batch_size`。LazyDataLoader会使用到该变量。
+        :param max_load: 懒加载单次加载的倍数，懒加载每次读取数据量规定为`load_multiple * batch_size`。LazyDataLoader会使用到该变量。
         :param read_fn: 数据读取方法，签名必须为：read_fn(index: Iterable[path]) -> features: Iterable。数据加载器会自动提供数据读取路径index
         :param collate_fn: 数据预处理方法
         """
-        self.load_multiple = load_multiple
+        self.max_load = max_load
         self.read_fn = read_fn
         super().__init__(features, labels, collate_fn)
 
