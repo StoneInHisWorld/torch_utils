@@ -85,7 +85,7 @@ class ControlPanel:
     @property
     def running_device(self):
         assert hasattr(self, "device"), '设置文件中不存在"device"参数！'
-        return self.device
+        return torch.device(self.device)
 
     @property
     def running_randomseed(self):

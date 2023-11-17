@@ -101,7 +101,7 @@ def read_img(path: str, required_shape: Tuple[int, int] = None, mode: str = 'L',
     assert mode in img_modes, f'不支持的图像模式{mode}！'
     img = Image.open(path).convert(mode)
     # 若有要求shape，则进行resize，边缘填充黑条
-    if required_shape:
+    if required_shape and required_shape != (-1, -1):
         img = tools.resize_img(img, required_shape)
     img = np.array(img)
     # 复原出通道。1表示样本数量维

@@ -1,8 +1,7 @@
 from torch import nn
 
-import networks.layers.common_layers as cl
-from networks.layers.multi_output import DualOutputLayer, MultiOutputLayer
 from networks.basic_nn import BasicNN
+from networks.layers.multi_output import MultiOutputLayer
 
 
 class WZYNetEssay(BasicNN):
@@ -34,10 +33,6 @@ class WZYNetEssay(BasicNN):
             nn.Conv2d(base_channel * 3, base_channel * 4, kernel_size=kernel_size,
                       stride=2, padding=1), nn.LeakyReLU(),
             nn.BatchNorm2d(base_channel * 4, momentum=bn_momen), nn.MaxPool2d(2),
-            # DualOutputLayer(
-            #     base_channel * 4, out_features[0], out_features[1],
-            #     momentum=bn_momen,
-            # ),
             MultiOutputLayer(
                 base_channel * 4, out_features, init_meth=init_meth, dropout_rate=dropout_rate,
                 momentum=bn_momen,

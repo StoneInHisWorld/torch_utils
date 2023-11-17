@@ -26,6 +26,7 @@ class LazyDataLoader:
         self.__collate_fn = collate_fn
         self.__read_fn = read_fn
         self.__sampler = sampler
+        self.__len = len(index_dataset)
         self.__kwargs = kwargs
 
         self.__features_preprocesses = [] if features_preprocesses is None else features_preprocesses
@@ -60,7 +61,8 @@ class LazyDataLoader:
 
     def __len__(self):
         # return len(self.__index_loader) * self.__max_load
-        return self.__max_load
+        # return self.__max_load
+        return self.__len
 
     def register_preprocess(self, features_calls=None, labels_calls=None):
         """
