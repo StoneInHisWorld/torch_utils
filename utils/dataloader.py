@@ -1,4 +1,6 @@
 # from utils.data_related import to_loader
+from typing import Tuple, Callable
+
 from utils.datasets import DataSet
 
 
@@ -57,3 +59,15 @@ class LazyDataLoader:
 
     def __len__(self):
         return len(self.__index_loader) * self.__multiple
+
+
+    def register_preprocess(self, feature_calls, label_calls):
+
+
+    def add_feaprepro(self, *calls):
+        for call in calls:
+            self.__features_preprocesses.append(call)
+
+    def add_labelprepro(self, *calls):
+        for call in calls:
+            self.__labels_preprocess.append(call)
