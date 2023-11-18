@@ -15,9 +15,9 @@ class Pix2Pix(BasicNN):
             nn.BatchNorm2d(o, momentum=bn_momen),
             nn.ReLU()
         )
-        ep_layer = lambda i_shape, o: nn.Sequential(
-            nn.Upsample(i_shape, scale_factor=2),
-            nn.Conv2d(i_shape[0], o, kernel_size=kernel_size, stride=1, padding=1),
+        ep_layer = lambda i, o: nn.Sequential(
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(i, o, kernel_size=kernel_size, stride=1, padding=1),
             nn.ReLU()
         )
         self.contracting_path = [
@@ -29,16 +29,16 @@ class Pix2Pix(BasicNN):
             cp_layer(base_channel * 8, base_channel * 8),
         ]
         self.expanding_path = [
-            ep_layer((512, 2, 2), 512),
-            ep_layer((1024, 4, 4), 512),
-            ep_layer((1024, 8, 8), 512),
-            ep_layer((1024, 16, 16), 256),
-            ep_layer((512, 32, 32), 128),
-            ep_layer((256, 64, 64), 64)
+            ep_layer(base_channel * 8, base_channel * 8),
+            ep_layer(base_channel * 16, base_channel * 8),
+            ep_layer(base_channel * 16, base_channel * 8),
+            ep_layer(base_channel * 16, base_channel * 8),
+            ep_layer(base_channel * 8, base_channel * 2),
+            ep_layer(base_channel * 4, base_channel)
         ]
         self.output_path = [
-            nn.Conv2d(128, 128, kernel_size=kernel_size, stride=1, padding=1),
-            nn.Conv2d(128, out_features[0], kernel_size=kernel_size, stride=1, padding=1),
+            nn.Conv2d(base_channel * 2, base_channel * 2, kernel_size=kernel_size, stride=1, padding=1),
+            nn.Conv2d(base_channel * 2, out_features[0], kernel_size=kernel_size, stride=1, padding=1),
         ]
         super().__init__(device, init_meth, with_checkpoint, *self.contracting_path, *self.expanding_path,
                          *self.output_path)
