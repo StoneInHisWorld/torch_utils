@@ -25,7 +25,7 @@ def write_log(path: str, **kwargs):
     if len(file_data) == 0:
         file_data = pd.DataFrame(item_data)
     else:
-        file_data = pd.concat([file_data, item_data], axis=0)
+        file_data = pd.concat([file_data, item_data], axis=0, sort=True)
     file_data.to_csv(path, index=False)
 
 

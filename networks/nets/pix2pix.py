@@ -6,7 +6,7 @@ from networks.layers.multi_output import MultiOutputLayer
 
 
 class Pix2Pix(BasicNN):
-    required_shape = (2048, 2048)
+    required_shape = (256, 256)
 
     def __init__(self, input_channel, out_features, base_channel=64,
                  kernel_size=4, bn_momen=0.8, init_meth='normal', with_checkpoint=False, device='cpu'):
