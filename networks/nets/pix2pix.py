@@ -17,7 +17,7 @@ class Pix2Pix(BasicNN):
         )
         ep_layer = lambda i, o: nn.Sequential(
             nn.Upsample(scale_factor=2),
-            nn.Conv2d(i, o, kernel_size=kernel_size, stride=1, padding=2),
+            nn.Conv2d(i, o, kernel_size=kernel_size + 1, stride=1, padding=2),
             nn.ReLU()
         )
         self.contracting_path = [
@@ -27,12 +27,13 @@ class Pix2Pix(BasicNN):
             cp_layer(base_channel * 4, base_channel * 8),
             cp_layer(base_channel * 8, base_channel * 8),
             cp_layer(base_channel * 8, base_channel * 8),
+            cp_layer(base_channel * 8, base_channel * 8),
         ]
         self.expanding_path = [
             ep_layer(base_channel * 8, base_channel * 8),
             ep_layer(base_channel * 16, base_channel * 8),
             ep_layer(base_channel * 16, base_channel * 8),
-            ep_layer(base_channel * 16, base_channel * 8),
+            ep_layer(base_channel * 16, base_channel * 4),
             ep_layer(base_channel * 8, base_channel * 2),
             ep_layer(base_channel * 4, base_channel)
         ]
@@ -48,8 +49,11 @@ class Pix2Pix(BasicNN):
         for layer in self.contracting_path:
             input = layer(input)
             cp_results.append(input)
-        for i, layer in enumerate(self.expanding_path):
+        cp_results = reversed(cp_results[:-1])  # 需要去除掉最后一个结果
+        for layer in self.expanding_path:
             input = layer(input)
-            input = torch.hstack((input, cp_results[i]))
+            input = torch.hstack((input, next(cp_results)))
+        for layer in self.output_path:
+            input = layer(input)
         return input
 
