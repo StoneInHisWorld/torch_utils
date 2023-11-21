@@ -17,7 +17,7 @@ class Pix2Pix(BasicNN):
         )
         ep_layer = lambda i, o: nn.Sequential(
             nn.Upsample(scale_factor=2),
-            nn.Conv2d(i, o, kernel_size=kernel_size, stride=1, padding=1),
+            nn.Conv2d(i, o, kernel_size=kernel_size, stride=1, padding=2),
             nn.ReLU()
         )
         self.contracting_path = [
