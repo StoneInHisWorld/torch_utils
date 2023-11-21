@@ -10,6 +10,8 @@ from matplotlib import pyplot as plt
 from torch import cuda, nn as nn
 from torch.nn import init as init
 
+from networks.layers import common_layers
+
 optimizers = ['sgd', 'adam']
 loss_es = ['l1', 'entro', 'mse', 'huber', 'ssim']
 init_funcs = ['normal', 'xavier', 'zero']
@@ -114,7 +116,7 @@ def get_loss(loss_str: str = 'mse'):
     elif loss_str == 'huber':
         return nn.HuberLoss()
     elif loss_str == 'ssim':
-        return
+        return common_layers.SSIMLoss()
     
 
 def init_wb(func_str: str = 'xavier'):
