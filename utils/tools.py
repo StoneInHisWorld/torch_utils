@@ -42,9 +42,9 @@ def plot_history(history, mute=False, title=None, xlabel=None,
         plt.ylabel(ylabel)
     if title:
         plt.title(title)
-    if not os.path.exists(os.path.split(savefig_as)[0]):
-        os.makedirs(os.path.split(savefig_as)[0])
     if savefig_as:
+        if not os.path.exists(os.path.split(savefig_as)[0]):
+            os.makedirs(os.path.split(savefig_as)[0])
         plt.savefig(savefig_as)
     plt.legend()
     if not mute:

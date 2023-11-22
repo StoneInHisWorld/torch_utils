@@ -3,7 +3,7 @@ from torch import nn
 
 
 def SSIM(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    mean_x, mean_y = torch.mean(y_hat), torch.mean(y)
+    mean_x, mean_y = torch.mean(y_hat, dim=0), torch.mean(y, dim=0)
     var_x, var_y = torch.var(y_hat), torch.var(y)
     conv_xy = torch.mean((y_hat - mean_x) * (y - mean_y))
     R = torch.tensor(255)
