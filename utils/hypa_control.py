@@ -27,6 +27,7 @@ class ControlPanel:
         tools.check_path(hypa_config_path)
         tools.check_path(runtime_config_path)
         tools.check_path(log_path, init_log)
+        # TODO：添加网络保存路径的检查
         self.__rcp = runtime_config_path
         self.__hcp = hypa_config_path
         self.__lp = log_path

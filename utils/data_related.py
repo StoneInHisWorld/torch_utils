@@ -121,6 +121,7 @@ def read_img(path: str, required_shape: Tuple[int, int] = None, mode: str = 'L',
 
 def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, sampler: Iterable = None, shuffle=True,
               **kwargs):
+    # TODO: 将maxload隐藏，在to_loader处输入
     """
     根据数据集类型转化为数据集加载器
     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.

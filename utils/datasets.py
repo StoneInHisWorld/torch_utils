@@ -32,23 +32,25 @@ class DataSet(torch_ds):
         :param device: 迁移目标设备
         :return:
         """
-        # migrate_list = []
-        try:
-            self.__features = self.__features.to(device)
-        except Exception:
-            def fea_collate(features: torch.Tensor):
-                features = self.collate_fn(features)
-                return features.to(device)
+        self.__features = self.__features.to(device)
+        self.__labels = self.__labels.to(device)
 
-            self.collate_fn = fea_collate
-        try:
-            self.__labels = self.__labels.to(device)
-        except Exception:
-            def label_collate(labels: torch.Tensor):
-                labels = self.collate_fn(labels)
-                return labels.to(device)
-
-            self.collate_fn = label_collate
+        # try:
+        #     self.__features = self.__features.to(device)
+        # except Exception:
+        #     def fea_collate(features: torch.Tensor):
+        #         features = self.collate_fn(features)
+        #         return features.to(device)
+        #
+        #     self.collate_fn = fea_collate
+        # try:
+        #     self.__labels = self.__labels.to(device)
+        # except Exception:
+        #     def label_collate(labels: torch.Tensor):
+        #         labels = self.collate_fn(labels)
+        #         return labels.to(device)
+        #
+        #     self.collate_fn = label_collate
 
         # if len(migrate_list) > 0:
         #     def migrate():
@@ -106,7 +108,6 @@ class DataSet(torch_ds):
 
 class LazyDataSet(DataSet):
 
-    # TODO：将load_multiple改为maxload
     def __init__(self, features, labels, max_load, read_fn, collate_fn=None):
         """
         懒加载数据集，只存储数据的索引供LazyDataLoader使用。

@@ -1,12 +1,12 @@
 # from utils.data_related import to_loader
 from typing import Tuple, Callable
 
-from utils.datasets import DataSet
+from utils.datasets import DataSet, LazyDataSet
 
 
 class LazyDataLoader:
 
-    def __init__(self, index_dataset: DataSet, read_fn, batch_size: int = None, max_load: int = 1, shuffle=True,
+    def __init__(self, index_dataset: LazyDataSet, read_fn, batch_size: int = None, max_load: int = 1, shuffle=True,
                  features_preprocesses=None, labels_preprocesses=None, collate_fn=None, sampler=None,
                  **kwargs):
         """
@@ -26,33 +26,27 @@ class LazyDataLoader:
         self.__collate_fn = collate_fn
         self.__read_fn = read_fn
         self.__sampler = sampler
-        self.__len = len(index_dataset)
+        self.__len = len(index_dataset) // batch_size
         self.__kwargs = kwargs
 
         self.__features_preprocesses = [] if features_preprocesses is None else features_preprocesses
         self.__labels_preprocess = [] if labels_preprocesses is None else labels_preprocesses
         # self.__index_loader = to_loader(index_dataset, batch_size * load_multiple, shuffle=shuffle)
         # self.__index_loader = index_dataset.to_loader(batch_size * max_load, shuffle=shuffle)
-        self.__index_loader = index_dataset.to_loader(max_load, shuffle=shuffle)
+        self.__index_loader = index_dataset.to_loader(max_load, sampler, shuffle)
         pass
 
-    # def __iter__(self):
-    #     for index, label in self.__index_loader:
-    #         batch_loader = to_loader(
-    #             DataSet(self.__read_fn(index), label),
-    #             self.__batch_size, self.__sampler, self.__shuffle, **self.__kwargs
-    #         )
-    #         for X, y in batch_loader:
-    #             yield X, y
-
     def __iter__(self):
+        # TODO：每次只提供maxload个index，但sampler提供的下标是整个数据集的随机下标
         for index, label in self.__index_loader:
             raw_ds = DataSet(self.__read_fn(index), label)
             # 进行预处理
             raw_ds.apply(self.__features_preprocesses, self.__labels_preprocess)
-            batch_loader = raw_ds.to_loader(
-                self.__batch_size, self.__sampler, self.__shuffle, **self.__kwargs
-            )
+            # batch_loader = raw_ds.to_loader(
+            #     self.__batch_size, self.__sampler, self.__shuffle, **self.__kwargs
+            # )
+            # 此处不可以使用用户提供的sampler，会发生越界问题。此处数据集已经进行了打乱，因此shuffle操作也是不必要的
+            batch_loader = raw_ds.to_loader(self.__batch_size, shuffle=False, **self.__kwargs)
             # batch_loader = to_loader(
             #     raw_ds, self.__batch_size, self.__sampler, self.__shuffle, **self.__kwargs
             # )

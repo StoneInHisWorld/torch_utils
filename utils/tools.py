@@ -194,6 +194,9 @@ def resize_img(image: Image, required_shape: Tuple[int, int], img_mode='L') -> I
     return image
 
 
+#TODO：从中央裁剪图片函数
+
+
 def check_path(path: str, way_to_mkfile=None):
     """
     检查指定路径。如果目录不存在，则会创建目录；如果文件不存在，则指定文件初始化方式后才会自动初始化文件
