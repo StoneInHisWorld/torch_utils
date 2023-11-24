@@ -1,13 +1,12 @@
-# from utils.data_related import to_loader
-from typing import Tuple, Callable
+from typing import Callable
 
 from utils.datasets import DataSet, LazyDataSet
 
 
 class LazyDataLoader:
 
-    def __init__(self, index_dataset: LazyDataSet, read_fn, batch_size: int = None, max_load: int = 1, shuffle=True,
-                 features_preprocesses=None, labels_preprocesses=None, collate_fn=None, sampler=None,
+    def __init__(self, index_dataset: LazyDataSet, read_fn: Callable, batch_size: int = None, shuffle=True,
+                 max_load: int = 10000, collate_fn=None, sampler=None,
                  **kwargs):
         """
         数据懒加载器。对懒加载数据集进行读取，每次供给懒加载数据集中索引对应的数据内容。
@@ -29,15 +28,15 @@ class LazyDataLoader:
         self.__len = len(index_dataset) // batch_size
         self.__kwargs = kwargs
 
-        self.__features_preprocesses = [] if features_preprocesses is None else features_preprocesses
-        self.__labels_preprocess = [] if labels_preprocesses is None else labels_preprocesses
+        # self.__features_preprocesses = [] if features_preprocesses is None else features_preprocesses
+        # self.__labels_preprocess = [] if labels_preprocesses is None else labels_preprocesses
+        self.__features_preprocesses = []
+        self.__labels_preprocess = []
         # self.__index_loader = to_loader(index_dataset, batch_size * load_multiple, shuffle=shuffle)
         # self.__index_loader = index_dataset.to_loader(batch_size * max_load, shuffle=shuffle)
-        self.__index_loader = index_dataset.to_loader(max_load, sampler, shuffle)
-        pass
+        self.__index_loader = index_dataset.to_loader(max_load, shuffle, sampler)
 
     def __iter__(self):
-        # TODO：每次只提供maxload个index，但sampler提供的下标是整个数据集的随机下标
         for index, label in self.__index_loader:
             raw_ds = DataSet(self.__read_fn(index), label)
             # 进行预处理
@@ -54,8 +53,10 @@ class LazyDataLoader:
                 yield X, y
 
     def __len__(self):
-        # return len(self.__index_loader) * self.__max_load
-        # return self.__max_load
+        """
+        返回懒加载数据集的总长度，计算公式为传入数据集长度整除批量大小
+        :return:
+        """
         return self.__len
 
     def register_preprocess(self, features_calls=None, labels_calls=None):
@@ -71,11 +72,3 @@ class LazyDataLoader:
             labels_calls = []
         self.__features_preprocesses += features_calls
         self.__labels_preprocess += labels_calls
-
-    # def add_feaprepro(self, *calls):
-    #     for call in calls:
-    #         self.__features_preprocesses.append(call)
-    #
-    # def add_labelprepro(self, *calls):
-    #     for call in calls:
-    #         self.__labels_preprocess.append(call)
