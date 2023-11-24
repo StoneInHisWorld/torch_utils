@@ -34,7 +34,7 @@ class LazyDataLoader:
         self.__labels_preprocess = []
         # self.__index_loader = to_loader(index_dataset, batch_size * load_multiple, shuffle=shuffle)
         # self.__index_loader = index_dataset.to_loader(batch_size * max_load, shuffle=shuffle)
-        self.__index_loader = index_dataset.to_loader(max_load, shuffle, sampler)
+        self.__index_loader = index_dataset.to_loader(max_load, sampler, shuffle)
 
     def __iter__(self):
         for index, label in self.__index_loader:
