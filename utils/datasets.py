@@ -8,6 +8,7 @@ from torch.utils.data import Dataset as torch_ds, DataLoader
 
 class DataSet(torch_ds):
     def __init__(self, features, labels, collate_fn: Callable = None):
+    # def __init__(self, features, labels):
         """
         普通数据集，存储数据实际内容供DataLoader进行读取。
         :param features: 数据特征集
@@ -18,6 +19,8 @@ class DataSet(torch_ds):
         assert len(features) == len(labels), f'特征集长度{len(features)}与标签集长度{len(labels)}不等！'
         self.__features = features
         self.__labels = labels
+        # if collate_fn is None:
+        #     collate_fn = lambda d: d
         self.collate_fn = collate_fn
 
     def __getitem__(self, item):
@@ -34,30 +37,6 @@ class DataSet(torch_ds):
         """
         self.__features = self.__features.to(device)
         self.__labels = self.__labels.to(device)
-
-        # try:
-        #     self.__features = self.__features.to(device)
-        # except Exception:
-        #     def fea_collate(features: torch.Tensor):
-        #         features = self.collate_fn(features)
-        #         return features.to(device)
-        #
-        #     self.collate_fn = fea_collate
-        # try:
-        #     self.__labels = self.__labels.to(device)
-        # except Exception:
-        #     def label_collate(labels: torch.Tensor):
-        #         labels = self.collate_fn(labels)
-        #         return labels.to(device)
-        #
-        #     self.collate_fn = label_collate
-
-        # if len(migrate_list) > 0:
-        #     def migrate():
-        #         for mlist in migrate_list:
-        #             mlist.to(device)
-        #
-        #     self.collate_fn = migrate
 
     def apply(self, features_calls: List[Callable[[torch.Tensor], torch.Tensor]] = None,
               labels_calls: List[Callable[[torch.Tensor], torch.Tensor]] = None):
@@ -76,10 +55,11 @@ class DataSet(torch_ds):
         for call in labels_calls:
             self.__labels = call(self.__labels)
 
-    def to_loader(self, batch_size: int = None, sampler: Iterable = None, shuffle=True,
+    def to_loader(self, batch_size: int = None, shuffle=True,
+                  sampler: Iterable = None,
                   **kwargs) -> DataLoader:
         """
-        根据参数生成本数据集的加载器
+        生成普通数据集的加载器
         :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
         :param batch_size: 每次供给的数据量。默认为整个数据集
         :param shuffle: 是否打乱
@@ -92,6 +72,7 @@ class DataSet(torch_ds):
             batch_size = self.feature_shape[0]
         return DataLoader(
             self, batch_size, shuffle=shuffle, collate_fn=self.collate_fn, sampler=sampler, **kwargs
+            # self, batch_size, shuffle=shuffle, collate_fn=collate_fn, sampler=sampler, **kwargs
         )
 
     def get_subset(self, indices: Iterable):
@@ -108,36 +89,28 @@ class DataSet(torch_ds):
 
 class LazyDataSet(DataSet):
 
-    def __init__(self, features, labels, max_load, read_fn, collate_fn=None):
+    def __init__(self, features, labels, read_fn, collate_fn=None):
         """
         懒加载数据集，只存储数据的索引供LazyDataLoader使用。
         LazyDataLoader取该数据集中实际的数据内容时，会使用`read_fn`方法进行数据内容的读取。
         :param features: 数据特征集
         :param labels: 数据标签集
-        :param max_load: 懒加载单次加载的倍数，懒加载每次读取数据量规定为`load_multiple * batch_size`。LazyDataLoader会使用到该变量。
         :param read_fn: 数据读取方法，签名必须为：read_fn(index: Iterable[path]) -> features: Iterable。数据加载器会自动提供数据读取路径index
-        :param collate_fn: 数据预处理方法
+        :param collate_fn: 数据验证方法，签名需为：签名为List[T] -> Any.DataLoader取出数据后，使用此方法对数据进行验证。
         """
-        self.max_load = max_load
         self.read_fn = read_fn
-        super().__init__(features, labels, collate_fn)
+        super().__init__(features, labels, collate_fn=collate_fn)
 
-    # def to_loader(self, batch_size: int = None, sampler: Iterable = None, shuffle=True,
-    #               **kwargs) -> LazyDataLoader:
-    #     """
-    #     根据参数生成本数据集的加载器
-    #     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
-    #     :param batch_size: 每次供给的数据量。默认为整个数据集
-    #     :param shuffle: 是否打乱
-    #     :param kwargs: DataLoader额外参数
-    #     :return: 加载器对象
-    #     """
-    #     if sampler is not None:
-    #         shuffle = None
-    #     if not batch_size:
-    #         batch_size = self.feature_shape[0]
-    #     return LazyDataLoader(
-    #         self, self.read_fn, batch_size, load_multiple=self.load_multiple, shuffle=shuffle,
-    #         collate_fn=self.collate_fn, sampler=sampler, **kwargs
-    #     )
+    def to_loader(self, batch_size: int = None, sampler: Iterable = None, shuffle=True,
+                  **kwargs) -> LazyDataLoader:
+        """
+        注意：本函数只会生成普通数据加载器。
+        如生成懒数据加载器，则需要调用data_related.to_loader()。
+        :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
+        :param batch_size: 每次供给的数据量。默认为整个数据集
+        :param shuffle: 是否打乱
+        :param kwargs: DataLoader额外参数
+        :return: 加载器对象
+        """
+        super().to_loader(batch_size, shuffle, sampler, **kwargs)
 
