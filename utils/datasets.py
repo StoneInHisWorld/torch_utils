@@ -3,8 +3,6 @@ from typing import Iterable, Callable, List
 import torch
 from torch.utils.data import Dataset as torch_ds, DataLoader
 
-# from utils.dataloader import LazyDataLoader
-
 
 class DataSet(torch_ds):
     def __init__(self, features, labels, collate_fn: Callable = None):
@@ -102,7 +100,7 @@ class LazyDataSet(DataSet):
         super().__init__(features, labels, collate_fn=collate_fn)
 
     def to_loader(self, batch_size: int = None, sampler: Iterable = None, shuffle=True,
-                  **kwargs) -> LazyDataLoader:
+                  **kwargs) -> DataLoader:
         """
         注意：本函数只会生成普通数据加载器。
         如生成懒数据加载器，则需要调用data_related.to_loader()。
