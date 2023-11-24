@@ -7,6 +7,7 @@ from PIL import Image
 from typing import Tuple, Iterable, Sized
 
 from torch.utils.data import DataLoader
+from torchvision.transforms import transforms
 
 from utils import tools
 from utils.dataloader import LazyDataLoader
@@ -119,26 +120,26 @@ def read_img(path: str, required_shape: Tuple[int, int] = None, mode: str = 'L',
     return img
 
 
-def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, sampler: Iterable = None, shuffle=True,
+def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=True,
+              sampler: Iterable = None, max_load: int = 10000,
               **kwargs):
-    # TODO: 将maxload隐藏，在to_loader处输入
     """
     根据数据集类型转化为数据集加载器
-    :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
+    :param max_load: 懒数据集加载器的最大加载量，当使用DataSet时，该参数无效
+    :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler，根据shuffle==True or False 提供乱序/顺序下标.
     :param dataset: 转化为加载器的数据集。
     :param batch_size: 每次供给的数据量。默认为整个数据集
     :param shuffle: 是否打乱
     :param kwargs: Dataloader额外参数
     :return: 加载器对象
     """
-    # warnings.warn('将在未来的版本中删除', DeprecationWarning)
     if sampler is not None:
         shuffle = None
     if not batch_size:
         batch_size = dataset.feature_shape[0]
     if type(dataset) == LazyDataSet:
         return LazyDataLoader(
-            dataset, dataset.read_fn, batch_size, max_load=dataset.max_load, shuffle=shuffle,
+            dataset, dataset.read_fn, batch_size, max_load=max_load, shuffle=shuffle,
             collate_fn=dataset.collate_fn, sampler=sampler, **kwargs
         )
     elif type(dataset) == DataSet:
@@ -203,6 +204,10 @@ def data_slicer(data_portion=1., shuffle=True, *args: Sized):
 
 
 def normalize(data: torch.Tensor) -> torch.Tensor:
-    # mean = data.mean()
-    # std = data.std()
-    return torch.nn.functional.normalize(data)
+    # mean = torch.mean(data, dim=list(range(1, len(data.shape))))
+    # std = torch.std(data, dim=list(range(1, len(data.shape))))
+    mean, std = [func(data, dim=list(range(2, len(data.shape))), keepdim=True)
+                 for func in [torch.mean, torch.std]]
+    computer = transforms.Normalize(mean, std)
+    return computer(data)
+    # return torch.nn.functional.normalize(data)
