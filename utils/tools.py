@@ -1,5 +1,6 @@
 import os.path
 import random
+from pathlib import Path
 from typing import Tuple
 
 import pandas as pd
@@ -9,10 +10,11 @@ from PIL.Image import Image
 from matplotlib import pyplot as plt
 from torch import cuda, nn as nn
 from torch.nn import init as init
+from torchvision.transforms import transforms
 
-from networks.layers import common_layers
+from networks.layers import common_layers as cl
 
-optimizers = ['sgd', 'adam']
+optimizers = ['sgd', 'asgd', 'adagrad', 'adadelta', 'rmsprop', 'adam', 'adamax']
 loss_es = ['l1', 'entro', 'mse', 'huber', 'ssim']
 init_funcs = ['normal', 'xavier', 'zero']
 
@@ -85,17 +87,55 @@ def permutation(res: list, *args):
 def get_optimizer(net: torch.nn.Module, optim_str, lr=0.1, w_decay=0., momentum=0.):
     assert optim_str in optimizers, f'不支持优化器{optim_str}, 支持的优化器包括{optimizers}'
     if optim_str == 'sgd':
+        # 使用随机梯度下降优化器
         return torch.optim.SGD(
             net.parameters(),
             lr=lr,
             weight_decay=w_decay,
             momentum=momentum
         )
+    elif optim_str == 'asgd':
+        # 使用随机平均梯度下降优化器
+        return torch.optim.ASGD(
+            net.parameters(),
+            lr=lr,
+            weight_decay=w_decay
+        )
+    elif optim_str == 'adagrad':
+        # 使用自适应梯度优化器
+        return torch.optim.Adagrad(
+            net.parameters(),
+            lr=lr,
+            weight_decay=w_decay
+        )
+    elif optim_str == 'adadelta':
+        # 使用Adadelta优化器，Adadelta是Adagrad的改进
+        return torch.optim.Adadelta(
+            net.parameters(),
+            lr=lr,
+            weight_decay=w_decay
+        )
+    elif optim_str == 'rmsprop':
+        # 使用RMSprop优化器，RMSprop是Adagrad的改进
+        return torch.optim.RMSprop(
+            net.parameters(),
+            lr=lr,
+            weight_decay=w_decay,
+            momentum=momentum
+        )
     elif optim_str == 'adam':
+        # 使用Adaptive Moment Estimation优化器。Adam是RMSprop的改进。
         return torch.optim.Adam(
             net.parameters(),
             lr=lr,
             weight_decay=w_decay
+        )
+    elif optim_str == 'adamax':
+        # 使用Adamax优化器，Adamax是Adam的改进
+        return torch.optim.Adamax(
+            net.parameters(),
+            lr=lr,
+            weight_decay=w_decay,
         )
 
 
@@ -116,8 +156,8 @@ def get_loss(loss_str: str = 'mse'):
     elif loss_str == 'huber':
         return nn.HuberLoss()
     elif loss_str == 'ssim':
-        return common_layers.SSIMLoss()
-    
+        return cl.SSIMLoss()
+
 
 def init_wb(func_str: str = 'xavier'):
     """
@@ -140,31 +180,6 @@ def init_wb(func_str: str = 'xavier'):
             b_init(m.bias)
 
     return _init
-
-# def resize_img(image: Image, required_shape: Tuple[int, int], img_mode='L') -> Image:
-#     # ------------------------------#
-#     #   获得图像的高宽与目标高宽
-#     #   code from: Bubbliiiing
-#     # ------------------------------#
-#     iw, ih = image.size
-#     h, w = required_shape
-#
-#     # 长边放缩比例
-#     scale = min(w / iw, h / ih)
-#     # 计算新图片shape
-#     new_w = int(iw * scale)
-#     new_h = int(ih * scale)
-#     # 计算图片缺失shape
-#     dx = (w - new_w) // 2
-#     dy = (h - new_h) // 2
-#     # ---------------------------------#
-#     #   将图像多余的部分加上黑条
-#     # ---------------------------------#
-#     image = image.resize((new_w, new_h), IMAGE.BICUBIC)
-#     new_image = IMAGE.new(img_mode, (w, h), 0)
-#     new_image.paste(image, (dx, dy))
-#
-#     return new_image
 
 
 def resize_img(image: Image, required_shape: Tuple[int, int], img_mode='L') -> Image:
@@ -194,12 +209,15 @@ def resize_img(image: Image, required_shape: Tuple[int, int], img_mode='L') -> I
     return image
 
 
-#TODO：从中央裁剪图片函数
+# TODO：从中央裁剪图片函数
 
 
 def check_path(path: str, way_to_mkfile=None):
     """
     检查指定路径。如果目录不存在，则会创建目录；如果文件不存在，则指定文件初始化方式后才会自动初始化文件
+    :param path: 需要检查的目录
+    :param way_to_mkfile: 初始化文件的方法
+    :return:
     """
     if not os.path.exists(path):
         path, file = os.path.split(path)
