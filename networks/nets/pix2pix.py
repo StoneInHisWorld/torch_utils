@@ -2,14 +2,16 @@ import torch
 from torch import nn
 
 from networks.basic_nn import BasicNN
-from networks.layers.multi_output import MultiOutputLayer
+from networks.layers.common_layers import Val2Fig
 
 
 class Pix2Pix(BasicNN):
     required_shape = (256, 256)
 
-    def __init__(self, input_channel, out_features, base_channel=64,
-                 kernel_size=4, bn_momen=0.8, init_meth='normal', with_checkpoint=False, device='cpu'):
+    def __init__(self, input_channel, out_features,
+                 base_channel=4, kernel_size=4, bn_momen=0.8,
+                 init_meth='normal', with_checkpoint=False, device='cpu',
+                 output_img=None):
         """
         摘录于王志远硕士毕业论文。
         :param input_channel: 输入数据通道，一般是图片通道数。
@@ -52,6 +54,8 @@ class Pix2Pix(BasicNN):
             ep_layer(base_channel * 2, base_channel * 2),
             nn.Conv2d(base_channel * 2, out_features[0], kernel_size=kernel_size + 1, stride=1, padding=2),
         ]
+        if output_img is not None:
+            self.output_path.append(Val2Fig(output_img))
         super().__init__(device, init_meth, with_checkpoint, *self.contracting_path, *self.expanding_path,
                          *self.output_path)
 
