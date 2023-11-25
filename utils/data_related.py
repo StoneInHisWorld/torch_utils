@@ -4,7 +4,7 @@ import warnings
 import numpy as np
 import torch
 from PIL import Image
-from typing import Tuple, Iterable, Sized
+from typing import Tuple, Iterable, Sized, Callable, List
 
 from torch.utils.data import DataLoader
 from torchvision.transforms import transforms
@@ -88,22 +88,28 @@ def split_data(dataset: DataSet or LazyDataSet, train=0.8, test=0.2, valid=.0, s
     ]
 
 
-def read_img(path: str, required_shape: Tuple[int, int] = None, mode: str = 'L',
-             requires_id: bool = False) -> np.ndarray:
+# def read_img(path: str, required_shape: Tuple[int, int] = None, mode: str = 'L',
+#              requires_id: bool = False) -> np.ndarray:
+def read_img(path: str, mode: str = 'L', requires_id: bool = False,
+             preprocess: List[Callable] = None, prepro_kwargs: List[dict] = None) -> np.ndarray:
     """
     读取图片
+    :param preprocess: 预处理过程，方法签名需为def __(img:Image, ...) -> Image
     :param path: 图片所在路径
-    :param required_shape: 需要将图片resize成的尺寸
     :param mode: 图片读取模式
     :param requires_id: 是否需要给图片打上ID
+    :param kwargs: 输入到预处理过程中的关键词参数
     :return: 图片对应numpy数组，形状为（通道，图片高，图片宽，……）
     """
     img_modes = ['L', 'RGB']
     assert mode in img_modes, f'不支持的图像模式{mode}！'
     img = Image.open(path).convert(mode)
-    # 若有要求shape，则进行resize，边缘填充黑条
-    if required_shape and required_shape != (-1, -1):
-        img = tools.resize_img(img, required_shape)
+    # # 若有要求shape，则进行resize，边缘填充黑条
+    # if required_shape and required_shape != (-1, -1):
+    #     img = tools.resize_img(img, required_shape)
+    if preprocess is not None:
+        for func, kwargs in zip(preprocess, prepro_kwargs):
+            img = func(img, **kwargs)
     img = np.array(img)
     # 复原出通道。1表示样本数量维
     if mode == 'L':
