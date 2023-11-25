@@ -182,7 +182,14 @@ def init_wb(func_str: str = 'xavier'):
     return _init
 
 
-def resize_img(image: Image, required_shape: Tuple[int, int], img_mode='L') -> Image:
+def resize_img(image: Image, required_shape: Tuple[int, int]) -> Image:
+    """
+    重塑图片。
+    先将图片等比例放大到最大（放缩到最小）满足required_shape的尺寸，再对图片随机取部分或填充黑边以适配所需形状
+    :param image: 待编辑图片
+    :param required_shape: 所需形状
+    :return: 重塑完成的图片。
+    """
     # 实现将图片进行随机裁剪以达到目标shape的功能
     ih, iw = image.size
     h, w = required_shape
@@ -199,7 +206,7 @@ def resize_img(image: Image, required_shape: Tuple[int, int], img_mode='L') -> I
     image = image.resize((new_h, new_w), IMAGE.BICUBIC)
     # 若需求图片大小较大，则进行填充
     if dw > 0 or dh > 0:
-        back_ground = IMAGE.new(img_mode, (w, h), 0)
+        back_ground = IMAGE.new(image.mode, (w, h), 0)
         back_ground.paste(image)
     # 若需求图片大小较小，则随机取部分
     if dw < 0 or dh < 0:
@@ -209,7 +216,31 @@ def resize_img(image: Image, required_shape: Tuple[int, int], img_mode='L') -> I
     return image
 
 
-# TODO：从中央裁剪图片函数
+def crop_img(img: Image, required_shape, loc: str or Tuple[int, int]) -> Image:
+    img_size = img.size
+    ih, iw = img_size
+    rh, rw = required_shape
+    assert rh <= ih and rw <= iw, (
+        f'裁剪尺寸{required_shape}需要小于图片尺寸{img_size}！'
+    )
+    if type(loc) == str:
+        if loc == 'lt':
+            loc = (0, 0, 0 + rw, 0 + rh)
+        elif loc == 'lb':
+            loc = (0, ih - rh, 0 + rw, iw)
+        elif loc == 'rt':
+            loc = (iw - rw, 0, iw, rh)
+        elif loc == 'rb':
+            loc = (iw - rw, ih - rh, ih, iw)
+        elif loc == 'c':
+            loc = (iw // 2 - rw // 2, ih // 2 - rh // 2, iw // 2 + rw // 2, ih // 2 + rh // 2)
+        else:
+            raise Exception(f'不支持的裁剪位置{loc}！')
+    elif type(loc) == Tuple and len(loc) == 2:
+        loc = (loc[0], loc[1], loc[0] + rw, loc[1] + rh)
+    else:
+        raise Exception(f'无法识别的裁剪位置参数{loc}')
+    return img.crop(loc)
 
 
 def check_path(path: str, way_to_mkfile=None):
