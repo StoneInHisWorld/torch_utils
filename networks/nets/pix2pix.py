@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from networks.basic_nn import BasicNN
-from networks.layers.common_layers import Val2Fig
+from networks.layers.val2img import Val2Fig
 
 
 class Pix2Pix(BasicNN):

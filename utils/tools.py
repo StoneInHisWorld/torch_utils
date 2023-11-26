@@ -1,6 +1,5 @@
 import os.path
 import random
-from pathlib import Path
 from typing import Tuple
 
 import pandas as pd
@@ -10,9 +9,8 @@ from PIL.Image import Image
 from matplotlib import pyplot as plt
 from torch import cuda, nn as nn
 from torch.nn import init as init
-from torchvision.transforms import transforms
 
-from networks.layers import common_layers as cl
+from networks.layers import ssim as cl
 
 optimizers = ['sgd', 'asgd', 'adagrad', 'adadelta', 'rmsprop', 'adam', 'adamax']
 loss_es = ['l1', 'entro', 'mse', 'huber', 'ssim']
@@ -20,7 +18,13 @@ init_funcs = ['normal', 'xavier', 'zero']
 
 
 def write_log(path: str, **kwargs):
-    assert path.endswith('.csv'), f'日志文件格式为.csv，将要写入的文件名为{path}'
+    """
+    编写运行日志。
+    :param path: 日志保存路径
+    :param kwargs: 日志保存信息，类型为词典，key为列名，value为单元格内容
+    :return: None
+    """
+    assert path.endswith('.csv'), f'日志文件格式为.csv，但指定的文件名为{path}'
     try:
         file_data = pd.read_csv(path)
     except Exception as _:
@@ -35,7 +39,17 @@ def write_log(path: str, **kwargs):
 
 def plot_history(history, mute=False, title=None, xlabel=None,
                  ylabel=None, savefig_as=None, accumulative=False):
-    # check_path(savefig_as)
+    """
+    绘制训练历史变化趋势图
+    :param history: 训练历史数据
+    :param mute: 绘制完毕后是否立即展示成果图
+    :param title: 绘制图标题
+    :param xlabel: 自变量名称
+    :param ylabel: 因变量名称
+    :param savefig_as: 保存图片路径
+    :param accumulative: 是否将所有趋势图叠加在一起
+    :return: None
+    """
     for label, log in history:
         plt.plot(range(len(log)), log, label=label)
     if xlabel:
@@ -217,6 +231,13 @@ def resize_img(image: Image, required_shape: Tuple[int, int]) -> Image:
 
 
 def crop_img(img: Image, required_shape, loc: str or Tuple[int, int]) -> Image:
+    """
+    按照指定位置裁剪图片
+    :param img: 即将进行裁剪的图片
+    :param required_shape: 需要保留的尺寸
+    :param loc: 裁剪的位置。可以指定为“lt, lb, rt, rb, c”的其中一种，或者指定为二元组指示裁剪区域的左上角坐标
+    :return: 裁剪完成的图片
+    """
     img_size = img.size
     ih, iw = img_size
     rh, rw = required_shape
@@ -248,7 +269,7 @@ def check_path(path: str, way_to_mkfile=None):
     检查指定路径。如果目录不存在，则会创建目录；如果文件不存在，则指定文件初始化方式后才会自动初始化文件
     :param path: 需要检查的目录
     :param way_to_mkfile: 初始化文件的方法
-    :return:
+    :return: None
     """
     if not os.path.exists(path):
         path, file = os.path.split(path)

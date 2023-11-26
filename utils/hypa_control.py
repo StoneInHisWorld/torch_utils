@@ -38,13 +38,12 @@ class ControlPanel:
         self.__lp = log_path
         self.__np = net_path
         self.__datasource = datasource
-        # self.__extra_lm = {}
         # 读取运行配置
         with open(self.__rcp, 'r') as config:
             self.config_dict = json.load(config)
-            # self.__rck = config_dict.keys()
-            # for k, v in config_dict.items():
-            #     setattr(self, k, v)
+        # 设置随机种子
+        self.random_seed = self['random_seed']
+        torch.random.manual_seed(self.random_seed)
         # 读取实验编号
         if self.__lp is not None:
             try:
@@ -114,6 +113,10 @@ class ControlPanel:
                 history, xlabel=xlabel, ylabel=ylabel, mute=self['pic_mute'], title=title,
                 savefig_as=save_path
             )
+
+    @property
+    def device(self):
+        return torch.device(self['device'])
 
     # @property
     # def running_device(self):

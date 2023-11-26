@@ -5,8 +5,8 @@ from torch.utils.data import Dataset as torch_ds, DataLoader
 
 
 class DataSet(torch_ds):
+
     def __init__(self, features, labels, collate_fn: Callable = None):
-    # def __init__(self, features, labels):
         """
         普通数据集，存储数据实际内容供DataLoader进行读取。
         :param features: 数据特征集
@@ -29,9 +29,9 @@ class DataSet(torch_ds):
 
     def to(self, device: torch.device) -> None:
         """
-        数据迁移
+        将数据迁移到device中
         :param device: 迁移目标设备
-        :return:
+        :return: None
         """
         self.__features = self.__features.to(device)
         self.__labels = self.__labels.to(device)
