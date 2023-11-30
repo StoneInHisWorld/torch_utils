@@ -1,10 +1,10 @@
 import numpy as np
 import torch
 
-import utils.data_related as dr
+from data_related import data_related as dr
 from networks.nets.wzynet_essay import WZYNetEssay
 from utils import tools
-from utils.datasets import DataSet
+from data_related.datasets import DataSet
 from utils.hypa_control import ControlPanel
 
 # TODO: 选择选用的模型

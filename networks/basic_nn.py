@@ -1,5 +1,5 @@
 import warnings
-from typing import Callable, Any, Iterable
+from typing import Callable, Iterable
 
 import torch
 import torch.nn as nn
@@ -7,14 +7,16 @@ from torch.nn import Module
 from torch.utils import checkpoint
 from tqdm import tqdm
 
-from utils.data_related import single_argmax_accuracy
+from utils.accumulator import Accumulator
+from data_related.data_related import single_argmax_accuracy
 from utils.history import History
 from utils.tools import init_wb
-from utils.accumulator import Accumulator
 
 
 class BasicNN(nn.Sequential):
+
     required_shape = (-1,)
+    # TODO：HIDE init_meth、with_checkpoint into of all the derived class
 
     # def __init__(self, device, *args: Module) -> None:
     def __init__(self, device: torch.device = torch.device('cpu'), init_meth: str = 'xavier',
@@ -81,7 +83,7 @@ class BasicNN(nn.Sequential):
                         [metric[0] / metric[2], metric[1] / metric[2]]
                     )
                 else:
-                    pbar.set_description('validating...')
+                    pbar.set_description('验证中...')
                     valid_acc, valid_l = self.test_(valid_iter, acc_fn, ls_fn)
                     history.add(
                         ['train_l', 'train_acc', 'valid_l', 'valid_acc'],

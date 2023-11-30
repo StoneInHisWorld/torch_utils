@@ -4,14 +4,13 @@ import warnings
 import numpy as np
 import torch
 from PIL import Image
-from typing import Tuple, Iterable, Sized, Callable, List
+from typing import Iterable, Sized, Callable, List
 
 from torch.utils.data import DataLoader
 from torchvision.transforms import transforms
 
-from utils import tools
-from utils.dataloader import LazyDataLoader
-from utils.datasets import DataSet, LazyDataSet
+from data_related.dataloader import LazyDataLoader
+from data_related.datasets import DataSet, LazyDataSet
 
 
 def single_argmax_accuracy(Y_HAT: torch.Tensor, Y: torch.Tensor) -> float:
@@ -144,10 +143,17 @@ def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=T
     if not batch_size:
         batch_size = dataset.feature_shape[0]
     if type(dataset) == LazyDataSet:
-        return LazyDataLoader(
+        # dataset.preprocess()
+        loader = LazyDataLoader(
             dataset, dataset.read_fn, batch_size, max_load=max_load, shuffle=shuffle,
             collate_fn=dataset.collate_fn, sampler=sampler, **kwargs
         )
+        loader.register_preprocess(dataset.fea_preprocesses, dataset.lb_preprocesses)
+        # return LazyDataLoader(
+        #     dataset, dataset.read_fn, batch_size, max_load=max_load, shuffle=shuffle,
+        #     collate_fn=dataset.collate_fn, sampler=sampler, **kwargs
+        # )
+        return loader
     elif type(dataset) == DataSet:
         return DataLoader(
             dataset, batch_size, shuffle=shuffle, collate_fn=dataset.collate_fn, sampler=sampler, **kwargs

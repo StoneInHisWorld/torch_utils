@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from utils import data_related as dr
+from data_related import data_related as dr
 
 
 class Val2Fig(nn.Module):

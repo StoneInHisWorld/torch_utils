@@ -1,6 +1,6 @@
 from typing import Callable
 
-from utils.datasets import DataSet, LazyDataSet
+from data_related.datasets import DataSet, LazyDataSet
 
 
 class LazyDataLoader:
@@ -28,8 +28,8 @@ class LazyDataLoader:
         self.__len = len(index_dataset) // batch_size
         self.__kwargs = kwargs
 
-        self.__features_preprocesses = []
-        self.__labels_preprocess = []
+        self.__fea_preprocesses = []
+        self.__lb_preprocesses = []
         # self.__index_loader = to_loader(index_dataset, batch_size * load_multiple, shuffle=shuffle)
         # self.__index_loader = index_dataset.to_loader(batch_size * max_load, shuffle=shuffle)
         self.__index_loader = index_dataset.to_loader(max_load, sampler, shuffle)
@@ -38,9 +38,11 @@ class LazyDataLoader:
         for index, label in self.__index_loader:
             # TODO：试图用多线程改进效率
             raw_ds = DataSet(self.__read_fn(index), label)
-            # 进行预处理
-            raw_ds.apply(self.__features_preprocesses, self.__labels_preprocess)
-            # 此处不可以使用用户提供的sampler，会发生越界问题。此处数据集已经进行了打乱，因此shuffle操作也是不必要的
+            # # 进行预处理
+            # raw_ds.apply(self.__features_preprocesses, self.__labels_preprocess)
+            # # 此处不可以使用用户提供的sampler，会发生越界问题。此处数据集已经进行了打乱，因此shuffle操作也是不必要的
+            # batch_loader = raw_ds.to_loader(self.__batch_size, shuffle=False, **self.__kwargs)
+            raw_ds.register_preprocess(self.__fea_preprocesses, self.__lb_preprocesses)
             batch_loader = raw_ds.to_loader(self.__batch_size, shuffle=False, **self.__kwargs)
             for X, y in batch_loader:
                 yield X, y
@@ -63,5 +65,5 @@ class LazyDataLoader:
             features_calls = []
         if labels_calls is None:
             labels_calls = []
-        self.__features_preprocesses += features_calls
-        self.__labels_preprocess += labels_calls
+        self.__fea_preprocesses += features_calls
+        self.__lb_preprocesses += labels_calls
