@@ -42,7 +42,7 @@ class Val2Fig(nn.Module):
         # 进行归一化
         y_hat = dr.normalize(y_hat)
         if self.mode == 'L' or self.mode == 'RGB':
-            return (y_hat + 1) * 128
+            return (y_hat + 1) * 127.5
         else:
             return y_hat
 

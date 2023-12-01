@@ -110,5 +110,5 @@ class LazyDataSet(DataSet):
         :param kwargs: DataLoader额外参数
         :return: 加载器对象
         """
-        super().to_loader(batch_size, shuffle, sampler, **kwargs)
+        return super().to_loader(batch_size, shuffle, sampler, **kwargs)
 

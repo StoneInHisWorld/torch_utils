@@ -49,16 +49,19 @@ class ControlPanel:
         if self.__lp is not None:
             try:
                 log = pd.read_csv(self.__lp)
-                self.config_dict['exp_no'] = log.iloc[-1]['exp_no'] + 1
+                exp_no = log.iloc[-1]['exp_no'] + 1
+                # self.config_dict['exp_no'] = log.iloc[-1]['exp_no'] + 1
             except Exception as _:
-                self.config_dict['exp_no'] = 1
+                # self.config_dict['exp_no'] = 1
+                exp_no = 1
+            self.exp_no = exp_no
 
     def __iter__(self):
         with open(self.__hcp, 'r', encoding='utf-8') as config:
             hyper_params = json.load(config)
             for hps in permutation([], *hyper_params.values()):
                 hyper_params = {k: v for k, v in zip(hyper_params.keys(), hps)}
-                yield Trainer(self.__datasource.__class__.__name__, hyper_params, self.__lp, self.__np)
+                yield Trainer(self.__datasource.__class__.__name__, hyper_params, self.exp_no, self.__lp, self.__np)
                 self.__read_running_config()
 
     def __getitem__(self, item):
@@ -84,7 +87,8 @@ class ControlPanel:
                 # setattr(self, k, v)
                 self.config_dict[k] = v
         # 更新实验编号
-        self.config_dict['exp_no'] += 1
+        # self.config_dict['exp_no'] += 1
+        self.exp_no += 1
 
     def list_net(self, net, input_size, batch_size):
         # assert hasattr(self, "print_net"), '设置文件中不存在"print_net"参数！'
@@ -138,7 +142,7 @@ class ControlPanel:
 
 class Trainer:
 
-    def __init__(self, datasource, hyper_parameters: dict,
+    def __init__(self, datasource, hyper_parameters: dict, exp_no: int,
                  log_path: str = None,
                  net_path: str = None):
         """
@@ -154,6 +158,7 @@ class Trainer:
         self.__lp = log_path
         self.__np = net_path
         self.datasource = datasource
+        self.exp_no = exp_no
 
     def __enter__(self):
         self.start = time.time()
@@ -163,8 +168,9 @@ class Trainer:
         if exc_type is not None:
             print(f'exc_type: {exc_type}')
             print(f'exc_val: {exc_val}')
+            self.__hp.update({'exc_val': exc_val})
         time_span = time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start))
-        self.__hp.update({'exc_val': exc_val, "duration": time_span, "dataset": self.datasource})
+        self.__hp.update({"duration": time_span, "dataset": self.datasource, "exp_no": self.exp_no})
         if self.__lp is not None and exc_type != KeyboardInterrupt:
             self.__write_log(**self.__hp)
 
