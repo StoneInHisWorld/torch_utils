@@ -16,7 +16,6 @@ from utils.tools import init_wb
 class BasicNN(nn.Sequential):
 
     required_shape = (-1,)
-    # TODO：HIDE init_meth、with_checkpoint into of all the derived class
 
     # def __init__(self, device: torch.device = torch.device('cpu'), init_meth: str = 'xavier',
     #              with_checkpoint: bool = False, *args: Module, **kwargs) -> None:
