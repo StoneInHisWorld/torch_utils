@@ -18,10 +18,18 @@ def SSIM(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 
 class SSIMLoss(nn.Module):
 
+    def __init__(self, mute=True):
+        """
+        SSIM损失层。计算每对y_hat与y的图片结构相似度，并求其平均逆作为损失值。
+        计算公式为：ls =
+        """
+        self.mute = mute
+        super().__init__()
+
     def forward(self, y_hat, y):
         ssim_of_each_sample = SSIM(y_hat, y)
         for ssim in ssim_of_each_sample:
-            if ssim < 0:
+            if ssim < 0 and not self.mute:
                 warnings.warn(f'出现了负值SSIM={ssim}！')
         return torch.mean(1 - ssim_of_each_sample)
 

@@ -9,8 +9,16 @@ import torch
 
 class MLP(BasicNN):
 
-    def __init__(self, in_features, out_features, device='cpu', base=2, init_meth='normal',
-                 with_checkpoint=False, regression=True) -> None:
+    def __init__(self, in_features, out_features,
+                 base=2, regression=True, **kwargs) -> None:
+        """
+        经典多层感知机。
+        :param in_channels: 输入特征通道数。
+        :param out_features: 输出数据通道数。
+        :param regression: 是否进行回归预测。
+        :param kwargs: BasicNN关键词参数。
+        :param base: 多层感知机复杂度参数。base要求为正整数，越大意味着多层感知机越复杂。
+        """
         layer_sizes = torch.logspace(
             math.log(in_features, base),
             math.log(out_features, base),
@@ -37,4 +45,4 @@ class MLP(BasicNN):
         # layers.pop(len(layers) - 1)
         if not regression:
             layers += [nn.Softmax(dim=1)]
-        super().__init__(device, init_meth, with_checkpoint, *layers)
+        super().__init__(*layers, **kwargs)

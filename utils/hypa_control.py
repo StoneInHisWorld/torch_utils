@@ -100,12 +100,6 @@ class ControlPanel:
         :param batch_size:
         :return:
         """
-        # assert hasattr(self, "print_net"), '设置文件中不存在"print_net"参数！'
-        # if self.print_net:
-        #     try:
-        #         summary(net, input_size=input_size, batch_size=batch_size)
-        #     except RuntimeError as _:
-        #         print(net)
         if self['print_net']:
             try:
                 summary(net, input_size=input_size, batch_size=batch_size)
@@ -113,16 +107,8 @@ class ControlPanel:
                 print(net)
 
     def plot_history(self, history, xlabel='num_epochs', ylabel='loss', title=None, save_path=None):
-        # assert hasattr(self, 'pic_mute'), '配置文件中缺少参数"pic_mute"'
-        # assert hasattr(self, 'plot'), '配置文件中缺少参数"plot"'
-        # if self.plot:
-        #     print('plotting...')
-        #     tools.plot_history(
-        #         history, xlabel=xlabel, ylabel=ylabel, mute=self.pic_mute, title=title,
-        #         savefig_as=save_path
-        #     )
         if self['plot']:
-            print('plotting...')
+            print('正在绘制历史趋势图……')
             tools.plot_history(
                 history, xlabel=xlabel, ylabel=ylabel, mute=self['pic_mute'], title=title,
                 savefig_as=save_path

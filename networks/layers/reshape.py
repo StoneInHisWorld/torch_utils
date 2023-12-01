@@ -6,6 +6,10 @@ from torchvision.transforms import Resize
 class Reshape(nn.Module):
 
     def __init__(self, required_shape):
+        """
+        重塑层，可以将输入的张量进行重塑为所需形状。
+        :param required_shape: 重塑目标形状
+        """
         super().__init__()
         self.required_shape = required_shape
 

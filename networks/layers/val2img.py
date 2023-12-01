@@ -8,8 +8,8 @@ class Val2Fig(nn.Module):
 
     def __init__(self, img_mode='L'):
         """
-        将数值转化为要求模式的图片。
-        :param img_mode: 生成的图片模式。'L'为灰度图。
+        数值-图片转化层。根据指定模式，对数值进行归一化后反归一化为图片模式像素取值范围，从而转化为可视图片。
+        :param img_mode: 生成的图片模式。'L'为灰度图，‘RGB’为彩色图。
         """
         self.mode = img_mode
         super().__init__()

@@ -47,7 +47,7 @@ class Trainer:
             self.__write_log(**self.__hp)
 
     def __write_log(self, **kwargs):
-        print('logging...')
+        print('正在编写日志……')
         kwargs.update(self.__extra_lm)
         tools.write_log(self.__lp, **kwargs)
 
