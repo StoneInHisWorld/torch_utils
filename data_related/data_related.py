@@ -72,7 +72,7 @@ def split_data(dataset: DataSet or LazyDataSet, train=0.8, test=0.2, valid=.0, s
     """
     assert train + test + valid == 1.0, '训练集、测试集、验证集比例之和须为1'
     # 数据集分割
-    print('splitting data...')
+    print('正对数据集进行分割...')
     data_len = len(dataset)
     train_len = int(data_len * train)
     valid_len = int(data_len * valid)
