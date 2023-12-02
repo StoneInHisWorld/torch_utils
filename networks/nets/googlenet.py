@@ -10,7 +10,7 @@ from networks.basic_nn import BasicNN
 
 class Inception(nn.Module):
     # c1--c4是每条路径的输出通道数
-    def __init__(self, in_channels, c1, c2, c3, c4, **kwargs):
+    def __init__(self, in_channels, c1, c2, c3, c4):
         """
         构成GoogLeNet的Inception块
         :param in_channels: 输入通道
@@ -18,9 +18,8 @@ class Inception(nn.Module):
         :param c2: path2中层的感受野，len(c2) == 2
         :param c3: path3中层的感受野，len(c3) == 2
         :param c4: path4中层的感受野，len(c4) == 2
-        :param kwargs: 构建nn.Module对象的关键词参数
         """
-        super(Inception, self).__init__(**kwargs)
+        super(Inception, self).__init__()
         # 线路1，单1x1卷积层
         self.p1_1 = nn.Conv2d(in_channels, c1, kernel_size=1)
         # 线路2，1x1卷积层后接3x3卷积层
@@ -46,10 +45,10 @@ class GoogLeNet(BasicNN):
 
     required_shape = (224, 224)
 
-    def __init__(self, in_channels, out_features, init_meth='xavier', with_checkpoint=False,
-                 device='cpu', regression=False):
+    def __init__(self, in_channels, out_features, regression=False,
+                 **kwargs):
         """
-        构造经典GoogLeNet
+        经典GoogLeNet模型。
         :param in_channels: 输入通道
         :param out_features: 输出特征
         :param device: 设置本网络所处设备
@@ -89,11 +88,9 @@ class GoogLeNet(BasicNN):
             nn.Flatten()
         )
         super().__init__(
-            device, init_meth, with_checkpoint,
             b1, b2, b3, b4, b5,
-            MultiOutputLayer(1024, out_features, init_meth=init_meth) if isinstance(out_features, Iterable)
-            else nn.Sequential(*linear_output(1024, out_features, softmax=not regression))
-            # [nn.Linear(1024, out_features)] if regression
-            # else nn.Softmax(dim=1)]
+            MultiOutputLayer(1024, out_features, init_meth=kwargs['init_meth']) if isinstance(out_features, Iterable)
+            else nn.Sequential(*linear_output(1024, out_features, softmax=not regression)),
+            **kwargs
         )
 

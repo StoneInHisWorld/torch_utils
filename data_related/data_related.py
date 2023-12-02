@@ -4,12 +4,13 @@ import warnings
 import numpy as np
 import torch
 from PIL import Image
-from typing import Tuple, Iterable, Sized
+from typing import Iterable, Sized, Callable, List
 
 from torch.utils.data import DataLoader
+from torchvision.transforms import transforms
 
-from utils import tools
-from utils.datasets import DataSet, LazyDataSet
+from data_related.dataloader import LazyDataLoader
+from data_related.datasets import DataSet, LazyDataSet
 
 
 def single_argmax_accuracy(Y_HAT: torch.Tensor, Y: torch.Tensor) -> float:
@@ -71,7 +72,7 @@ def split_data(dataset: DataSet or LazyDataSet, train=0.8, test=0.2, valid=.0, s
     """
     assert train + test + valid == 1.0, '训练集、测试集、验证集比例之和须为1'
     # 数据集分割
-    print('splitting data...')
+    print('正对数据集进行分割……')
     data_len = len(dataset)
     train_len = int(data_len * train)
     valid_len = int(data_len * valid)
@@ -86,28 +87,36 @@ def split_data(dataset: DataSet or LazyDataSet, train=0.8, test=0.2, valid=.0, s
     ]
 
 
-def read_img(path: str, required_shape: Tuple[int, int] = None, mode: str = 'L',
-             requires_id: bool = False) -> np.ndarray:
+# def read_img(path: str, required_shape: Tuple[int, int] = None, mode: str = 'L',
+#              requires_id: bool = False) -> np.ndarray:
+def read_img(path: str, mode: str = 'L', requires_id: bool = False,
+             preprocess: List[Callable] = None, prepro_kwargs: List[dict] = None) -> np.ndarray:
     """
     读取图片
+    :param preprocess: 预处理过程，方法签名需为def __(img:Image, ...) -> Image
     :param path: 图片所在路径
-    :param required_shape: 需要将图片resize成的尺寸
     :param mode: 图片读取模式
     :param requires_id: 是否需要给图片打上ID
+    :param kwargs: 输入到预处理过程中的关键词参数
     :return: 图片对应numpy数组，形状为（通道，图片高，图片宽，……）
     """
     img_modes = ['L', 'RGB']
     assert mode in img_modes, f'不支持的图像模式{mode}！'
     img = Image.open(path).convert(mode)
-    # 若有要求shape，则进行resize，边缘填充黑条
-    if required_shape:
-        img = tools.resize_img(img, required_shape)
+    # # 若有要求shape，则进行resize，边缘填充黑条
+    # if required_shape and required_shape != (-1, -1):
+    #     img = tools.resize_img(img, required_shape)
+    if preprocess is not None:
+        for func, kwargs in zip(preprocess, prepro_kwargs):
+            img = func(img, **kwargs)
     img = np.array(img)
     # 复原出通道。1表示样本数量维
     if mode == 'L':
         img_channels = 1
     elif mode == 'RGB':
         img_channels = 3
+    else:
+        img_channels = -1
     img = img.reshape((img_channels, *img.shape[:2]))
     if requires_id:
         # 添加上读取文件名
@@ -116,50 +125,13 @@ def read_img(path: str, required_shape: Tuple[int, int] = None, mode: str = 'L',
     return img
 
 
-class LazyDataLoader:
-    def __init__(self, index_dataset: DataSet, read_fn, batch_size: int = None, load_multiple: int = 1,
-                 shuffle=True, collate_fn=None, sampler=None,
-                 **kwargs):
-        """
-        数据懒加载器。对懒加载数据集进行读取，每次供给懒加载数据集中索引对应的数据内容。
-        :param index_dataset: 懒加载数据集
-        :param read_fn: 读取方法
-        :param batch_size: 批量大小
-        :param load_multiple: 每次加载数量
-        :param shuffle: 是否进行数据打乱
-        :param collate_fn: 数据校对方法
-        :param sampler: 数据抽取器
-        :param kwargs: DataLoader()关键字参数
-        """
-        self.__batch_size = batch_size
-        self.__multiple = load_multiple
-        self.__shuffle = shuffle
-        self.__collate_fn = collate_fn
-        self.__read_fn = read_fn
-        self.__sampler = sampler
-        self.__kwargs = kwargs
-
-        self.__index_loader = to_loader(index_dataset, batch_size * load_multiple, shuffle=shuffle)
-        pass
-
-    def __iter__(self):
-        for index, label in self.__index_loader:
-            batch_loader = to_loader(
-                DataSet(self.__read_fn(index), label),
-                self.__batch_size, self.__sampler, self.__shuffle, **self.__kwargs
-            )
-            for X, y in batch_loader:
-                yield X, y
-
-    def __len__(self):
-        return len(self.__index_loader) * self.__multiple
-
-
-def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, sampler: Iterable = None, shuffle=True,
-              **kwargs) -> DataLoader or LazyDataLoader:
+def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=True,
+              sampler: Iterable = None, max_load: int = 10000,
+              **kwargs):
     """
     根据数据集类型转化为数据集加载器
-    :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
+    :param max_load: 懒数据集加载器的最大加载量，当使用DataSet时，该参数无效
+    :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler，根据shuffle==True or False 提供乱序/顺序下标.
     :param dataset: 转化为加载器的数据集。
     :param batch_size: 每次供给的数据量。默认为整个数据集
     :param shuffle: 是否打乱
@@ -171,10 +143,17 @@ def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, sampler: 
     if not batch_size:
         batch_size = dataset.feature_shape[0]
     if type(dataset) == LazyDataSet:
-        return LazyDataLoader(
-            dataset, dataset.read_fn, batch_size, load_multiple=dataset.load_multiple, shuffle=shuffle,
+        # dataset.preprocess()
+        loader = LazyDataLoader(
+            dataset, dataset.read_fn, batch_size, max_load=max_load, shuffle=shuffle,
             collate_fn=dataset.collate_fn, sampler=sampler, **kwargs
         )
+        loader.register_preprocess(dataset.fea_preprocesses, dataset.lb_preprocesses)
+        # return LazyDataLoader(
+        #     dataset, dataset.read_fn, batch_size, max_load=max_load, shuffle=shuffle,
+        #     collate_fn=dataset.collate_fn, sampler=sampler, **kwargs
+        # )
+        return loader
     elif type(dataset) == DataSet:
         return DataLoader(
             dataset, batch_size, shuffle=shuffle, collate_fn=dataset.collate_fn, sampler=sampler, **kwargs
@@ -217,6 +196,13 @@ def k_fold_split(dataset: DataSet or LazyDataSet, k: int = 10, shuffle: bool = T
 #     return data[:int(data_portion * len(data))]
 
 def data_slicer(data_portion=1., shuffle=True, *args: Sized):
+    """
+    数据集切分器
+    :param data_portion: 数据集遍历的比例
+    :param shuffle: 是否进行打乱
+    :param args: 需要进行切分的数据集，可以有多个。
+    :return: 切分出的数据集，具有相同的下标序列。注意：返回的数据集为元组！
+    """
     assert 0 <= data_portion <= 1.0, '切分的数据集需为源数据集的子集！'
     # 验证每个需要切分的数据集的长度均相同
     data_len = len(args[0])
@@ -226,10 +212,14 @@ def data_slicer(data_portion=1., shuffle=True, *args: Sized):
     if shuffle:
         random.shuffle(args)
     data_portion = int(data_portion * data_len)
-    return zip(*args[: data_portion])
+    return zip(*args[: data_portion])  # 返回值总为元组
 
 
 def normalize(data: torch.Tensor) -> torch.Tensor:
-    # mean = data.mean()
-    # std = data.std()
-    return torch.nn.functional.normalize(data)
+    # mean = torch.mean(data, dim=list(range(1, len(data.shape))))
+    # std = torch.std(data, dim=list(range(1, len(data.shape))))
+    mean, std = [func(data, dim=list(range(2, len(data.shape))), keepdim=True)
+                 for func in [torch.mean, torch.std]]
+    computer = transforms.Normalize(mean, std)
+    return computer(data)
+    # return torch.nn.functional.normalize(data)

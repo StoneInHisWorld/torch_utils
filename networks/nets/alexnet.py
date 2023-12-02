@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 
-import networks.layers.reshape
 from networks.basic_nn import BasicNN
 
 
@@ -9,11 +8,16 @@ class AlexNet(BasicNN):
 
     required_shape = (224, 224)
 
-    def __init__(self, in_channels, out_features, init_meth: str = 'xavier',
-                 device: torch.device = torch.device('cpu'), regression=False,
-                 with_checkpoint: bool = False) -> None:
+    def __init__(self, in_channels, out_features,
+                 regression=False, **kwargs) -> None:
+        """
+        经典AlexNet模型。
+        :param in_channels: 输入特征通道数。
+        :param out_features: 输出通道数。
+        :param regression: 是否进行回归预测。
+        :param kwargs: BasicNN关键词参数。
+        """
         layers = [
-            # networks.layers.reshape.Reshape(AlexNet.required_shape),
             nn.BatchNorm2d(in_channels),
             nn.Conv2d(in_channels, 96, kernel_size=11, stride=4, padding=1), nn.ReLU(),
             nn.MaxPool2d(kernel_size=3, stride=2),
@@ -29,4 +33,4 @@ class AlexNet(BasicNN):
         ]
         if not regression:
             layers += [nn.Softmax(dim=1)]
-        super().__init__(device, init_meth, with_checkpoint, *layers)
+        super().__init__(*layers, **kwargs)

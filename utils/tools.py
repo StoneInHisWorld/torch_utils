@@ -1,7 +1,8 @@
 import os.path
 import random
+import warnings
+from typing import Tuple
 
-import PIL.Image
 import pandas as pd
 import torch
 from PIL import Image as IMAGE
@@ -9,15 +10,22 @@ from PIL.Image import Image
 from matplotlib import pyplot as plt
 from torch import cuda, nn as nn
 from torch.nn import init as init
-from typing import Tuple
 
-optimizers = ['sgd', 'adam']
-loss_es = ['l1', 'entro', 'mse', 'huber']
+from networks.layers import ssim as cl
+
+optimizers = ['sgd', 'asgd', 'adagrad', 'adadelta', 'rmsprop', 'adam', 'adamax']
+loss_es = ['l1', 'entro', 'mse', 'huber', 'ssim']
 init_funcs = ['normal', 'xavier', 'zero']
 
 
 def write_log(path: str, **kwargs):
-    assert path.endswith('.csv'), f'日志文件格式为.csv，将要写入的文件名为{path}'
+    """
+    编写运行日志。
+    :param path: 日志保存路径
+    :param kwargs: 日志保存信息，类型为词典，key为列名，value为单元格内容
+    :return: None
+    """
+    assert path.endswith('.csv'), f'日志文件格式为.csv，但指定的文件名为{path}'
     try:
         file_data = pd.read_csv(path)
     except Exception as _:
@@ -26,26 +34,37 @@ def write_log(path: str, **kwargs):
     if len(file_data) == 0:
         file_data = pd.DataFrame(item_data)
     else:
-        file_data = pd.concat([file_data, item_data], axis=0)
+        file_data = pd.concat([file_data, item_data], axis=0, sort=True)
     file_data.to_csv(path, index=False)
 
 
 def plot_history(history, mute=False, title=None, xlabel=None,
                  ylabel=None, savefig_as=None, accumulative=False):
-    # check_path(savefig_as)
-    for k, log in history:
-        plt.plot(range(len(log)), log, label=k)
+    """
+    绘制训练历史变化趋势图
+    :param history: 训练历史数据
+    :param mute: 绘制完毕后是否立即展示成果图
+    :param title: 绘制图标题
+    :param xlabel: 自变量名称
+    :param ylabel: 因变量名称
+    :param savefig_as: 保存图片路径
+    :param accumulative: 是否将所有趋势图叠加在一起
+    :return: None
+    """
+    for label, log in history:
+        plt.plot(range(len(log)), log, label=label)
     if xlabel:
         plt.xlabel(xlabel)
     if ylabel:
         plt.ylabel(ylabel)
     if title:
         plt.title(title)
-    if not os.path.exists(os.path.split(savefig_as)[0]):
-        os.makedirs(os.path.split(savefig_as)[0])
-    if savefig_as:
-        plt.savefig(savefig_as)
     plt.legend()
+    if savefig_as:
+        if not os.path.exists(os.path.split(savefig_as)[0]):
+            os.makedirs(os.path.split(savefig_as)[0])
+        plt.savefig(savefig_as)
+        print('已保存历史趋势图')
     if not mute:
         plt.show()
     if not accumulative:
@@ -84,17 +103,55 @@ def permutation(res: list, *args):
 def get_optimizer(net: torch.nn.Module, optim_str, lr=0.1, w_decay=0., momentum=0.):
     assert optim_str in optimizers, f'不支持优化器{optim_str}, 支持的优化器包括{optimizers}'
     if optim_str == 'sgd':
+        # 使用随机梯度下降优化器
         return torch.optim.SGD(
             net.parameters(),
             lr=lr,
             weight_decay=w_decay,
             momentum=momentum
         )
+    elif optim_str == 'asgd':
+        # 使用随机平均梯度下降优化器
+        return torch.optim.ASGD(
+            net.parameters(),
+            lr=lr,
+            weight_decay=w_decay
+        )
+    elif optim_str == 'adagrad':
+        # 使用自适应梯度优化器
+        return torch.optim.Adagrad(
+            net.parameters(),
+            lr=lr,
+            weight_decay=w_decay
+        )
+    elif optim_str == 'adadelta':
+        # 使用Adadelta优化器，Adadelta是Adagrad的改进
+        return torch.optim.Adadelta(
+            net.parameters(),
+            lr=lr,
+            weight_decay=w_decay
+        )
+    elif optim_str == 'rmsprop':
+        # 使用RMSprop优化器，RMSprop是Adagrad的改进
+        return torch.optim.RMSprop(
+            net.parameters(),
+            lr=lr,
+            weight_decay=w_decay,
+            momentum=momentum
+        )
     elif optim_str == 'adam':
+        # 使用Adaptive Moment Estimation优化器。Adam是RMSprop的改进。
         return torch.optim.Adam(
             net.parameters(),
             lr=lr,
             weight_decay=w_decay
+        )
+    elif optim_str == 'adamax':
+        # 使用Adamax优化器，Adamax是Adam的改进
+        return torch.optim.Adamax(
+            net.parameters(),
+            lr=lr,
+            weight_decay=w_decay,
         )
 
 
@@ -114,7 +171,9 @@ def get_loss(loss_str: str = 'mse'):
         return nn.MSELoss()
     elif loss_str == 'huber':
         return nn.HuberLoss()
-    
+    elif loss_str == 'ssim':
+        return cl.SSIMLoss()
+
 
 def init_wb(func_str: str = 'xavier'):
     """
@@ -138,33 +197,15 @@ def init_wb(func_str: str = 'xavier'):
 
     return _init
 
-# def resize_img(image: Image, required_shape: Tuple[int, int], img_mode='L') -> Image:
-#     # ------------------------------#
-#     #   获得图像的高宽与目标高宽
-#     #   code from: Bubbliiiing
-#     # ------------------------------#
-#     iw, ih = image.size
-#     h, w = required_shape
-#
-#     # 长边放缩比例
-#     scale = min(w / iw, h / ih)
-#     # 计算新图片shape
-#     new_w = int(iw * scale)
-#     new_h = int(ih * scale)
-#     # 计算图片缺失shape
-#     dx = (w - new_w) // 2
-#     dy = (h - new_h) // 2
-#     # ---------------------------------#
-#     #   将图像多余的部分加上黑条
-#     # ---------------------------------#
-#     image = image.resize((new_w, new_h), IMAGE.BICUBIC)
-#     new_image = IMAGE.new(img_mode, (w, h), 0)
-#     new_image.paste(image, (dx, dy))
-#
-#     return new_image
 
-
-def resize_img(image: Image, required_shape: Tuple[int, int], img_mode='L') -> Image:
+def resize_img(image: Image, required_shape: Tuple[int, int]) -> Image:
+    """
+    重塑图片。
+    先将图片等比例放大到最大（放缩到最小）满足required_shape的尺寸，再对图片随机取部分或填充黑边以适配所需形状
+    :param image: 待编辑图片
+    :param required_shape: 所需形状
+    :return: 重塑完成的图片。
+    """
     # 实现将图片进行随机裁剪以达到目标shape的功能
     ih, iw = image.size
     h, w = required_shape
@@ -181,7 +222,7 @@ def resize_img(image: Image, required_shape: Tuple[int, int], img_mode='L') -> I
     image = image.resize((new_h, new_w), IMAGE.BICUBIC)
     # 若需求图片大小较大，则进行填充
     if dw > 0 or dh > 0:
-        back_ground = IMAGE.new(img_mode, (w, h), 0)
+        back_ground = IMAGE.new(image.mode, (w, h), 0)
         back_ground.paste(image)
     # 若需求图片大小较小，则随机取部分
     if dw < 0 or dh < 0:
@@ -191,9 +232,46 @@ def resize_img(image: Image, required_shape: Tuple[int, int], img_mode='L') -> I
     return image
 
 
+def crop_img(img: Image, required_shape, loc: str or Tuple[int, int]) -> Image:
+    """
+    按照指定位置裁剪图片
+    :param img: 即将进行裁剪的图片
+    :param required_shape: 需要保留的尺寸
+    :param loc: 裁剪的位置。可以指定为“lt, lb, rt, rb, c”的其中一种，或者指定为二元组指示裁剪区域的左上角坐标
+    :return: 裁剪完成的图片
+    """
+    img_size = img.size
+    ih, iw = img_size
+    rh, rw = required_shape
+    assert rh <= ih and rw <= iw, (
+        f'裁剪尺寸{required_shape}需要小于图片尺寸{img_size}！'
+    )
+    if type(loc) == str:
+        if loc == 'lt':
+            loc = (0, 0, 0 + rw, 0 + rh)
+        elif loc == 'lb':
+            loc = (0, ih - rh, 0 + rw, iw)
+        elif loc == 'rt':
+            loc = (iw - rw, 0, iw, rh)
+        elif loc == 'rb':
+            loc = (iw - rw, ih - rh, ih, iw)
+        elif loc == 'c':
+            loc = (iw // 2 - rw // 2, ih // 2 - rh // 2, iw // 2 + rw // 2, ih // 2 + rh // 2)
+        else:
+            raise Exception(f'不支持的裁剪位置{loc}！')
+    elif type(loc) == Tuple and len(loc) == 2:
+        loc = (loc[0], loc[1], loc[0] + rw, loc[1] + rh)
+    else:
+        raise Exception(f'无法识别的裁剪位置参数{loc}')
+    return img.crop(loc)
+
+
 def check_path(path: str, way_to_mkfile=None):
     """
     检查指定路径。如果目录不存在，则会创建目录；如果文件不存在，则指定文件初始化方式后才会自动初始化文件
+    :param path: 需要检查的目录
+    :param way_to_mkfile: 初始化文件的方法
+    :return: None
     """
     if not os.path.exists(path):
         path, file = os.path.split(path)
@@ -211,3 +289,11 @@ def check_path(path: str, way_to_mkfile=None):
         else:
             # 如果目录不存在，则新建目录
             os.makedirs(path)
+
+
+def check_para(name, value, val_range) -> bool:
+    if value in val_range:
+        return True
+    else:
+        warnings.warn(f'参数{name}需要取值限于{val_range}！')
+        return False

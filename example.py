@@ -1,19 +1,19 @@
 import numpy as np
 import torch
 
-import utils.data_related as dr
+from data_related import data_related as dr
 from networks.nets.wzynet_essay import WZYNetEssay
 from utils import tools
-from utils.datasets import DataSet
+from data_related.datasets import DataSet
 from utils.hypa_control import ControlPanel
-from vortex import Vortex
 
 # TODO: 选择选用的模型
 Net = WZYNetEssay
 
 # 调参面板
+_ = None
 # TODO： 请输入配置文件路径
-cp = ControlPanel(Vortex,
+cp = ControlPanel(_,  # 处理的数据集类
                   '',  # 调参json文件路径
                   '',  # 运行配置json文件路径
                   '',  # 结果存储文件路径
@@ -22,7 +22,8 @@ torch.random.manual_seed(cp.running_randomseed)
 
 print('collecting data...')
 # TODO: 读取数据集
-_ = None
+# TODO：数据集需要提供格式为（特征集，标签集）的数据集
+# TODO：自定义数据集需要切分为训练集、验证集、测试集
 data = _
 acc_func = _
 dataset_name = _
@@ -103,7 +104,7 @@ for trainer in cp:
         print(f'train_acc = {train_acc * 100:.3f}%, train_l = {train_l:.5f}, '
               f'valid_acc = {valid_acc * 100:.3f}%, valid_l = {valid_l:.5f}, '
               f'test_acc = {test_acc * 100:.3f}%, test_l = {test_ls:.5f}')
-        cp.plot_history(
+        cp.__plot_history(
             history, xlabel='num_epochs', ylabel=f'loss({ls_fn.__class__.__name__})',
             title=f'dataset: {dataset_name} optimizer: {optimizer.__class__.__name__}\n'
                   f'net: {net.__class__.__name__}',

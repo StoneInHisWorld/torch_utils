@@ -1,5 +1,5 @@
 import warnings
-from typing import Callable, Any, Iterable
+from typing import Callable, Iterable
 
 import torch
 import torch.nn as nn
@@ -7,18 +7,19 @@ from torch.nn import Module
 from torch.utils import checkpoint
 from tqdm import tqdm
 
-from utils.data_related import single_argmax_accuracy
+from utils.accumulator import Accumulator
+from data_related.data_related import single_argmax_accuracy
 from utils.history import History
 from utils.tools import init_wb
-from utils.accumulator import Accumulator
 
 
 class BasicNN(nn.Sequential):
+
     required_shape = (-1,)
 
-    # def __init__(self, device, *args: Module) -> None:
-    def __init__(self, device: torch.device = torch.device('cpu'), init_meth: str = 'xavier',
-                 with_checkpoint: bool = False, *args: Module) -> None:
+    # def __init__(self, device: torch.device = torch.device('cpu'), init_meth: str = 'xavier',
+    #              with_checkpoint: bool = False, *args: Module, **kwargs) -> None:
+    def __init__(self, *args: Module, **kwargs) -> None:
         """
         基本神经网络。提供神经网络的基本功能，包括权重初始化，训练以及测试。
         :param device: 网络所处设备
@@ -28,6 +29,11 @@ class BasicNN(nn.Sequential):
         :param with_checkpoint: 是否使用检查点机制
         :param args: 输入网络的模型
         """
+        # 设置默认值
+        init_meth = 'normal' if 'init_meth' not in kwargs.keys() else kwargs['init_meth']
+        device = torch.device('cpu') if 'device' not in kwargs.keys() else kwargs['device']
+        with_checkpoint = False if 'with_checkpoint' not in kwargs.keys() else kwargs['with_checkpoint']
+        # 初始化各模块
         super().__init__(*args)
         self.apply(init_wb(init_meth))
         self.apply(lambda m: m.to(device))
@@ -81,7 +87,7 @@ class BasicNN(nn.Sequential):
                         [metric[0] / metric[2], metric[1] / metric[2]]
                     )
                 else:
-                    pbar.set_description('validating...')
+                    pbar.set_description('验证中...')
                     valid_acc, valid_l = self.test_(valid_iter, acc_fn, ls_fn)
                     history.add(
                         ['train_l', 'train_acc', 'valid_l', 'valid_acc'],
@@ -92,7 +98,6 @@ class BasicNN(nn.Sequential):
 
     hook_mute = False
 
-    # @staticmethod
     def hook_forward_fn(self, module, input, output):
         if not BasicNN.hook_mute:
             print(f'{module.__class__.__name__} FORWARD')
@@ -115,7 +120,6 @@ class BasicNN(nn.Sequential):
         if not BasicNN.hook_mute:
             print('-' * 20)
 
-    # @staticmethod
     def hook_backward_fn(self, module, grad_input, grad_output):
         if not BasicNN.hook_mute:
             print(f'{module.__class__.__name__} BACKWARD')
@@ -156,7 +160,6 @@ class BasicNN(nn.Sequential):
         :param acc_func: 准确度计算函数
         :return: 训练过程数据记录表
         """
-        # history = History('train_l', 'train_acc')
         for m in self:
             m.register_forward_hook(hook=BasicNN.hook_forward_fn)
             m.register_full_backward_hook(hook=BasicNN.hook_backward_fn)
@@ -195,13 +198,6 @@ class BasicNN(nn.Sequential):
         :return: 测试准确率，测试损失
         """
         self.eval()
-        # with torch.no_grad():
-        #     for features, labels in test_iter:
-        #         preds = self(features)
-        #         test_acc = acc_func(preds, labels) / len(features)
-        #         test_ls = loss(preds, labels)
-        #         del preds
-        #         return test_acc, test_ls.item()
         metric = Accumulator(3)
         for features, labels in test_iter:
             preds = self(features)
@@ -223,7 +219,7 @@ class BasicNN(nn.Sequential):
     def device(self):
         return self.__device
 
-    def __str__(self):
+    def __str__(self) -> str:
         return '网络结构：\n' + super().__str__() + '\n所处设备：' + str(self.__device)
 
     def __call__(self, x):

@@ -1,154 +1,165 @@
 import json
-import time
+import warnings
 
+import numpy as np
 import pandas as pd
 import torch
 from torchsummary import summary
 
 from utils import tools
 from utils.tools import permutation
+from utils.trainer import Trainer
+
+
+def init_log(path):
+    with open(path, 'w', encoding='utf-8') as log:
+        log.write("exp_no\n1\n")
 
 
 class ControlPanel:
 
     def __init__(self, datasource,
-                 hypa_config_path: str,
-                 runtime_config_path: str,
+                 hp_cfg_path: str,
+                 runtime_cfg_path: str,
                  log_path: str = None,
-                 net_path: str = None):
+                 net_path: str = None,
+                 plot_path: str = None):
         """
         控制台类。用于读取运行参数设置，设定训练超参数以及自动编写日志文件等一系列与网络构建无关的操作。
+        :param datasource: 训练数据来源
+        :param hp_cfg_path: 超参数配置文件路径
+        :param runtime_cfg_path: 运行配置文件路径
+        :param log_path: 日志文件存储路径
+        :param net_path: 网络文件存储路径
         """
-
-        def init_log(path):
-            with open(path, 'w', encoding='utf-8') as log:
-                log.write("exp_no\n1\n")
-
-        tools.check_path(hypa_config_path)
-        tools.check_path(runtime_config_path)
-        tools.check_path(log_path, init_log)
-        self.__rcp = runtime_config_path
-        self.__hcp = hypa_config_path
+        tools.check_path(hp_cfg_path)
+        tools.check_path(runtime_cfg_path)
+        if log_path is not None:
+            tools.check_path(log_path, init_log)
+        if net_path is not None:
+            tools.check_path(net_path)
+        if plot_path is not None:
+            tools.check_path(plot_path)
+        self.__rcp = runtime_cfg_path
+        self.__hcp = hp_cfg_path
         self.__lp = log_path
         self.__np = net_path
+        self.__pp = plot_path
         self.__datasource = datasource
-        self.__extra_lm = {}
         # 读取运行配置
-        with open(self.__rcp, 'r') as config:
-            config_dict = json.load(config)
-            self.__rck = config_dict.keys()
-            for k, v in config_dict.items():
-                setattr(self, k, v)
+        with open(self.__rcp, 'r') as cfg:
+            self.cfg_dict = json.load(cfg)
+        # 设置随机种子
+        self.random_seed = self['random_seed']
+        torch.random.manual_seed(self.random_seed)
         # 读取实验编号
         if self.__lp is not None:
             try:
                 log = pd.read_csv(self.__lp)
-                self.exp_no = log.iloc[-1]['exp_no'] + 1
-            except:
-                self.exp_no = 1
+                exp_no = log.iloc[-1]['exp_no'] + 1
+            except Exception as _:
+                exp_no = 1
+        else:
+            exp_no = 1
+        assert exp_no > 0, f'训练序号需为正整数，但读取到的序号为{exp_no}'
+        self.exp_no = exp_no
 
     def __iter__(self):
-        with open(self.__hcp, 'r', encoding='utf-8') as config:
-            hyper_params = json.load(config)
+        with open(self.__hcp, 'r', encoding='utf-8') as cfg:
+            hyper_params = json.load(cfg)
             for hps in permutation([], *hyper_params.values()):
                 hyper_params = {k: v for k, v in zip(hyper_params.keys(), hps)}
-                yield Trainer(self.__datasource.__class__.__name__, hyper_params, self.__lp, self.__np)
-                self.__read_running_config()
+                self.__cur_trainer = Trainer(
+                    self.__datasource, hyper_params, self.exp_no,
+                    self.__lp, self.__np, self['print_net'], self['save_net']
+                )
+                yield self.__cur_trainer
+                # yield Trainer(
+                #     self.__datasource, hyper_params, self.exp_no,
+                #     self.__lp, self.__np, self['save_net']
+                # )
+                self.__read_runtime_cfg()
 
-    def __read_running_config(self):
+    def __getitem__(self, item):
+        """
+        获取控制面板中的运行配置参数。
+        :param item: 运行配置参数名称
+        :return: 运行配置参数值
+        """
+        assert item in self.cfg_dict.keys(), f'设置文件中不存在{item}参数！'
+        return self.cfg_dict[item]
+
+    def __read_runtime_cfg(self):
+        """
+        读取运行配置，在每组超参数训练前都会进行本操作。
+        :return: None
+        """
         with open(self.__rcp, 'r', encoding='utf-8') as config:
             config_dict = json.load(config)
-            assert config_dict.keys() == self.__rck, '在运行期间，不允许添加新的运行设置参数！'
+            assert config_dict.keys() == self.cfg_dict.keys(), '在运行期间，不允许添加新的运行设置参数！'
             for k, v in config_dict.items():
-                setattr(self, k, v)
+                self.cfg_dict[k] = v
         # 更新实验编号
         self.exp_no += 1
 
-    def list_net(self, net, input_size, batch_size):
-        assert hasattr(self, "print_net"), '设置文件中不存在"print_net"参数！'
-        if self.print_net:
+    def list_net(self, net, input_size, batch_size) -> None:
+        """
+        打印网络信息。
+        :param net: 待打印的网络信息。
+        :param input_size: 网络输入参数。
+        :param batch_size: 训练的批量大小。
+        :return: None
+        """
+        if self['print_net']:
             try:
                 summary(net, input_size=input_size, batch_size=batch_size)
             except RuntimeError as _:
                 print(net)
 
-    def plot_history(self, history, xlabel='num_epochs', ylabel='loss', title=None, save_path=None):
-        assert hasattr(self, 'pic_mute'), '配置文件中缺少参数"pic_mute"'
-        assert hasattr(self, 'plot'), '配置文件中缺少参数"plot"'
-        if self.plot:
-            print('plotting...')
-            tools.plot_history(
-                history, xlabel=xlabel, ylabel=ylabel, mute=self.pic_mute, title=title,
-                savefig_as=save_path
-            )
+    # def plot_history(self, history, xlabel='epochs', ylabel='loss', title=None, save_path=None):
+    #     if self['plot']:
+    #         print('正在绘制历史趋势图……')
+    #         tools.plot_history(
+    #             history, xlabel=xlabel, ylabel=ylabel, mute=self['pic_mute'], title=title,
+    #             savefig_as=save_path
+    #         )
+    def __plot_history(self, history, cfg, mute) -> None:
+        # 检查参数设置
+        cfg_range = ['plot', 'save', 'no']
+        if not tools.check_para('plot_history', cfg, cfg_range):
+            print('请检查setting.json中参数plot_history设置是否正确，本次不予绘制历史趋势图！')
+            return
+        if cfg == 'no':
+            return
+        if self.__pp is None:
+            warnings.warn('未指定绘图路径，不予保存历史趋势图！')
+        savefig_as = None if self.__pp is None or cfg == 'plot' else self.__pp + str(self.exp_no) + '.jpg'
+        # 绘图
+        print('已绘制历史趋势图')
+        tools.plot_history(
+            history, xlabel='epoch', ylabel='loss/acc', mute=mute,
+            title='EXP NO.' + str(self.exp_no), savefig_as=savefig_as
+        )
+
+    def register_result(self, history, test_acc=None, test_ls=None) -> None:
+        train_acc, train_l = history["train_acc"][-1], history["train_l"][-1]
+        try:
+            valid_acc, valid_l = history["valid_acc"][-1], history["valid_l"][-1]
+        except AttributeError as _:
+            valid_acc, valid_l = np.nan, np.nan
+        print(f'训练准确率 = {train_acc * 100:.3f}%, 训练损失 = {train_l:.5f}')
+        print(f'验证准确率 = {valid_acc * 100:.3f}%, 验证损失 = {valid_l:.5f}')
+        if test_acc is not None and test_ls is not None:
+            print(f'测试准确率 = {test_acc * 100:.3f}%, 测试损失 = {test_ls:.5f}')
+        self.__plot_history(history, self['plot_history'], self['plot_mute'])
+        self.__cur_trainer.add_logMsg(
+            True,
+            train_l=train_l, train_acc=train_acc, valid_l=valid_l, valid_acc=valid_acc,
+            test_acc=test_acc, test_ls=test_ls, data_portion=self['data_portion']
+        )
 
     @property
-    def running_device(self):
-        assert hasattr(self, "device"), '设置文件中不存在"device"参数！'
-        return self.device
-
-    @property
-    def running_randomseed(self):
-        assert hasattr(self, "random_seed"), '设置文件中不存在"random_seed"参数！'
-        return self.random_seed
-
-    @property
-    def running_dataportion(self):
-        assert hasattr(self, "data_portion"), '设置文件中不存在"data_portion"参数！'
-        return self.data_portion
-
-    @property
-    def running_expno(self):
-        assert hasattr(self, "exp_no"), '设置文件中不存在"exp_no"参数！'
-        return self.exp_no
+    def device(self):
+        return torch.device(self['device'])
 
 
-class Trainer:
-
-    def __init__(self, datasource, hyper_parameters: dict,
-                 log_path: str = None,
-                 net_path: str = None):
-        """
-        训练器。
-        使用with上下文管理器以充分利用其全部功能。
-        with启用时，训练器会计时以记录本次训练所花时间。
-        with退出时，会编写日志记录本次训练的数据。
-        可以向日志文件中加入额外参数。
-        可以对网络进行持久化。
-        """
-        self.__extra_lm = {}
-        self.__hp = hyper_parameters
-        self.__lp = log_path
-        self.__np = net_path
-        self.datasource = datasource
-
-    def __enter__(self):
-        self.start = time.time()
-        return self.__hp.values()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is not None:
-            print(f'exc_type: {exc_type}')
-            print(f'exc_val: {exc_val}')
-        time_span = time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start))
-        self.__hp.update({'exc_val': exc_val, "duration": time_span, "dataset": self.datasource})
-        if self.__lp is not None and exc_type != KeyboardInterrupt:
-            self.__write_log(**self.__hp)
-
-    def __write_log(self, **kwargs):
-        print('logging...')
-        kwargs.update(self.__extra_lm)
-        tools.write_log(self.__lp, **kwargs)
-
-    def add_logMsg(self, mute=True, **kwargs):
-        self.__extra_lm = kwargs
-        if not mute:
-            print(self.__extra_lm)
-
-    def save_net(self, net: torch.nn.Module, exp_no: int, entire=False):
-        if self.__np is None:
-            print("未指定模型保存路径，不予保存模型！")
-        if entire:
-            torch.save(net, self.__np + f'{exp_no}.ptm')
-        else:
-            torch.save(net.state_dict(), self.__np + f'{exp_no}.ptsd')
