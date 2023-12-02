@@ -1,5 +1,6 @@
 import os.path
 import random
+import warnings
 from typing import Tuple
 
 import pandas as pd
@@ -58,11 +59,12 @@ def plot_history(history, mute=False, title=None, xlabel=None,
         plt.ylabel(ylabel)
     if title:
         plt.title(title)
+    plt.legend()
     if savefig_as:
         if not os.path.exists(os.path.split(savefig_as)[0]):
             os.makedirs(os.path.split(savefig_as)[0])
         plt.savefig(savefig_as)
-    plt.legend()
+        print('已保存历史趋势图')
     if not mute:
         plt.show()
     if not accumulative:
@@ -287,3 +289,11 @@ def check_path(path: str, way_to_mkfile=None):
         else:
             # 如果目录不存在，则新建目录
             os.makedirs(path)
+
+
+def check_para(name, value, val_range) -> bool:
+    if value in val_range:
+        return True
+    else:
+        warnings.warn(f'参数{name}需要取值限于{val_range}！')
+        return False

@@ -104,7 +104,7 @@ for trainer in cp:
         print(f'train_acc = {train_acc * 100:.3f}%, train_l = {train_l:.5f}, '
               f'valid_acc = {valid_acc * 100:.3f}%, valid_l = {valid_l:.5f}, '
               f'test_acc = {test_acc * 100:.3f}%, test_l = {test_ls:.5f}')
-        cp.plot_history(
+        cp.__plot_history(
             history, xlabel='num_epochs', ylabel=f'loss({ls_fn.__class__.__name__})',
             title=f'dataset: {dataset_name} optimizer: {optimizer.__class__.__name__}\n'
                   f'net: {net.__class__.__name__}',
