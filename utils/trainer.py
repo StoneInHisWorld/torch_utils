@@ -35,7 +35,7 @@ class Trainer:
     def __enter__(self):
         self.start = time.time()
         print(
-            f'---------------------------EXP NO.{self.__exp_no}'
+            f'---------------------------实验{self.__exp_no}号'
             f'---------------------------'
         )
         for k, v in self.__hp.items():
@@ -68,24 +68,6 @@ class Trainer:
         self.__extra_lm = kwargs
         if not mute:
             print(self.__extra_lm)
-
-    # def save_net(self, net: torch.nn.Module, exp_no: int, entire=False):
-    # def save_net(self, net: torch.nn.Module, entire=False) -> None:
-    #     """
-    #     保存当前网络net
-    #     :param net: 需要保存的网络
-    #     :param entire: 是否保存整个网络
-    #     :return: None
-    #     """
-    #     warnings.warn('将在未来的版本中删除，由settings.json中的save_net参数自动指示对网络的保存，由__save_net()进行该动作',
-    #                   DeprecationWarning)
-    #     if self.__np is None:
-    #         print("未指定模型保存路径，不予保存模型！")
-    #         return
-    #     if entire:
-    #         torch.save(net, self.__np + f'{self.__exp_no}.ptm')
-    #     else:
-    #         torch.save(net.state_dict(), self.__np + f'{self.__exp_no}.ptsd')
 
     def __save_net(self) -> None:
         """
@@ -123,4 +105,7 @@ class Trainer:
 
     def register_net(self, net: torch.nn.Module):
         self.__net = net
-        self.__list_net(net, (self.datasource.img_channel, *net.required_shape), self.__hp['batch_size'])
+        self.__list_net(
+            net, (self.datasource.img_channel, *net.required_shape),
+            self.__hp['batch_size']
+        )

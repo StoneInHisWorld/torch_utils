@@ -74,10 +74,6 @@ class ControlPanel:
                     self.__lp, self.__np, self['print_net'], self['save_net']
                 )
                 yield self.__cur_trainer
-                # yield Trainer(
-                #     self.__datasource, hyper_params, self.exp_no,
-                #     self.__lp, self.__np, self['save_net']
-                # )
                 self.__read_runtime_cfg()
 
     def __getitem__(self, item):
@@ -102,7 +98,7 @@ class ControlPanel:
         # 更新实验编号
         self.exp_no += 1
 
-    def list_net(self, net, input_size, batch_size) -> None:
+    def __list_net(self, net, input_size, batch_size) -> None:
         """
         打印网络信息。
         :param net: 待打印的网络信息。
@@ -116,14 +112,7 @@ class ControlPanel:
             except RuntimeError as _:
                 print(net)
 
-    # def plot_history(self, history, xlabel='epochs', ylabel='loss', title=None, save_path=None):
-    #     if self['plot']:
-    #         print('正在绘制历史趋势图……')
-    #         tools.plot_history(
-    #             history, xlabel=xlabel, ylabel=ylabel, mute=self['pic_mute'], title=title,
-    #             savefig_as=save_path
-    #         )
-    def __plot_history(self, history, cfg, mute) -> None:
+    def __plot_history(self, history, cfg, mute, ls_fn, acc_fn) -> None:
         # 检查参数设置
         cfg_range = ['plot', 'save', 'no']
         if not tools.check_para('plot_history', cfg, cfg_range):
@@ -135,13 +124,14 @@ class ControlPanel:
             warnings.warn('未指定绘图路径，不予保存历史趋势图！')
         savefig_as = None if self.__pp is None or cfg == 'plot' else self.__pp + str(self.exp_no) + '.jpg'
         # 绘图
-        print('已绘制历史趋势图')
         tools.plot_history(
-            history, xlabel='epoch', ylabel='loss/acc', mute=mute,
+            history, mute=mute, ls_ylabel=ls_fn, acc_ylabel=acc_fn,
             title='EXP NO.' + str(self.exp_no), savefig_as=savefig_as
         )
+        print('已绘制历史趋势图')
 
-    def register_result(self, history, test_acc=None, test_ls=None) -> None:
+    def register_result(self, history, test_acc=None, test_ls=None,
+                        ls_fn=None, acc_fn=None) -> None:
         train_acc, train_l = history["train_acc"][-1], history["train_l"][-1]
         try:
             valid_acc, valid_l = history["valid_acc"][-1], history["valid_l"][-1]
@@ -151,7 +141,9 @@ class ControlPanel:
         print(f'验证准确率 = {valid_acc * 100:.3f}%, 验证损失 = {valid_l:.5f}')
         if test_acc is not None and test_ls is not None:
             print(f'测试准确率 = {test_acc * 100:.3f}%, 测试损失 = {test_ls:.5f}')
-        self.__plot_history(history, self['plot_history'], self['plot_mute'])
+        self.__plot_history(
+            history, self['plot_history'], self['plot_mute'], ls_fn, acc_fn
+        )
         self.__cur_trainer.add_logMsg(
             True,
             train_l=train_l, train_acc=train_acc, valid_l=valid_l, valid_acc=valid_acc,

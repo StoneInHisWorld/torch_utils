@@ -38,8 +38,41 @@ def write_log(path: str, **kwargs):
     file_data.to_csv(path, index=False)
 
 
-def plot_history(history, mute=False, title=None, xlabel=None,
-                 ylabel=None, savefig_as=None, accumulative=False):
+# def plot_history(history, mute=False, title=None, xlabel=None,
+#                  ylabel=None, savefig_as=None, accumulative=False):
+#     """
+#     绘制训练历史变化趋势图
+#     :param history: 训练历史数据
+#     :param mute: 绘制完毕后是否立即展示成果图
+#     :param title: 绘制图标题
+#     :param xlabel: 自变量名称
+#     :param ylabel: 因变量名称
+#     :param savefig_as: 保存图片路径
+#     :param accumulative: 是否将所有趋势图叠加在一起
+#     :return: None
+#     """
+#     warnings.warn('将在未来版本中删除！', DeprecationWarning)
+#     for label, log in history:
+#         plt.plot(range(len(log)), log, label=label)
+#     if xlabel:
+#         plt.xlabel(xlabel)
+#     if ylabel:
+#         plt.ylabel(ylabel)
+#     if title:
+#         plt.title(title)
+#     plt.legend()
+#     if savefig_as:
+#         if not os.path.exists(os.path.split(savefig_as)[0]):
+#             os.makedirs(os.path.split(savefig_as)[0])
+#         plt.savefig(savefig_as)
+#         print('已保存历史趋势图')
+#     if not mute:
+#         plt.show()
+#     if not accumulative:
+#         plt.clf()
+
+def plot_history(history, mute=False, title=None, ls_ylabel=None,
+                 acc_ylabel=None, savefig_as=None, accumulative=False):
     """
     绘制训练历史变化趋势图
     :param history: 训练历史数据
@@ -51,15 +84,26 @@ def plot_history(history, mute=False, title=None, xlabel=None,
     :param accumulative: 是否将所有趋势图叠加在一起
     :return: None
     """
+    fig, (ax1, ax2) = plt.subplots(2, 1, sharex='col', figsize=(7, 6))
+    ax1.set_title('LOSS')
+    ax2.set_xlabel('epochs')
+    ax2.set_title('ACCURACY')
     for label, log in history:
-        plt.plot(range(len(log)), log, label=label)
-    if xlabel:
-        plt.xlabel(xlabel)
-    if ylabel:
-        plt.ylabel(ylabel)
+        if label.find('_l') != -1:
+            # 绘制损失值history
+            ax1.plot(range(len(log)), log, label=label)
+        elif label.find('_acc') != -1:
+            # 绘制准确率history
+            ax2.plot(range(len(log)), log, label=label)
+            ax2.set_xticks(range(1, len(log) + 1))
+    if ls_ylabel:
+        ax1.set_ylabel(ls_ylabel)
+    if acc_ylabel:
+        ax2.set_ylabel(acc_ylabel)
     if title:
-        plt.title(title)
-    plt.legend()
+        fig.suptitle(title)
+    ax1.legend()
+    ax2.legend()
     if savefig_as:
         if not os.path.exists(os.path.split(savefig_as)[0]):
             os.makedirs(os.path.split(savefig_as)[0])

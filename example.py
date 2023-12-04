@@ -82,7 +82,7 @@ for trainer in cp:
         in_channel = _
         out_features = _
         net = Net(in_channel, base, out_features, init_meth=init_meth, device=device)
-        cp.list_net(net, (in_channel, *train_data.feature_shape), batch_size)
+        cp.__list_net(net, (in_channel, *train_data.feature_shape), batch_size)
 
         print(f'training on {device}...')
         # 进行训练准备
