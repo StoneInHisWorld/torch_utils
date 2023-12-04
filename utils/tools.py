@@ -91,11 +91,10 @@ def plot_history(history, mute=False, title=None, ls_ylabel=None,
     for label, log in history:
         if label.find('_l') != -1:
             # 绘制损失值history
-            ax1.plot(range(len(log)), log, label=label)
+            ax1.plot(range(1, len(log) + 1), log, label=label)
         elif label.find('_acc') != -1:
             # 绘制准确率history
-            ax2.plot(range(len(log)), log, label=label)
-            ax2.set_xticks(range(1, len(log) + 1))
+            ax2.plot(range(1, len(log) + 1), log, label=label)
     if ls_ylabel:
         ax1.set_ylabel(ls_ylabel)
     if acc_ylabel:
