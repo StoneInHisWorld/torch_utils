@@ -29,9 +29,11 @@ class Pix2Pix(BasicNN):
             nn.BatchNorm2d(o, momentum=bn_momen),
             nn.ReLU()
         )
+        # TODO：会使数据变得越来越大
         ep_layer = lambda i, o: nn.Sequential(
             nn.Upsample(scale_factor=2),
             nn.Conv2d(i, o, kernel_size=kernel_size + 1, stride=1, padding=2),
+            nn.BatchNorm2d(o, momentum=bn_momen),
             nn.ReLU()
         )
         self.contracting_path = [

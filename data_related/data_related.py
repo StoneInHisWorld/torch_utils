@@ -185,16 +185,6 @@ def k_fold_split(dataset: DataSet or LazyDataSet, k: int = 10, shuffle: bool = T
         ]
 
 
-# def data_slicer(data, data_portion=1., shuffle=True) -> np.ndarray:
-#     assert 0 <= data_portion <= 1.0, '切分的数据集需为源数据集的子集！'
-#     if isinstance(data, np.ndarray):
-#         shuffle_fn = np.random.shuffle
-#     else:
-#         shuffle_fn = random.shuffle
-#     if shuffle:
-#         shuffle_fn(data)
-#     return data[:int(data_portion * len(data))]
-
 def data_slicer(data_portion=1., shuffle=True, *args: Sized):
     """
     数据集切分器
@@ -215,11 +205,8 @@ def data_slicer(data_portion=1., shuffle=True, *args: Sized):
     return zip(*args[: data_portion])  # 返回值总为元组
 
 
-def normalize(data: torch.Tensor) -> torch.Tensor:
-    # mean = torch.mean(data, dim=list(range(1, len(data.shape))))
-    # std = torch.std(data, dim=list(range(1, len(data.shape))))
+def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
     mean, std = [func(data, dim=list(range(2, len(data.shape))), keepdim=True)
                  for func in [torch.mean, torch.std]]
-    computer = transforms.Normalize(mean, std)
+    computer = transforms.Normalize(mean, std + epsilon)
     return computer(data)
-    # return torch.nn.functional.normalize(data)
