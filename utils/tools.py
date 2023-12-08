@@ -15,6 +15,7 @@ from networks.layers import ssim as cl
 
 optimizers = ['sgd', 'asgd', 'adagrad', 'adadelta', 'rmsprop', 'adam', 'adamax']
 loss_es = ['l1', 'entro', 'mse', 'huber', 'ssim']
+# init_funcs = ['normal', 'xavier', 'zero', 'entire_trained', 'state_trained']
 init_funcs = ['normal', 'xavier', 'zero']
 
 
@@ -231,6 +232,11 @@ def init_wb(func_str: str = 'xavier'):
         b_init = lambda m: init.normal_(m, 0, 1)
     elif func_str == 'xavier':
         w_init, b_init = init.xavier_uniform_, init.zeros_
+    # elif func_str == 'entire_trained':
+    #     pass
+    # elif func_str == 'state_trained':
+    #     def _init(m: nn.Module) -> None:
+    #         sd = torch.load(where)
     else:
         w_init, b_init = init.zeros_, init.zeros_
 

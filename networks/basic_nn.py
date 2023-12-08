@@ -1,3 +1,4 @@
+import os.path
 import warnings
 from typing import Callable, Iterable
 
@@ -5,20 +6,20 @@ import torch
 import torch.nn as nn
 from torch.nn import Module
 from torch.utils import checkpoint
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from data_related.dataloader import LazyDataLoader
 from utils.accumulator import Accumulator
 from data_related.data_related import single_argmax_accuracy
 from utils.history import History
-from utils.tools import init_wb
+from utils.tools import init_wb, check_path
 
 
 class BasicNN(nn.Sequential):
 
     required_shape = (-1,)
 
-    # def __init__(self, device: torch.device = torch.device('cpu'), init_meth: str = 'xavier',
-    #              with_checkpoint: bool = False, *args: Module, **kwargs) -> None:
     def __init__(self, *args: Module, **kwargs) -> None:
         """
         基本神经网络。提供神经网络的基本功能，包括权重初始化，训练以及测试。
@@ -30,7 +31,7 @@ class BasicNN(nn.Sequential):
         :param args: 输入网络的模型
         """
         # 设置默认值
-        init_meth = 'normal' if 'init_meth' not in kwargs.keys() else kwargs['init_meth']
+        init_meth = 'zero' if 'init_meth' not in kwargs.keys() else kwargs['init_meth']
         device = torch.device('cpu') if 'device' not in kwargs.keys() else kwargs['device']
         with_checkpoint = False if 'with_checkpoint' not in kwargs.keys() else kwargs['with_checkpoint']
         # 初始化各模块
@@ -44,9 +45,6 @@ class BasicNN(nn.Sequential):
         if with_checkpoint:
             warnings.warn('使用“检查点机制”虽然会减少前向传播的内存使用，但是会大大增加反向传播的计算量！')
         self.__checkpoint = with_checkpoint
-
-    def __str__(self):
-        return '网络结构：\n' + super().__str__() + '\n所处设备：' + str(self.__device)
 
     def train_(self, data_iter, optimizer, num_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
                acc_fn=single_argmax_accuracy, valid_iter=None) -> History:
@@ -205,10 +203,10 @@ class BasicNN(nn.Sequential):
         return metric[0] / metric[2], metric[1] / metric[2]
 
     @torch.no_grad()
-    def predict_(self, feature_iter: Iterable,
+    def predict_(self, data_iter: DataLoader or LazyDataLoader,
                  unwrap_fn: Callable[[torch.Tensor], torch.Tensor] = None) -> torch.Tensor:
         ret = []
-        for feature in feature_iter:
+        for feature, _ in data_iter:
             ret.append(self(feature))
         ret = torch.cat(ret, dim=0)
         if unwrap_fn is not None:
@@ -219,7 +217,13 @@ class BasicNN(nn.Sequential):
     def device(self):
         return self.__device
 
-    def __str__(self) -> str:
+    def load_state_dict_(self, where: str):
+        assert os.path.exists(where), f'目录{where}无效！'
+        assert where.endswith('.ptsd'), f'该文件{where}并非网络参数文件！'
+        paras = torch.load(where)
+        self.load_state_dict(paras)
+
+    def __str__(self):
         return '网络结构：\n' + super().__str__() + '\n所处设备：' + str(self.__device)
 
     def __call__(self, x):
