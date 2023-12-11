@@ -62,7 +62,7 @@ class ControlPanel:
         else:
             exp_no = 1
         assert exp_no > 0, f'训练序号需为正整数，但读取到的序号为{exp_no}'
-        self.exp_no = exp_no
+        self.exp_no = int(exp_no)
 
     def __iter__(self):
         with open(self.__hcp, 'r', encoding='utf-8') as cfg:
