@@ -351,4 +351,7 @@ def check_para(name, value, val_range) -> bool:
 def get_logData(log_path, exp_no) -> dict:
     log = pd.read_csv(log_path)
     log = log.set_index('exp_no').to_dict('index')
-    return log[exp_no]
+    try:
+        return log[exp_no]
+    except KeyError as e:
+        raise Exception(f'日志不存在{exp_no}项，请检查日志文件或重新选择查看的实验标号！')

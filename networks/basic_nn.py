@@ -1,6 +1,6 @@
 import os.path
 import warnings
-from typing import Callable, Iterable
+from typing import Callable
 
 import torch
 import torch.nn as nn
@@ -9,11 +9,11 @@ from torch.utils import checkpoint
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from data_related.data_related import single_argmax_accuracy
 from data_related.dataloader import LazyDataLoader
 from utils.accumulator import Accumulator
-from data_related.data_related import single_argmax_accuracy
 from utils.history import History
-from utils.tools import init_wb, check_path
+from utils.tools import init_wb
 
 
 class BasicNN(nn.Sequential):
@@ -204,18 +204,19 @@ class BasicNN(nn.Sequential):
 
     @torch.no_grad()
     def predict_(self, data_iter: DataLoader or LazyDataLoader,
-                 unwrap_fn: Callable[[torch.Tensor], torch.Tensor] = None
+                 unwrap_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None
                  ) -> torch.Tensor:
         self.eval()
-        ret = []
+        results, labels = [], []
         with tqdm(data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1) as data_iter:
-            for feature, _ in data_iter:
-                ret.append(self(feature))
+            for fe_batch, lb_batch in data_iter:
+                results.append(self(fe_batch))
+                labels.append(lb_batch)
             data_iter.set_description('正对结果进行解包……')
-        ret = torch.cat(ret, dim=0)
+        results, labels = torch.cat(results, dim=0), torch.cat(labels, dim=0)
         if unwrap_fn is not None:
-            ret = unwrap_fn(ret)
-        return ret
+            results = unwrap_fn(results, labels)
+        return results
 
     @property
     def device(self):

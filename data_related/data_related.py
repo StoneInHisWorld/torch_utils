@@ -1,10 +1,11 @@
+import os
 import random
 import warnings
 
 import numpy as np
 import torch
 from PIL import Image
-from typing import Iterable, Sized, Callable, List
+from typing import Iterable, Sized, Callable, List, Tuple
 
 from torch.utils.data import DataLoader
 from torchvision.transforms import transforms
@@ -89,29 +90,56 @@ def split_data(dataset: DataSet or LazyDataSet, train=0.8, test=0.2, valid=.0, s
 
 # def read_img(path: str, required_shape: Tuple[int, int] = None, mode: str = 'L',
 #              requires_id: bool = False) -> np.ndarray:
+# def read_img(path: str, mode: str = 'L', requires_id: bool = False,
+#              preprocess: List[Callable] = None, prepro_kwargs: List[dict] = None) -> np.ndarray:
+#     """
+#     读取图片
+#     :param preprocess: 预处理过程，方法签名需为def __(img:Image, ...) -> Image
+#     :param path: 图片所在路径
+#     :param mode: 图片读取模式
+#     :param requires_id: 是否需要给图片打上ID
+#     :param kwargs: 输入到预处理过程中的关键词参数
+#     :return: 图片对应numpy数组，形状为（通道，图片高，图片宽，……）
+#     """
+#     # TODO: 使用*args 代替 prepro_kwargs & preprocess
+#     img_modes = ['L', 'RGB', '1']
+#     assert mode in img_modes, f'不支持的图像模式{mode}！'
+#     img = Image.open(path).convert(mode)
+#     if preprocess is not None:
+#         for func, kwargs in zip(preprocess, prepro_kwargs):
+#             img = func(img, **kwargs)
+#     img = np.array(img)
+#     # 复原出通道。1表示样本数量维
+#     if mode == 'L' or mode == '1':
+#         img_channels = 1
+#     elif mode == 'RGB':
+#         img_channels = 3
+#     else:
+#         img_channels = -1
+#     img = img.reshape((img_channels, *img.shape[:2]))
+#     if requires_id:
+#         # 添加上读取文件名
+#         print(path.split('/')[-1])
+#         img = np.hstack((path.split('/')[-1], img))
+#     return img
 def read_img(path: str, mode: str = 'L', requires_id: bool = False,
-             preprocess: List[Callable] = None, prepro_kwargs: List[dict] = None) -> np.ndarray:
+             *args: Iterable[Tuple[Callable, dict]]) -> np.ndarray:
     """
     读取图片
-    :param preprocess: 预处理过程，方法签名需为def __(img:Image, ...) -> Image
     :param path: 图片所在路径
     :param mode: 图片读取模式
     :param requires_id: 是否需要给图片打上ID
-    :param kwargs: 输入到预处理过程中的关键词参数
     :return: 图片对应numpy数组，形状为（通道，图片高，图片宽，……）
     """
-    img_modes = ['L', 'RGB']
+    img_modes = ['L', 'RGB', '1']
     assert mode in img_modes, f'不支持的图像模式{mode}！'
     img = Image.open(path).convert(mode)
-    # # 若有要求shape，则进行resize，边缘填充黑条
-    # if required_shape and required_shape != (-1, -1):
-    #     img = tools.resize_img(img, required_shape)
-    if preprocess is not None:
-        for func, kwargs in zip(preprocess, prepro_kwargs):
-            img = func(img, **kwargs)
+    for arg in args:
+        func, kwargs = arg
+        img = func(img, **kwargs)
     img = np.array(img)
     # 复原出通道。1表示样本数量维
-    if mode == 'L':
+    if mode == 'L' or mode == '1':
         img_channels = 1
     elif mode == 'RGB':
         img_channels = 3
@@ -120,8 +148,8 @@ def read_img(path: str, mode: str = 'L', requires_id: bool = False,
     img = img.reshape((img_channels, *img.shape[:2]))
     if requires_id:
         # 添加上读取文件名
-        print(path.split('/')[-1])
-        img = np.hstack((path.split('/')[-1], img))
+        file_name = os.path.split(path)[-1]
+        img = np.hstack((file_name, img))
     return img
 
 
@@ -143,16 +171,11 @@ def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=T
     if not batch_size:
         batch_size = dataset.feature_shape[0]
     if type(dataset) == LazyDataSet:
-        # dataset.preprocess()
         loader = LazyDataLoader(
             dataset, dataset.read_fn, batch_size, max_load=max_load, shuffle=shuffle,
             collate_fn=dataset.collate_fn, sampler=sampler, **kwargs
         )
         loader.register_preprocess(dataset.fea_preprocesses, dataset.lb_preprocesses)
-        # return LazyDataLoader(
-        #     dataset, dataset.read_fn, batch_size, max_load=max_load, shuffle=shuffle,
-        #     collate_fn=dataset.collate_fn, sampler=sampler, **kwargs
-        # )
         return loader
     elif type(dataset) == DataSet:
         return DataLoader(
