@@ -28,7 +28,7 @@ def write_log(path: str, **kwargs):
     """
     assert path.endswith('.csv'), f'日志文件格式为.csv，但指定的文件名为{path}'
     try:
-        file_data = pd.read_csv(path)
+        file_data = pd.read_csv(path, encoding='utf-8')
     except Exception as _:
         file_data = pd.DataFrame([])
     item_data = pd.DataFrame([kwargs])
@@ -36,7 +36,7 @@ def write_log(path: str, **kwargs):
         file_data = pd.DataFrame(item_data)
     else:
         file_data = pd.concat([file_data, item_data], axis=0, sort=True)
-    file_data.to_csv(path, index=False)
+    file_data.to_csv(path, index=False, encoding='utf-8-sig')
 
 
 # def plot_history(history, mute=False, title=None, xlabel=None,
@@ -346,3 +346,9 @@ def check_para(name, value, val_range) -> bool:
     else:
         warnings.warn(f'参数{name}需要取值限于{val_range}！')
         return False
+
+
+def get_logData(log_path, exp_no) -> dict:
+    log = pd.read_csv(log_path)
+    log = log.set_index('exp_no').to_dict('index')
+    return log[exp_no]
