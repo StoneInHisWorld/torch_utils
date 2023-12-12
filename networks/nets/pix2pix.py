@@ -55,7 +55,7 @@ class Pix2Pix(BasicNN):
         ]
         self.output_path = [
             ep_layer(base_channel * 2, base_channel * 2),
-            nn.Conv2d(base_channel * 2, out_features[0], kernel_size=kernel_size + 1, stride=1, padding=2),
+            nn.Conv2d(base_channel * 2, out_features, kernel_size=kernel_size + 1, stride=1, padding=2),
         ]
         if output_img is not None:
             self.output_path.append(Val2Fig(output_img))
