@@ -17,8 +17,6 @@ class DataSet(torch_ds):
         assert len(features) == len(labels), f'特征集长度{len(features)}与标签集长度{len(labels)}不等！'
         self._features = features
         self._labels = labels
-        # if collate_fn is None:
-        #     collate_fn = lambda d: d
         self.collate_fn = collate_fn
         self.fea_preprocesses = []
         self.lb_preprocesses = []
@@ -77,13 +75,11 @@ class DataSet(torch_ds):
             self.preprocess()
         return DataLoader(
             self, batch_size, shuffle=shuffle, collate_fn=self.collate_fn, sampler=sampler, **kwargs
-            # self, batch_size, shuffle=shuffle, collate_fn=collate_fn, sampler=sampler, **kwargs
         )
 
     def get_subset(self, indices: Iterable):
         return DataSet(self[indices][0], self[indices][1])
 
-    # TODO: 试图隐藏预处理过程
     def register_preprocess(self, features_calls=None, labels_calls=None):
         """
         注册预处理方法，用于数据加载器对数据进行预处理
@@ -118,8 +114,11 @@ class LazyDataSet(DataSet):
         LazyDataLoader取该数据集中实际的数据内容时，会使用`read_fn`方法进行数据内容的读取。
         :param features: 数据特征集
         :param labels: 数据标签集
-        :param read_fn: 数据读取方法，签名必须为：read_fn(index: Iterable[path]) -> features: Iterable。数据加载器会自动提供数据读取路径index
-        :param collate_fn: 数据验证方法，签名需为：签名为List[T] -> Any.DataLoader取出数据后，使用此方法对数据进行验证。
+        :param read_fn: 数据读取方法。
+            签名必须为：
+            read_fn(fea_index: Iterable[path], lb_index: Iterable[path]) -> Tuple[features: Iterable, labels: Iterable]
+            数据加载器会自动提供数据读取路径index
+        :param collate_fn: 数据验证方法，签名需为：签名为List[T] -> Any. DataLoader取出数据后，使用此方法对数据进行验证。
         """
         self.read_fn = read_fn
         self.feaIndex_preprocess = []
@@ -130,7 +129,7 @@ class LazyDataSet(DataSet):
                   **kwargs) -> DataLoader:
         """
         注意：本函数只会生成普通数据加载器。
-        如生成懒数据加载器，则需要调用data_related.to_loader()。
+        如生成懒数据加载器，则需要调用data_related.to_loader()
         :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
         :param batch_size: 每次供给的数据量。默认为整个数据集
         :param shuffle: 是否打乱
@@ -151,19 +150,10 @@ class LazyDataSet(DataSet):
         :param labels_calls: 需要对标签集调用的方法列表
         :return: None
         """
-        # for call in [features_calls, labels_calls,
-        #              feaIndex_calls, lbIndex_calls]:
-        #     call = [] if call is None else call
-        # if features_calls is None:
-        #     features_calls = []
-        # if labels_calls is None:
-        #     labels_calls = []
         if feaIndex_calls is None:
             feaIndex_calls = []
         if lbIndex_calls is None:
             lbIndex_calls = []
-        # self.__features_preprocesses += features_calls
-        # self.__labels_preprocess += labels_calls
         self.feaIndex_preprocess += feaIndex_calls
         self.lbIndex_preprocess += lbIndex_calls
         super().register_preprocess(features_calls, labels_calls)
@@ -177,7 +167,6 @@ class LazyDataSet(DataSet):
         :param device: 迁移目标设备
         :return: None
         """
-        # TODO: TEST RISKY CODE!
         to = lambda fea: fea.to(device)
         if type(self._features) == torch.Tensor:
             self._features = self._features.to(device)
