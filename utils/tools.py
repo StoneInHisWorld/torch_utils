@@ -5,11 +5,13 @@ from typing import Tuple
 
 import pandas as pd
 import torch
+import torchvision
 from PIL import Image as IMAGE
 from PIL.Image import Image
 from matplotlib import pyplot as plt
 from torch import cuda, nn as nn
 from torch.nn import init as init
+import numpy as np
 
 from networks.layers import ssim as cl
 
@@ -39,48 +41,15 @@ def write_log(path: str, **kwargs):
     file_data.to_csv(path, index=False, encoding='utf-8-sig')
 
 
-# def plot_history(history, mute=False, title=None, xlabel=None,
-#                  ylabel=None, savefig_as=None, accumulative=False):
-#     """
-#     绘制训练历史变化趋势图
-#     :param history: 训练历史数据
-#     :param mute: 绘制完毕后是否立即展示成果图
-#     :param title: 绘制图标题
-#     :param xlabel: 自变量名称
-#     :param ylabel: 因变量名称
-#     :param savefig_as: 保存图片路径
-#     :param accumulative: 是否将所有趋势图叠加在一起
-#     :return: None
-#     """
-#     warnings.warn('将在未来版本中删除！', DeprecationWarning)
-#     for label, log in history:
-#         plt.plot(range(len(log)), log, label=label)
-#     if xlabel:
-#         plt.xlabel(xlabel)
-#     if ylabel:
-#         plt.ylabel(ylabel)
-#     if title:
-#         plt.title(title)
-#     plt.legend()
-#     if savefig_as:
-#         if not os.path.exists(os.path.split(savefig_as)[0]):
-#             os.makedirs(os.path.split(savefig_as)[0])
-#         plt.savefig(savefig_as)
-#         print('已保存历史趋势图')
-#     if not mute:
-#         plt.show()
-#     if not accumulative:
-#         plt.clf()
-
 def plot_history(history, mute=False, title=None, ls_ylabel=None,
                  acc_ylabel=None, savefig_as=None, accumulative=False):
     """
     绘制训练历史变化趋势图
+    :param acc_ylabel: 准确率趋势图的纵轴标签
+    :param ls_ylabel: 损失值趋势图的纵轴标签
     :param history: 训练历史数据
     :param mute: 绘制完毕后是否立即展示成果图
     :param title: 绘制图标题
-    :param xlabel: 自变量名称
-    :param ylabel: 因变量名称
     :param savefig_as: 保存图片路径
     :param accumulative: 是否将所有趋势图叠加在一起
     :return: None
@@ -112,6 +81,7 @@ def plot_history(history, mute=False, title=None, ls_ylabel=None,
     if not mute:
         plt.show()
     if not accumulative:
+        plt.close(fig)
         plt.clf()
 
 
@@ -355,3 +325,16 @@ def get_logData(log_path, exp_no) -> dict:
         return log[exp_no]
     except KeyError as e:
         raise Exception(f'日志不存在{exp_no}项，请检查日志文件或重新选择查看的实验标号！')
+
+
+def tensor_to_img(ts: torch.Tensor, mode: str = 'RGB') -> Image:
+    img_modes = ['L', 'RGB', '1']
+    assert mode in img_modes, f'不支持的图像模式{mode}！'
+    if mode == '1':
+        ts = ts.cpu().numpy().astype(int)
+        ts = ts.reshape(ts.shape[1:])
+        ret = IMAGE.fromarray(ts)
+    else:
+        ret = torchvision.transforms.ToPILImage(mode)(ts)
+    return ret
+
