@@ -96,6 +96,10 @@ class BasicNN(nn.Sequential):
 
     hook_mute = False
 
+    def train__(self):
+        # TODO: 用多线程改进性能。可以利用生产者消费者模型，训练模型产生state_dict，验证模型使用valid_iter进行验证
+        pass
+
     def hook_forward_fn(self, module, input, output):
         if not BasicNN.hook_mute:
             print(f'{module.__class__.__name__} FORWARD')

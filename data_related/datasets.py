@@ -2,6 +2,7 @@ from typing import Iterable, Callable, List
 
 import torch
 from torch.utils.data import Dataset as torch_ds, DataLoader
+import utils.tools as tools
 
 
 class DataSet(torch_ds):
@@ -39,21 +40,38 @@ class DataSet(torch_ds):
         self._labels = self._labels.to(device)
 
     def apply(self, features_calls: List[Callable[[torch.Tensor], torch.Tensor]] = None,
-              labels_calls: List[Callable[[torch.Tensor], torch.Tensor]] = None):
+              labels_calls: List[Callable[[torch.Tensor], torch.Tensor]] = None,
+              desc: str = '对数据集进行操作……'):
         """
         对数据调用某种方法，可用作数据预处理。
+        :param desc:
         :param features_calls: 需要对特征集调用的方法列表
         :param labels_calls: 需要对标签集调用的方法列表
         :return: None
         """
+        # TODO: 使用多线程加速
         if features_calls is None:
             features_calls = []
         if labels_calls is None:
             labels_calls = []
-        for call in features_calls:
-            self._features = call(self._features)
-        for call in labels_calls:
-            self._labels = call(self._labels)
+
+        def fea_apply():
+            for call in features_calls:
+                self._features = call(self._features)
+
+        def lb_apply():
+            for call in labels_calls:
+                self._labels = call(self._labels)
+
+        tools.multi_process(
+            2, False, desc,
+            (fea_apply, (), {}),
+            (lb_apply, (), {})
+        )
+        # for call in features_calls:
+        #     self._features = call(self._features)
+        # for call in labels_calls:
+        #     self._labels = call(self._labels)
 
     def to_loader(self, batch_size: int = None, shuffle=True,
                   sampler: Iterable = None, preprocess: bool = True,
@@ -159,7 +177,8 @@ class LazyDataSet(DataSet):
         super().register_preprocess(features_calls, labels_calls)
 
     def preprocess(self):
-        self.apply(self.feaIndex_preprocess, self.lbIndex_preprocess)
+        self.apply(self.feaIndex_preprocess, self.lbIndex_preprocess,
+                   desc='正在对索引集进行预处理……')
 
     def to(self, device: torch.device) -> None:
         """
