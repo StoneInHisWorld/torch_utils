@@ -2,7 +2,7 @@ import math
 import os.path
 import random
 import warnings
-from typing import Tuple, Iterable, Callable, List, Sized
+from typing import Tuple, Iterable, Callable, Sized
 
 import pandas as pd
 import torch
@@ -12,7 +12,6 @@ from PIL.Image import Image
 from matplotlib import pyplot as plt
 from torch import cuda, nn as nn
 from torch.nn import init as init
-import numpy as np
 from tqdm import tqdm
 
 from networks.layers import ssim as cl
@@ -334,9 +333,9 @@ def tensor_to_img(ts: torch.Tensor, mode: str = 'RGB') -> Image:
     img_modes = ['L', 'RGB', '1']
     assert mode in img_modes, f'不支持的图像模式{mode}！'
     if mode == '1':
-        ts = ts.cpu().numpy().astype(int)
-        ts = ts.reshape(ts.shape[1:])
-        ret = IMAGE.fromarray(ts)
+        ts = ts.cpu().numpy()
+        ts = ts.reshape(ts.shape[1:]) * 255
+        ret = IMAGE.fromarray(ts).convert(mode)
     else:
         ret = torchvision.transforms.ToPILImage(mode)(ts)
     return ret
@@ -357,7 +356,7 @@ def multi_process(n_workers: int = 8, mute: bool = True, desc: str = '',
                 # pop出队头处理机
                 processor = processors.pop(0)
                 # 等待线程运行完毕
-                if processor.isAlive():
+                if processor.is_alive():
                     processor.join()
                 # 获取运行结果
                 results.append(processor.get_result())
@@ -365,7 +364,7 @@ def multi_process(n_workers: int = 8, mute: bool = True, desc: str = '',
             processors.append(t)
         for processor in processors:
             # 收集所有线程的运行结果
-            if processor.isAlive():
+            if processor.is_alive():
                 processor.join()
             results.append(processor.get_result())
     else:
@@ -377,14 +376,14 @@ def multi_process(n_workers: int = 8, mute: bool = True, desc: str = '',
                     t.start()
                 else:
                     processor = processors.pop(0)
-                    if processor.isAlive():
+                    if processor.is_alive():
                         processor.join()
                     results.append(processor.get_result())
                     pbar.update(1)
                     t.start()
                 processors.append(t)
             for processor in processors:
-                if processor.isAlive():
+                if processor.is_alive():
                     processor.join()
                 results.append(processor.get_result())
                 pbar.update(1)
@@ -400,8 +399,8 @@ def iterable_multi_process(data: Iterable and Sized, task: Callable,
     ret = []
     for res in multi_process(
             n_workers, mute, desc, *[
-                (task, (data[_], *args), kwargs)
-                for _ in range(n_workers)
+                (task, (d, *args), kwargs)
+                for d in data
             ]
     ):
         ret += res
