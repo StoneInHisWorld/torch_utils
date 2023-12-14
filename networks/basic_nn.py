@@ -208,18 +208,21 @@ class BasicNN(nn.Sequential):
 
     @torch.no_grad()
     def predict_(self, data_iter: DataLoader or LazyDataLoader,
-                 unwrap_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None
+                 unwrap_fn: Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor] = None
                  ) -> torch.Tensor:
         self.eval()
-        results, labels = [], []
+        inputs, results, labels = [], [], []
         with tqdm(data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1) as data_iter:
             for fe_batch, lb_batch in data_iter:
+                inputs.append(fe_batch)
                 results.append(self(fe_batch))
                 labels.append(lb_batch)
             data_iter.set_description('正对结果进行解包……')
-        results, labels = torch.cat(results, dim=0), torch.cat(labels, dim=0)
+        inputs = torch.cat(inputs, dim=0)
+        results = torch.cat(results, dim=0)
+        labels = torch.cat(labels, dim=0)
         if unwrap_fn is not None:
-            results = unwrap_fn(results, labels)
+            results = unwrap_fn(inputs, results, labels)
         return results
 
     @property
