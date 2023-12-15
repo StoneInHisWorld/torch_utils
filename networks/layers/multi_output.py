@@ -1,5 +1,4 @@
 import math
-import warnings
 from collections.abc import Iterable
 from typing import List
 
@@ -7,7 +6,8 @@ import numpy as np
 import torch
 from torch import nn
 
-from utils import tools as tools
+import utils.func.torch_tools
+from utils.func import pytools as tools
 
 
 def mlp(in_features, out_features, base=2, bn_momen=0., dropout=0.) -> List[nn.Module]:
@@ -85,7 +85,7 @@ class MultiOutputLayer(nn.Module):
             for s in out_or_strategy
         ]
         for i, p in enumerate(self._paths):
-            p.apply(tools.init_wb(init_meth))
+            p.apply(utils.func.torch_tools.init_wb(init_meth))
             self.add_module(f'path{i}', p)
 
     def forward(self, features):

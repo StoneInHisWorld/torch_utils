@@ -13,7 +13,7 @@ from data_related.data_related import single_argmax_accuracy
 from data_related.dataloader import LazyDataLoader
 from utils.accumulator import Accumulator
 from utils.history import History
-from utils.tools import init_wb
+from utils.func.torch_tools import init_wb
 
 
 class BasicNN(nn.Sequential):

@@ -2,7 +2,7 @@ from typing import Iterable, Callable, List
 
 import torch
 from torch.utils.data import Dataset as torch_ds, DataLoader
-import utils.tools as tools
+import utils.func.pytools as tools
 
 
 class DataSet(torch_ds):

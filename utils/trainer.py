@@ -1,10 +1,10 @@
 import time
-import warnings
 
 import torch
 from torchsummary import summary
 
-from utils import tools
+import utils.func.log_tools as ltools
+from utils.func import pytools
 
 
 class Trainer:
@@ -61,7 +61,7 @@ class Trainer:
 
     def __write_log(self, **kwargs):
         kwargs.update(self.__extra_lm)
-        tools.write_log(self.__lp, **kwargs)
+        ltools.write_log(self.__lp, **kwargs)
         print('已编写日志')
 
     def add_logMsg(self, mute=True, **kwargs):
@@ -80,7 +80,7 @@ class Trainer:
         if not isinstance(self.__net, torch.nn.Module):
             print('训练器对象未得到训练网络对象，因此不予保存网络！')
             return
-        if not tools.check_para('save_net', self.__sn, self.sn_range):
+        if not pytools.check_para('save_net', self.__sn, self.sn_range):
             print('请检查setting.json中参数save_net设置是否正确，本次不予保存模型！')
             return
         if self.__sn == 'entire':

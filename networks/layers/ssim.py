@@ -1,15 +1,27 @@
 import warnings
 
 import torch
-from torch import nn
-import utils.tools as tools
 import torchvision.transforms as T
+from torch import nn
+
+from utils.func.tensor_tools import tensor_to_img, img_to_tensor
 
 
 def calculate_ssim(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    """
+    计算SSIM值
+    :param y_hat: 计算对象1
+    :param y: 计算对象2
+    :return: 两张图片的SSIM值
+    """
     mean_x, mean_y = [torch.mean(t, dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
     std_x, std_y = [torch.std(t, dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
-    conv_xy = torch.sum((y_hat - mean_x) * (y - mean_y), dim=list(range(1, len(y.shape))), keepdim=True) / (len(y_hat) - 1)
+    conv_xy = torch.mean((y_hat - mean_x) * (y - mean_y), dim=list(range(1, len(y.shape))), keepdim=True)
+    # 更精确的表达式
+    # conv_xy =
+    # torch.sum((y_hat - mean_x) * (y - mean_y), dim=list(range(1, len(y.shape))), keepdim=True)
+    # /
+    # (width * height - 1)
     R = torch.tensor(255)
     c1, c2 = torch.sqrt(R * 0.01), torch.sqrt(R * 0.03)
     numerator = (2 * mean_x * mean_y + c1) * (2 * conv_xy + c2)
@@ -31,16 +43,18 @@ class SSIMLoss(nn.Module):
     def forward(self, y_hat, y):
         # 将y_hat, y反归一化
         # TODO: Untested!
-        y_hat, y = [tools.tensor_to_img(t, self.mode) for t in [y_hat, y]]
-        transformer = T.PILToTensor()
-        y_hat, y = [transformer(t) for t in [y_hat, y]]
-        # 计算SSIM
-        ssim_of_each = calculate_ssim(y_hat, y)
-        if not self.mute:
-            for ssim in ssim_of_each:
-                if ssim < 0:
-                    warnings.warn(f'出现了负值SSIM={ssim}！')
-        return 1 - torch.mean(ssim_of_each, dim=list(range(1, len(ssim_of_each.shape))))
+        computer = SSIM(self.mode, self.mute)
+        return 1 - computer(y_hat, y)
+        # y_hat, y = [utils.func.tensor_tools.tensor_to_img(t, self.mode) for t in [y_hat, y]]
+        # transformer = T.PILToTensor()
+        # y_hat, y = [transformer(t) for t in [y_hat, y]]
+        # # 计算SSIM
+        # ssim_of_each = calculate_ssim(y_hat, y)
+        # if not self.mute:
+        #     for ssim in ssim_of_each:
+        #         if ssim < 0:
+        #             warnings.warn(f'出现了负值SSIM={ssim}！')
+        # return 1 - torch.mean(ssim_of_each, dim=list(range(1, len(ssim_of_each.shape))))
 
 
 class SSIM(nn.Module):
@@ -54,12 +68,15 @@ class SSIM(nn.Module):
         self.mode = mode
         super().__init__()
 
-    def forward(self, y_hat, y):
+    def forward(self, y_hat: torch.Tensor, y: torch.Tensor):
         # 将y_hat, y反归一化
         # TODO: Untested!
-        y_hat, y = [tools.tensor_to_img(t, self.mode) for t in [y_hat, y]]
-        transformer = T.PILToTensor()
-        y_hat, y = [transformer(t) for t in [y_hat, y]]
+        dtype = y_hat.dtype
+        device = y_hat.device
+        y_hat = [tensor_to_img(t, self.mode) for t in y_hat]
+        y = [tensor_to_img(t, self.mode) for t in y]
+        y_hat = torch.cat([img_to_tensor(t, dtype, device) for t in y_hat], dim=0)
+        y = torch.cat([img_to_tensor(t, dtype, device) for t in y], dim=0)
         # 计算SSIM
         ssim_of_each = calculate_ssim(y_hat, y)
         if not self.mute:

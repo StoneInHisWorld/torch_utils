@@ -6,8 +6,8 @@ import pandas as pd
 import torch
 from torchsummary import summary
 
-from utils import tools
-from utils.tools import permutation
+import utils.func.log_tools as ltools
+from utils.func import pytools
 from utils.trainer import Trainer
 
 
@@ -32,14 +32,14 @@ class ControlPanel:
         :param log_path: 日志文件存储路径
         :param net_path: 网络文件存储路径
         """
-        tools.check_path(hp_cfg_path)
-        tools.check_path(runtime_cfg_path)
+        pytools.check_path(hp_cfg_path)
+        pytools.check_path(runtime_cfg_path)
         if log_path is not None:
-            tools.check_path(log_path, init_log)
+            pytools.check_path(log_path, init_log)
         if net_path is not None:
-            tools.check_path(net_path)
+            pytools.check_path(net_path)
         if plot_path is not None:
-            tools.check_path(plot_path)
+            pytools.check_path(plot_path)
         self.__rcp = runtime_cfg_path
         self.__hcp = hp_cfg_path
         self.__lp = log_path
@@ -67,7 +67,7 @@ class ControlPanel:
     def __iter__(self):
         with open(self.__hcp, 'r', encoding='utf-8') as cfg:
             hyper_params = json.load(cfg)
-            for hps in permutation([], *hyper_params.values()):
+            for hps in pytools.permutation([], *hyper_params.values()):
                 hyper_params = {k: v for k, v in zip(hyper_params.keys(), hps)}
                 self.__cur_trainer = Trainer(
                     self.__datasource, hyper_params, self.exp_no,
@@ -115,7 +115,7 @@ class ControlPanel:
     def __plot_history(self, history, cfg, mute, ls_fn, acc_fn) -> None:
         # 检查参数设置
         cfg_range = ['plot', 'save', 'no']
-        if not tools.check_para('plot_history', cfg, cfg_range):
+        if not pytools.check_para('plot_history', cfg, cfg_range):
             print('请检查setting.json中参数plot_history设置是否正确，本次不予绘制历史趋势图！')
             return
         if cfg == 'no':
@@ -124,7 +124,7 @@ class ControlPanel:
             warnings.warn('未指定绘图路径，不予保存历史趋势图！')
         savefig_as = None if self.__pp is None or cfg == 'plot' else self.__pp + str(self.exp_no) + '.jpg'
         # 绘图
-        tools.plot_history(
+        ltools.plot_history(
             history, mute=mute, ls_ylabel=ls_fn, acc_ylabel=acc_fn,
             title='EXP NO.' + str(self.exp_no), savefig_as=savefig_as
         )
