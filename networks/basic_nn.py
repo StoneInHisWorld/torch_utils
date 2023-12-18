@@ -1,9 +1,12 @@
 import os.path
 import warnings
+from copy import deepcopy
+from threading import Event
 from typing import Callable
 
 import torch
 import torch.nn as nn
+from queue import Queue
 from torch.nn import Module
 from torch.utils import checkpoint
 from torch.utils.data import DataLoader
@@ -12,12 +15,14 @@ from tqdm import tqdm
 from data_related.data_related import single_argmax_accuracy
 from data_related.dataloader import LazyDataLoader
 from utils.accumulator import Accumulator
-from utils.history import History
 from utils.func.torch_tools import init_wb
+from utils.history import History
+from utils.thread import Thread
+
+epoch_ending = 'end_of_an_epoch'
 
 
 class BasicNN(nn.Sequential):
-
     required_shape = (-1,)
 
     def __init__(self, *args: Module, **kwargs) -> None:
@@ -45,6 +50,108 @@ class BasicNN(nn.Sequential):
         if with_checkpoint:
             warnings.warn('使用“检查点机制”虽然会减少前向传播的内存使用，但是会大大增加反向传播的计算量！')
         self.__checkpoint = with_checkpoint
+
+    @torch.no_grad()
+    def __train_log_impl(
+            self, history, acc_fn,
+            finish, Q
+    ) -> History:
+        metric = Accumulator(3)
+        net = deepcopy(self)
+        while not finish.is_set() or Q.unfinished_tasks > 0:
+            item = Q.get()
+            if item == epoch_ending:
+                metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
+                Q.task_done()
+                # epoch += 1
+                # i = 1
+                continue
+            ls, state_dict, X, y = item
+            net.load_state_dict(state_dict)
+            # 开始计算准确率数据
+            correct = acc_fn(net(X), y)
+            num_examples = X.shape[0]
+            metric.add(ls * num_examples, correct, num_examples)
+            # 记录训练数据
+            history.add(
+                ['train_l', 'train_acc'],
+                [metric[0] / metric[2], metric[1] / metric[2]]
+            )
+            Q.task_done()
+        return history
+
+    @staticmethod
+    @torch.no_grad()
+    def __valid_impl(net, test_iter, acc_fn, ls_fn) -> tuple:
+        net.eval()
+        metric = Accumulator(3)
+        for features, lbs in test_iter:
+            preds = net(features)
+            metric.add(acc_fn(preds, lbs), ls_fn(preds, lbs) * len(features), len(features))
+        return metric[0] / metric[2], metric[1] / metric[2]
+
+    @torch.no_grad()
+    def __train_and_valid_log_impl(
+            self, valid_iter, acc_fn, ls_fn, history,
+            finish, Q: Queue  # 信号量
+    ) -> History:
+        metric = Accumulator(3)
+        net = deepcopy(self)
+        # epoch = 1
+        # i = 1
+        while not finish.is_set() or Q.unfinished_tasks > 0:
+            item = Q.get()
+            if item == epoch_ending:
+                metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
+                Q.task_done()
+                # epoch += 1
+                # i = 1
+                continue
+            ls, state_dict, X, y = item
+            net.load_state_dict(state_dict)
+            # 开始计算验证数据
+            valid_thread = Thread(self.__valid_impl, net, valid_iter, acc_fn, ls_fn)
+            valid_thread.start()
+            # 开始计算准确率数据
+            correct = acc_fn(net(X), y)
+            num_examples = X.shape[0]
+            metric.add(ls * num_examples, correct, num_examples)
+            # 记录训练、验证数据
+            if valid_thread.is_alive():
+                valid_thread.join()
+            valid_acc, valid_l = valid_thread.get_result()
+            history.add(
+                ['train_l', 'train_acc', 'valid_l', 'valid_acc'],
+                [metric[0] / metric[2], metric[1] / metric[2], valid_l, valid_acc]
+                # [f'e{epoch}{i}' for _ in range(4)]
+            )
+            # i += 1
+            Q.task_done()
+        return history
+
+    def __train_impl(
+            self, data_iter, num_epochs, optimizer, ls_fn,
+            Q: Queue, finish
+    ):
+        with tqdm(total=len(data_iter), unit='批', position=0,
+                  desc=f'训练中...', mininterval=1) as pbar:
+            for epoch in range(num_epochs):
+                pbar.reset(len(data_iter))
+                pbar.set_description(f'世代{epoch + 1}/{num_epochs} 训练中...')
+                # 训练主循环
+                for X, y in data_iter:
+                    self.train()
+                    optimizer.zero_grad()
+                    ls = ls_fn(self(X), y)
+                    ls.backward()
+                    optimizer.step()
+                    # TODO：若没有获得完整的forward函数，将会发生错误！
+                    Q.put_nowait((ls.item(), self.state_dict(), X, y))
+                    pbar.update(1)
+                Q.put_nowait(epoch_ending)
+            finish.set()
+            pbar.set_description('正在进行收尾工作……')
+            pbar.close()
 
     def train_(self, data_iter, optimizer, num_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
                acc_fn=single_argmax_accuracy, valid_iter=None) -> History:
@@ -96,9 +203,46 @@ class BasicNN(nn.Sequential):
 
     hook_mute = False
 
-    def train__(self):
+    def train__(self, data_iter, optimizer, num_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
+                acc_fn=single_argmax_accuracy, valid_iter=None) -> History:
         # TODO: 用多线程改进性能。可以利用生产者消费者模型，训练模型产生state_dict，验证模型使用valid_iter进行验证
-        pass
+        """
+        神经网络训练函数。
+        :param data_iter: 训练数据供给迭代器
+        :param optimizer: 网络参数优化器
+        :param num_epochs: 迭代世代
+        :param ls_fn: 训练损失函数
+        :param acc_fn: 准确率计算函数
+        :param valid_iter: 验证数据供给迭代器
+        :return: 训练数据记录`History`对象
+        """
+        Q = Queue()
+        finish = Event()
+        clear_metric = Event()
+
+        train_thread = Thread(
+            self.__train_impl, data_iter, num_epochs, optimizer, ls_fn,
+            clear_metric, Q, finish
+        )
+        train_thread.start()
+        if valid_iter is not None:
+            history = History('train_l', 'train_acc', 'valid_l', 'valid_acc')
+            log_thread = Thread(
+                self.__train_and_valid_log_impl,
+                valid_iter, acc_fn, ls_fn, history,
+                clear_metric, finish, Q
+            )
+        else:
+            history = History('train_l', 'train_acc')
+            log_thread = Thread(
+                self.__train_log_impl,
+                history, acc_fn,
+                clear_metric, finish, Q
+            )
+        log_thread.start()
+        finish.wait()
+        log_thread.join()
+        return log_thread.get_result()
 
     def hook_forward_fn(self, module, input, output):
         if not BasicNN.hook_mute:
