@@ -7,6 +7,9 @@ from torch import nn
 from utils.func.tensor_tools import tensor_to_img, img_to_tensor
 
 
+img_modes = ['L', 'RGB', '1']
+
+
 def calculate_ssim(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     """
     计算SSIM值
@@ -65,22 +68,27 @@ class SSIM(nn.Module):
         计算公式为：ls =
         """
         self.mute = mute
+        assert mode in img_modes, f'不支持的图像模式{mode}！'
         self.mode = mode
         super().__init__()
 
     def forward(self, y_hat: torch.Tensor, y: torch.Tensor):
+        # TODO: 是否在计算时需要 * 255？
         # 将y_hat, y反归一化
-        # TODO: Untested!
-        dtype = y_hat.dtype
-        device = y_hat.device
-        y_hat = [tensor_to_img(t, self.mode) for t in y_hat]
-        y = [tensor_to_img(t, self.mode) for t in y]
-        y_hat = torch.cat([img_to_tensor(t, dtype, device) for t in y_hat], dim=0)
-        y = torch.cat([img_to_tensor(t, dtype, device) for t in y], dim=0)
+        # dtype = y_hat.dtype
+        # device = y_hat.device
+        # y_hat = [tensor_to_img(t, self.mode) for t in y_hat]
+        # y = [tensor_to_img(t, self.mode) for t in y]
+        # y_hat = torch.cat([img_to_tensor(t, dtype, device) for t in y_hat], dim=0)
+        # y = torch.cat([img_to_tensor(t, dtype, device) for t in y], dim=0)
         # 计算SSIM
-        ssim_of_each = calculate_ssim(y_hat, y)
+        if self.mode == '1':
+            ssim_of_each = calculate_ssim(y_hat * 255, y * 255)
+        else:
+            ssim_of_each = calculate_ssim(y_hat, y)
         if not self.mute:
             for ssim in ssim_of_each:
                 if ssim < 0:
                     warnings.warn(f'出现了负值SSIM={ssim}！')
-        return torch.mean(ssim_of_each, dim=list(range(1, len(ssim_of_each.shape))))
+        return ssim_of_each
+        # return torch.mean(ssim_of_each, dim=list(range(1, len(ssim_of_each.shape))))

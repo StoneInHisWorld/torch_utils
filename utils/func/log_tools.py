@@ -1,4 +1,5 @@
 import os
+import time
 
 import pandas as pd
 from matplotlib import pyplot as plt
@@ -12,16 +13,37 @@ def write_log(path: str, **kwargs):
     :return: None
     """
     assert path.endswith('.csv'), f'日志文件格式为.csv，但指定的文件名为{path}'
-    try:
-        file_data = pd.read_csv(path, encoding='utf-8')
-    except Exception as _:
-        file_data = pd.DataFrame([])
+    file_data = None
+    wait = 0
+    while file_data is None:
+        try:
+            file_data = pd.read_csv(path, encoding='utf-8')
+        except FileNotFoundError as _:
+            file_data = pd.DataFrame([])
+        except PermissionError as _:
+            for i in range(10):
+                print(f'\r文件{path}被占用，已等待{wait}秒。请立即关闭此文件，在整10秒处会再次尝试获取文件读取权限。',
+                      end='', flush=True)
+                wait += 1
+                time.sleep(1)
     item_data = pd.DataFrame([kwargs])
     if len(file_data) == 0:
         file_data = pd.DataFrame(item_data)
     else:
         file_data = pd.concat([file_data, item_data], axis=0, sort=True)
-    file_data.to_csv(path, index=False, encoding='utf-8-sig')
+    # TODO: 测试append模式能否不出现清空数据的情况
+    wait = 0
+    while True:
+        try:
+            file_data.to_csv(path, index=False, encoding='utf-8-sig')
+            return
+        except PermissionError as _:
+            for i in range(10):
+                print(f'\r 文件{path}被占用，已等待{wait}秒。请立即关闭此文件，在整10秒处会再次尝试获取文件读取权限。',
+                      end='',  flush=True)
+                wait += 1
+                time.sleep(1)
+    # item_data.to_csv(path, index=False, encoding='utf-8-sig', mode='a')
 
 
 def plot_history(history, mute=False, title=None, ls_ylabel=None,
