@@ -26,24 +26,26 @@ def permutation(res: list, *args):
                 yield p
 
 
-def check_path(path: str, way_to_mkfile=None):
+def check_path(path: str, way_to_mkf=None):
     """
-    检查指定路径。如果目录不存在，则会创建目录；如果文件不存在，则指定文件初始化方式后才会自动初始化文件
+    检查指定路径。
+    如果目录不存在，则会创建目录；
+    如果文件不存在，则指定文件初始化方式后才会自动初始化文件
     :param path: 需要检查的目录
-    :param way_to_mkfile: 初始化文件的方法
+    :param way_to_mkf: 初始化文件的方法
     :return: None
     """
     if not os.path.exists(path):
         path, file = os.path.split(path)
         if file != "":
             # 如果是文件
-            if way_to_mkfile is not None:
+            if way_to_mkf is not None:
                 # 如果指定了文件初始化方式，则自动初始化文件
                 if path == "" or os.path.exists(path):
-                    way_to_mkfile(file)
+                    way_to_mkf(file)
                 else:
                     os.makedirs(path)
-                    way_to_mkfile(os.path.join(path, file))
+                    way_to_mkf(os.path.join(path, file))
             else:
                 raise FileNotFoundError(f'没有在{path}下找到{file}文件！')
         else:
