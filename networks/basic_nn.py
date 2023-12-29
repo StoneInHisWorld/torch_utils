@@ -23,6 +23,7 @@ epoch_ending = 'end_of_an_epoch'
 
 
 class BasicNN(nn.Sequential):
+
     required_shape = (-1,)
 
     def __init__(self, *args: Module, **kwargs) -> None:
@@ -97,15 +98,11 @@ class BasicNN(nn.Sequential):
     ) -> History:
         metric = Accumulator(3)
         net = deepcopy(self)
-        # epoch = 1
-        # i = 1
         while not finish.is_set() or Q.unfinished_tasks > 0:
             item = Q.get()
             if item == epoch_ending:
                 metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
                 Q.task_done()
-                # epoch += 1
-                # i = 1
                 continue
             ls, state_dict, X, y = item
             net.load_state_dict(state_dict)
@@ -123,7 +120,6 @@ class BasicNN(nn.Sequential):
             history.add(
                 ['train_l', 'train_acc', 'valid_l', 'valid_acc'],
                 [metric[0] / metric[2], metric[1] / metric[2], valid_l, valid_acc]
-                # [f'e{epoch}{i}' for _ in range(4)]
             )
             # i += 1
             Q.task_done()
@@ -205,7 +201,7 @@ class BasicNN(nn.Sequential):
 
     def train__(self, data_iter, optimizer, num_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
                 acc_fn=single_argmax_accuracy, valid_iter=None) -> History:
-        # TODO: 用多线程改进性能。可以利用生产者消费者模型，训练模型产生state_dict，验证模型使用valid_iter进行验证
+        # TODO: 检查一下，为什么使用真实数量的数据集会引发死锁
         """
         神经网络训练函数。
         :param data_iter: 训练数据供给迭代器
@@ -218,11 +214,10 @@ class BasicNN(nn.Sequential):
         """
         Q = Queue()
         finish = Event()
-        clear_metric = Event()
 
         train_thread = Thread(
             self.__train_impl, data_iter, num_epochs, optimizer, ls_fn,
-            clear_metric, Q, finish
+            Q, finish
         )
         train_thread.start()
         if valid_iter is not None:
@@ -230,14 +225,14 @@ class BasicNN(nn.Sequential):
             log_thread = Thread(
                 self.__train_and_valid_log_impl,
                 valid_iter, acc_fn, ls_fn, history,
-                clear_metric, finish, Q
+                finish, Q
             )
         else:
             history = History('train_l', 'train_acc')
             log_thread = Thread(
                 self.__train_log_impl,
                 history, acc_fn,
-                clear_metric, finish, Q
+                finish, Q
             )
         log_thread.start()
         finish.wait()
