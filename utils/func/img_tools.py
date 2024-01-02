@@ -1,6 +1,8 @@
+import os
 import random
-from typing import Tuple
+from typing import Tuple, Iterable, Callable
 
+import numpy as np
 from PIL import Image as IMAGE
 from PIL.Image import Image
 
@@ -71,3 +73,53 @@ def crop_img(img: Image, required_shape, loc: str or Tuple[int, int]) -> Image:
     else:
         raise Exception(f'无法识别的裁剪位置参数{loc}')
     return img.crop(loc)
+
+
+def read_img(path: str, mode: str = 'L', requires_id: bool = False,
+             *preprocesses: Iterable[Tuple[Callable, dict]]) -> np.ndarray:
+    """
+    读取图片
+    :param path: 图片所在路径
+    :param mode: 图片读取模式
+    :param requires_id: 是否需要给图片打上ID
+    :return: 图片对应numpy数组，形状为（通道，图片高，图片宽，……）
+    """
+    img_modes = ['L', 'RGB', '1']
+    assert mode in img_modes, f'不支持的图像模式{mode}！'
+    # img = Image.open(path).convert(mode)
+    img = IMAGE.open(path)
+    preprocesses = (*preprocesses, (Image.convert, (mode, ), {}))
+    for preprocess in preprocesses:
+        func, args, kwargs = preprocess
+        img = func(img, *args, **kwargs)
+    img = np.array(img)
+    # 复原出通道。1表示样本数量维
+    if mode == 'L' or mode == '1':
+        img_channels = 1
+    elif mode == 'RGB':
+        img_channels = 3
+    else:
+        img_channels = -1
+    img = img.reshape((img_channels, *img.shape[:2]))
+    if requires_id:
+        # 添加上读取文件名
+        file_name = os.path.split(path)[-1]
+        img = np.hstack((file_name, img))
+    return img
+
+
+def binarize_img(img: Image, threshold: int = 127):
+    """
+    参考自：https://www.jianshu.com/p/f6d40a73310f
+    :param img:
+    :param threshold:
+    :return:
+    """
+    table = []
+    for i in range(256):
+        if i < threshold:
+            table.append(0)
+        else:
+            table.append(1)
+    # 图片二值化
+    return img.point(table, '1')
