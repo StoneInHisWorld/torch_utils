@@ -1,12 +1,9 @@
-import os
 import random
 import warnings
+from typing import Iterable, Sized
 
 import numpy as np
 import torch
-from PIL import Image
-from typing import Iterable, Sized, Callable, List, Tuple
-
 from torch.utils.data import DataLoader
 from torchvision.transforms import transforms
 
@@ -88,37 +85,6 @@ def split_data(dataset: DataSet or LazyDataSet, train=0.8, test=0.2, valid=.0, s
     ]
 
 
-def read_img(path: str, mode: str = 'L', requires_id: bool = False,
-             *args: Iterable[Tuple[Callable, dict]]) -> np.ndarray:
-    """
-    读取图片
-    :param path: 图片所在路径
-    :param mode: 图片读取模式
-    :param requires_id: 是否需要给图片打上ID
-    :return: 图片对应numpy数组，形状为（通道，图片高，图片宽，……）
-    """
-    img_modes = ['L', 'RGB', '1']
-    assert mode in img_modes, f'不支持的图像模式{mode}！'
-    img = Image.open(path).convert(mode)
-    for arg in args:
-        func, kwargs = arg
-        img = func(img, **kwargs)
-    img = np.array(img)
-    # 复原出通道。1表示样本数量维
-    if mode == 'L' or mode == '1':
-        img_channels = 1
-    elif mode == 'RGB':
-        img_channels = 3
-    else:
-        img_channels = -1
-    img = img.reshape((img_channels, *img.shape[:2]))
-    if requires_id:
-        # 添加上读取文件名
-        file_name = os.path.split(path)[-1]
-        img = np.hstack((file_name, img))
-    return img
-
-
 def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=True,
               sampler: Iterable = None, max_load: int = 10000,
               **kwargs):
@@ -137,13 +103,6 @@ def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=T
     if not batch_size:
         batch_size = dataset.feature_shape[0]
     if type(dataset) == LazyDataSet:
-        # loader = LazyDataLoader(
-        #     dataset, dataset.read_fn, batch_size,
-        #     max_load=max_load, shuffle=shuffle, collate_fn=dataset.collate_fn,
-        #     sampler=sampler, **kwargs
-        # )
-        # loader.register_preprocess(dataset.fea_preprocesses, dataset.lb_preprocesses)
-        # return loader
         return LazyDataLoader(
             dataset, batch_size,
             max_load=max_load, shuffle=shuffle, collate_fn=dataset.collate_fn,
