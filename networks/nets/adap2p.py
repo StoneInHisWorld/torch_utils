@@ -78,6 +78,8 @@ class AdaP2P(BasicNN):
             cur_out //= 2
             cur_shape *= 2
         # 拼凑输出路径，确保输出通道数与输入通道数相符，输出形状与指定形状相符
+        cur_out *= 2
+        cur_shape //= 2
         self.output_path = []
         if cur_shape < output_shape[0]:
             self.output_path += [
@@ -85,7 +87,7 @@ class AdaP2P(BasicNN):
             ]
         if cur_out > input_channel:
             self.output_path += [
-                nn.Conv2d(cur_out * 2, input_channel, kernel_size=kernel_size + 1, stride=1, padding=2),
+                nn.Conv2d(cur_out, input_channel, kernel_size=kernel_size + 1, stride=1, padding=2),
             ]
         self.output_path += [
             nn.BatchNorm2d(input_channel, momentum=bn_momen),
