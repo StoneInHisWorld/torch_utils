@@ -53,10 +53,11 @@ class Trainer:
             self.__hp.update({'exc_val': exc_val})
         time_span = time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start))
         self.__hp.update({'exp_no': self.__exp_no, "duration": time_span, "dataset": self.datasource.__name__})
-        if self.__lp is not None and exc_type != KeyboardInterrupt:
-            self.__write_log(**self.__hp)
-        # 保存训练生成的网络
-        self.__save_net()
+        if exc_type != KeyboardInterrupt:
+            if self.__lp is not None:
+                self.__write_log(**self.__hp)
+                # 保存训练生成的网络
+            self.__save_net()
 
     def __write_log(self, **kwargs):
         kwargs.update(self.__extra_lm)
