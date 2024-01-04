@@ -105,6 +105,6 @@ class Trainer:
     def register_net(self, net: torch.nn.Module):
         self.__net = net
         self.__list_net(
-            net, (self.datasource.img_channel, *net.required_shape),
+            net, (self.datasource.fea_channel, *net.required_shape),
             self.__hp['batch_size']
         )

@@ -61,7 +61,6 @@ class SSIM(nn.Module):
         super().__init__()
 
     def forward(self, y_hat: torch.Tensor, y: torch.Tensor):
-        # TODO: 是否在计算时需要 * 255？
         # 计算SSIM
         if self.mode == '1':
             ssim_of_each = calculate_ssim(y_hat * 255, y * 255)
