@@ -31,7 +31,6 @@ def write_log(path: str, **kwargs):
         file_data = pd.DataFrame(item_data)
     else:
         file_data = pd.concat([file_data, item_data], axis=0, sort=True)
-    # TODO: 测试append模式能否不出现清空数据的情况
     wait = 0
     while True:
         try:
@@ -43,7 +42,6 @@ def write_log(path: str, **kwargs):
                       end='',  flush=True)
                 wait += 1
                 time.sleep(1)
-    # item_data.to_csv(path, index=False, encoding='utf-8-sig', mode='a')
 
 
 def plot_history(history, mute=False, title=None, ls_ylabel=None,
