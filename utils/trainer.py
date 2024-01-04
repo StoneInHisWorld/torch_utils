@@ -35,15 +35,14 @@ class Trainer:
     def __enter__(self):
         self.start = time.time()
         print(
-            f'---------------------------实验{self.__exp_no}号'
+            f'\r---------------------------实验{self.__exp_no}号'
             f'---------------------------'
         )
         for k, v in self.__hp.items():
             print(k + ': ' + str(v))
         print(
-            '----------------------------------------------------------------'
+            '\r----------------------------------------------------------------'
         )
-        # TODO: 打印超参数
         return self.__hp.values()
 
     def __exit__(self, exc_type, exc_val, exc_tb):

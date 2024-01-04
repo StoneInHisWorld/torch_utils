@@ -139,7 +139,7 @@ class BasicNN(nn.Sequential):
                     ls = ls_fn(self(X), y)
                     ls.backward()
                     optimizer.step()
-                    Q.put_nowait((ls.item(), self.state_dict(), X, y))
+                    Q.put((ls.item(), self.state_dict(), X, y))
                     pbar.update(1)
                 Q.put_nowait(epoch_ending)
             finish.set()

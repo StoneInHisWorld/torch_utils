@@ -137,7 +137,7 @@ class ControlPanel:
             valid_acc, valid_l = history["valid_acc"][-1], history["valid_l"][-1]
         except AttributeError as _:
             valid_acc, valid_l = np.nan, np.nan
-        print(f'训练准确率 = {train_acc * 100:.3f}%, 训练损失 = {train_l:.5f}')
+        print(f'\r训练准确率 = {train_acc * 100:.3f}%, 训练损失 = {train_l:.5f}')
         print(f'验证准确率 = {valid_acc * 100:.3f}%, 验证损失 = {valid_l:.5f}')
         if test_acc is not None and test_ls is not None:
             print(f'测试准确率 = {test_acc * 100:.3f}%, 测试损失 = {test_ls:.5f}')
