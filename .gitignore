@@ -20,3 +20,5 @@ utils/func/__pycache__/log_tools.cpython-311.pyc
 utils/func/__pycache__/pytools.cpython-311.pyc
 utils/func/__pycache__/tensor_tools.cpython-311.pyc
 utils/func/__pycache__/torch_tools.cpython-311.pyc
+networks/nets/__pycache__/adap2p.cpython-311.pyc
+networks/nets/__pycache__/pix2pix.cpython-311.pyc
