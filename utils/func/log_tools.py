@@ -75,9 +75,11 @@ def get_logData(log_path, exp_no) -> dict:
     :param exp_no: 实验编号
     :return: 实验数据字典`{数据名: 数据值}`
     """
-    log = pd.read_csv(log_path)
-    log = log.set_index('exp_no').to_dict('index')
     try:
+        log = pd.read_csv(log_path)
+        log = log.set_index('exp_no').to_dict('index')
         return log[exp_no]
-    except KeyError as e:
+    except KeyError:
         raise Exception(f'日志不存在{exp_no}项，请检查日志文件或重新选择查看的实验标号！')
+    except FileNotFoundError:
+        raise Exception(f'无法找到{log_path}文件，请检查日志文件路径是否输入正确！')
