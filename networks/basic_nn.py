@@ -30,11 +30,9 @@ class BasicNN(nn.Sequential):
         """
         基本神经网络。提供神经网络的基本功能，包括权重初始化，训练以及测试。
         :param device: 网络所处设备
-        :param args: 需要添加的网络层
-        :param device: 本网络所处设备
         :param init_meth: 网络初始化方法
         :param with_checkpoint: 是否使用检查点机制
-        :param args: 输入网络的模型
+        :param args: 需要添加的网络层
         """
         # 设置默认值
         init_meth = 'zero' if 'init_meth' not in kwargs.keys() else kwargs['init_meth']
@@ -141,7 +139,6 @@ class BasicNN(nn.Sequential):
                     ls = ls_fn(self(X), y)
                     ls.backward()
                     optimizer.step()
-                    # TODO：若没有获得完整的forward函数，将会发生错误！
                     Q.put_nowait((ls.item(), self.state_dict(), X, y))
                     pbar.update(1)
                 Q.put_nowait(epoch_ending)
