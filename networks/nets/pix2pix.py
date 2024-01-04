@@ -74,4 +74,3 @@ class Pix2Pix(BasicNN):
         for layer in self.output_path:
             input = layer(input)
         return input
-
