@@ -117,11 +117,11 @@ class DataSet(torch_ds):
 
     @property
     def feature_shape(self):
-        return self._features.shape
+        return self._features.shape[1:]
 
     @property
     def label_shape(self):
-        return self._labels.shape
+        return self._labels.shape[1:]
 
 
 class LazyDataSet(DataSet):
