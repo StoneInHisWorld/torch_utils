@@ -19,7 +19,7 @@ class Pix2Pix(BasicNN):
             Image-to-Image Translation with Conditional Adversarial Networks[J].
             CVF, 2017. 1125, 1134
         :param input_channel: 输入数据通道，一般是图片通道数。
-        :param out_features: 输出特征维度，需包含三个元素，分别为（图片通道数，图片长度，图片宽度）
+        :param out_features: 输出特征通道数，一般是图片通道数。
         :param base_channel: 决定网络复杂度的基础通道数，需为大于0的整数。数值越高决定提取的特征维度越高。
         :param kernel_size: 卷积层使用的感受野大小
         :param bn_momen: 批量标准化层的动量超参数

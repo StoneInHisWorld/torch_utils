@@ -3,7 +3,7 @@ import random
 from typing import Tuple, Iterable, Callable
 
 import numpy as np
-from PIL import Image as IMAGE
+from PIL import Image as IMAGE, ImageDraw
 from PIL.Image import Image
 
 
@@ -108,12 +108,13 @@ def read_img(path: str, mode: str = 'L', requires_id: bool = False,
     return img
 
 
-def binarize_img(img: Image, threshold: int = 127):
+def binarize_img(img: Image, threshold: int = 127) -> Image:
     """
+    将图片根据阈值进行二值化
     参考自：https://www.jianshu.com/p/f6d40a73310f
-    :param img:
-    :param threshold:
-    :return:
+    :param img: 待转换图片
+    :param threshold: 二值图阈值
+    :return: 转换好的图片
     """
     table = []
     for i in range(256):
@@ -123,3 +124,39 @@ def binarize_img(img: Image, threshold: int = 127):
             table.append(1)
     # 图片二值化
     return img.point(table, '1')
+
+
+def concat_imgs(comment="", *imgs_and_labels: Tuple[Image, str]) -> Image:
+    # TODO: Untested!
+    text_size = 15
+    border = 5
+    img_mode = imgs_and_labels[0][0].mode
+    wb_width = (len(imgs_and_labels) + 1) * border + sum(
+        [img.width for img, _ in imgs_and_labels]
+    )
+    wb_height = 2 * border + 2 * text_size + max(
+        [img.height for img, _ in imgs_and_labels]
+    )  # 留出一栏填充comment
+    # 制作输入、输出、标签对照图
+    whiteboard = IMAGE.new(
+        img_mode, (wb_width, wb_height), color=255
+    )
+    draw = ImageDraw.Draw(whiteboard)
+    # 绘制标签
+    for i in range(len(imgs_and_labels)):
+        draw.text(
+            (
+                (i + 1) * border + sum([img.width for img, _ in imgs_and_labels[: i]]),
+                border
+            ),
+            imgs_and_labels[i][1]
+        )
+    # 粘贴图片
+    for i, (img, label) in enumerate(imgs_and_labels):
+        whiteboard.paste(img,
+                         ((i + 1) * border + sum([img.width for img, _ in imgs_and_labels[: i]]), border + text_size))
+    # 绘制脚注
+    draw.text(
+        (wb_height - text_size - border, 0), comment
+    )
+    return whiteboard
