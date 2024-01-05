@@ -127,14 +127,14 @@ def binarize_img(img: Image, threshold: int = 127) -> Image:
 
 
 def concat_imgs(comment="", *imgs_and_labels: Tuple[Image, str]) -> Image:
-    # TODO: Untested!
     text_size = 15
     border = 5
+    # # TODO：如何判断白板所用的图片模式？
     img_mode = imgs_and_labels[0][0].mode
     wb_width = (len(imgs_and_labels) + 1) * border + sum(
         [img.width for img, _ in imgs_and_labels]
     )
-    wb_height = 2 * border + 2 * text_size + max(
+    wb_height = 4 * border + 2 * text_size + max(
         [img.height for img, _ in imgs_and_labels]
     )  # 留出一栏填充comment
     # 制作输入、输出、标签对照图
@@ -154,9 +154,10 @@ def concat_imgs(comment="", *imgs_and_labels: Tuple[Image, str]) -> Image:
     # 粘贴图片
     for i, (img, label) in enumerate(imgs_and_labels):
         whiteboard.paste(img,
-                         ((i + 1) * border + sum([img.width for img, _ in imgs_and_labels[: i]]), border + text_size))
+                         ((i + 1) * border + sum([img.width for img, _ in imgs_and_labels[: i]]),
+                          border + text_size))
     # 绘制脚注
     draw.text(
-        (wb_height - text_size - border, 0), comment
+        (border, wb_height - text_size - border), 'COMMENT: ' + comment
     )
     return whiteboard

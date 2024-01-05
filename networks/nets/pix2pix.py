@@ -8,7 +8,7 @@ from networks.layers.val2img import Val2Fig
 class Pix2Pix(BasicNN):
     required_shape = (256, 256)
 
-    def __init__(self, input_channel, out_features,
+    def __init__(self, input_channel, out_channel,
                  base_channel=4, kernel_size=4, bn_momen=0.8, output_img=None,
                  **kwargs):
         """
@@ -19,7 +19,7 @@ class Pix2Pix(BasicNN):
             Image-to-Image Translation with Conditional Adversarial Networks[J].
             CVF, 2017. 1125, 1134
         :param input_channel: 输入数据通道，一般是图片通道数。
-        :param out_features: 输出特征通道数，一般是图片通道数。
+        :param out_channel: 输出特征通道数，一般是图片通道数。
         :param base_channel: 决定网络复杂度的基础通道数，需为大于0的整数。数值越高决定提取的特征维度越高。
         :param kernel_size: 卷积层使用的感受野大小
         :param bn_momen: 批量标准化层的动量超参数
@@ -55,7 +55,7 @@ class Pix2Pix(BasicNN):
         ]
         self.output_path = [
             ep_layer(base_channel * 2, base_channel * 2),
-            nn.Conv2d(base_channel * 2, out_features, kernel_size=kernel_size + 1, stride=1, padding=2),
+            nn.Conv2d(base_channel * 2, out_channel, kernel_size=kernel_size + 1, stride=1, padding=2),
         ]
         if output_img is not None:
             self.output_path.append(Val2Fig(output_img))

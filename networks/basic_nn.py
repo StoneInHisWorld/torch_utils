@@ -326,13 +326,15 @@ class BasicNN(nn.Sequential):
         return k_fold_history
 
     @torch.no_grad()
-    def test_(self, test_iter, acc_func=single_argmax_accuracy,
-              loss: Callable = nn.L1Loss) -> [float, float]:
+    def test_(self, test_iter,
+              acc_func: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = single_argmax_accuracy,
+              loss: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
+              ) -> [float, float]:
         """
         测试方法，取出迭代器中的下一batch数据，进行预测后计算准确度和损失
         :param test_iter: 测试数据迭代器
-        :param acc_func: 计算准确度所使用的函数
-        :param loss: 计算损失所使用的函数
+        :param acc_func: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
+        :param loss: 计算损失所使用的函数，该函数需要求出整个batch的损失平均值。签名需为：loss(Y_HAT, Y) -> float or torch.Tensor
         :return: 测试准确率，测试损失
         """
         self.eval()
@@ -344,22 +346,48 @@ class BasicNN(nn.Sequential):
 
     @torch.no_grad()
     def predict_(self, data_iter: DataLoader or LazyDataLoader,
-                 unwrap_fn: Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor] = None
+                 acc_func: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = single_argmax_accuracy,
+                 loss: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
+                 unwrap_fn: Callable[[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor] = None
                  ) -> torch.Tensor:
+        """
+        预测方法。对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
+        :param data_iter: 预测数据迭代器。
+        :param acc_func: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
+        :param loss: 计算损失所使用的函数，该函数需要求出整个batch的损失平均值。签名需为：loss(Y_HAT, Y) -> float or torch.Tensor
+        :param unwrap_fn: 对所有数据进行打包的方法。如不指定，则直接返回预测数据。签名需为：unwrap_fn(inputs, predictions, labels, acc_s, loss_es) -> Any
+        :return: 打包好的数据集
+        """
         self.eval()
-        inputs, results, labels = [], [], []
-        with tqdm(data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1) as data_iter:
-            for fe_batch, lb_batch in data_iter:
-                inputs.append(fe_batch)
-                results.append(self(fe_batch))
-                labels.append(lb_batch)
-            data_iter.set_description('正对结果进行解包……')
-        inputs = torch.cat(inputs, dim=0)
-        results = torch.cat(results, dim=0)
-        labels = torch.cat(labels, dim=0)
         if unwrap_fn is not None:
-            results = unwrap_fn(inputs, results, labels)
-        return results
+            # 将本次预测所产生的全部数据打包并返回。
+            inputs, predictions, labels, acc_s, loss_es = [], [], [], [], []
+            # 验证acc, loss是否对应
+            with tqdm(data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1) as data_iter:
+                for fe_batch, lb_batch in data_iter:
+                    inputs.append(fe_batch)
+                    pre_batch = self(fe_batch)
+                    predictions.append(pre_batch)
+                    labels.append(lb_batch)
+                    # TODO：对单独的每张图片进行acc和loss计算。是否过于效率低下？
+                    for pre, lb in zip(pre_batch, lb_batch):
+                        acc_s.append(acc_func(pre, lb))
+                        loss_es.append(loss(pre, lb))
+                data_iter.set_description('正对结果进行解包……')
+            inputs = torch.cat(inputs, dim=0)
+            predictions = torch.cat(predictions, dim=0)
+            labels = torch.cat(labels, dim=0)
+            acc_s = torch.tensor(acc_s)
+            loss_es = torch.tensor(loss_es)
+            predictions = unwrap_fn(inputs, predictions, labels, acc_s, loss_es)
+        else:
+            # 如果不需要打包数据，则直接返回预测数据集
+            predictions = []
+            with tqdm(data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1) as data_iter:
+                for fe_batch, lb_batch in data_iter:
+                    predictions.append(self(fe_batch))
+            predictions = torch.cat(predictions, dim=0)
+        return predictions
 
     @property
     def device(self):
