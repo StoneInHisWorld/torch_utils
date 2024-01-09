@@ -181,7 +181,13 @@ def get_mask(pos: List[Tuple[int, int]], size: List[int or Tuple[int]], img_chan
     return mask
 
 
-def add_mask(images: List[np.ndarray], mask: np.ndarray):
+def add_mask(images: List[np.ndarray], mask: np.ndarray) -> np.ndarray:
+    """
+    给图片加上掩膜。
+    :param images: 待操作图片。待操作图片需要转化为numpy N维数组列表，在计算过程中，会将列表转化为N维数组以加速运算。
+    :param mask: 二值图掩膜
+    :return: 加上掩膜的图片序列
+    """
     img_shape, mask_shape = images[0].shape, mask.shape
     assert img_shape == mask_shape, f'掩膜的大小{mask_shape}须与图片的大小{img_shape}一致！'
     ret = np.array(images) * mask
@@ -189,17 +195,26 @@ def add_mask(images: List[np.ndarray], mask: np.ndarray):
     # IMAGE.fromarray(ret[0].reshape((256, 256))).show()  # 查看掩膜图片的语句
 
 
-@staticmethod
 def extract_and_cat_holes(images: np.ndarray,
                           hole_poses: List[Tuple[int, int]],
-                          hole_sizes: List[int]):
-    num_rows = len(xv)
-    num_cols = len(yv)
+                          hole_sizes: List[int],
+                          num_rows: int, num_cols: int) -> np.ndarray:
+    """
+    根据孔径大小和位置提取图片孔径内容，并将所有孔径粘连到一起，形成孔径聚合图片。
+    :param images: 图片序列。
+    :param hole_poses: 孔径位置，即方形孔径的左上角坐标。
+    :param hole_sizes: 孔径大小，需为整数列表，内含孔径边长。目前只支持方形孔径。
+    :param num_rows: 孔径矩阵的行数。
+    :param num_cols: 孔径矩阵的列数。
+    :return: 孔径聚合图片结果。
+    """
+    # TODO：Untested!
     hole_sizes = np.array(hole_sizes).reshape([num_rows, num_cols])
     # 逐行求出最大宽度作为最终的特征图片宽度
     fea_width = np.max(hole_sizes.sum(0))
     fea_height = np.max(hole_sizes.sum(1))
-    features = np.zeros([len(images), MNISTinCCD.fea_channel, fea_height, fea_width])
+    whiteboard_channel = images.shape[1]
+    whiteboards = np.zeros([len(images), whiteboard_channel, fea_height, fea_width])
     # 获取粘贴位置矩阵
     paste_poses = []
     for i in range(num_rows):
@@ -213,5 +228,5 @@ def extract_and_cat_holes(images: np.ndarray,
                            hole_sizes.flatten()):
         ppx, ppy = pp
         px, py = p
-        features[:, :, ppx: ppx + size, ppy: ppy + size] = images[:, :, px: px + size, py: py + size]
-    return features
+        whiteboards[:, :, ppx: ppx + size, ppy: ppy + size] = images[:, :, px: px + size, py: py + size]
+    return whiteboards
