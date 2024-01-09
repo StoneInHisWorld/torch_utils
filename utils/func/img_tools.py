@@ -1,6 +1,6 @@
 import os
 import random
-from typing import Tuple, Iterable, Callable
+from typing import Tuple, Iterable, Callable, List
 
 import numpy as np
 from PIL import Image as IMAGE, ImageDraw
@@ -88,7 +88,7 @@ def read_img(path: str, mode: str = 'L', requires_id: bool = False,
     assert mode in img_modes, f'不支持的图像模式{mode}！'
     # img = Image.open(path).convert(mode)
     img = IMAGE.open(path)
-    preprocesses = (*preprocesses, (Image.convert, (mode, ), {}))
+    preprocesses = (*preprocesses, (Image.convert, (mode,), {}))
     for preprocess in preprocesses:
         func, args, kwargs = preprocess
         img = func(img, *args, **kwargs)
@@ -161,3 +161,57 @@ def concat_imgs(comment="", *imgs_and_labels: Tuple[Image, str]) -> Image:
         (border, wb_height - text_size - border), 'COMMENT: ' + comment
     )
     return whiteboard
+
+
+def get_mask(pos: List[Tuple[int, int]], size: List[int or Tuple[int]], img_channel, img_shape):
+    """
+    根据孔位、孔径、图片参数来获取掩膜。
+    :param pos: 孔位列表，方形孔左上角位
+    :param size: 孔径列表，一个孔位对应一个孔径，若孔径为整型数字，则认为长宽一致，否则需指定孔径为（长，宽）
+    :param img_channel: 图片通道
+    :param img_shape: 图片形状
+    :return: 掩模二值图，孔径对应位置值为1，其他位置为0
+    """
+    # TODO：Untested!
+    mask = np.zeros((img_channel, *img_shape), dtype=int)
+    for p, s in zip(pos, size):
+        if type(s) == int:
+            s = (s, s)
+        mask[:, p[0]: p[0] + s[0], p[1]: p[1] + s[1]] = 1
+    return mask
+
+
+def add_mask(images: List[np.ndarray], mask: np.ndarray):
+    img_shape, mask_shape = images[0].shape, mask.shape
+    assert img_shape == mask_shape, f'掩膜的大小{mask_shape}须与图片的大小{img_shape}一致！'
+    ret = np.array(images) * mask
+    return ret
+    # IMAGE.fromarray(ret[0].reshape((256, 256))).show()  # 查看掩膜图片的语句
+
+
+@staticmethod
+def extract_and_cat_holes(images: np.ndarray,
+                          hole_poses: List[Tuple[int, int]],
+                          hole_sizes: List[int]):
+    num_rows = len(xv)
+    num_cols = len(yv)
+    hole_sizes = np.array(hole_sizes).reshape([num_rows, num_cols])
+    # 逐行求出最大宽度作为最终的特征图片宽度
+    fea_width = np.max(hole_sizes.sum(0))
+    fea_height = np.max(hole_sizes.sum(1))
+    features = np.zeros([len(images), MNISTinCCD.fea_channel, fea_height, fea_width])
+    # 获取粘贴位置矩阵
+    paste_poses = []
+    for i in range(num_rows):
+        for j in range(num_cols):
+            x = hole_sizes[:i, j].sum()
+            y = hole_sizes[i, :j].sum()
+            paste_poses.append((x, y))
+    images = np.array(images)
+    # 逐位点粘贴
+    for pp, p, size in zip(paste_poses, hole_poses,
+                           hole_sizes.flatten()):
+        ppx, ppy = pp
+        px, py = p
+        features[:, :, ppx: ppx + size, ppy: ppy + size] = images[:, :, px: px + size, py: py + size]
+    return features
