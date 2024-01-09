@@ -1,10 +1,6 @@
-import warnings
-
 import torch
-import torchvision.transforms as T
 from torch import nn
-
-from utils.func.tensor_tools import tensor_to_img, img_to_tensor
+import pytorch_ssim
 
 img_modes = ['L', 'RGB', '1']
 
@@ -43,8 +39,10 @@ class SSIMLoss(nn.Module):
         super().__init__()
 
     def forward(self, y_hat, y):
-        computer = SSIM(self.mode, self.mute)
-        return 1 - computer(y_hat, y)
+        ssim_loss = pytorch_ssim.SSIM(window_size=11)
+        return ssim_loss(y_hat, y)
+        # computer = SSIM(self.mode, self.mute)
+        # return 1 - computer(y_hat, y)
 
 
 class SSIM(nn.Module):
@@ -61,12 +59,15 @@ class SSIM(nn.Module):
 
     def forward(self, y_hat: torch.Tensor, y: torch.Tensor):
         # 计算SSIM
-        if self.mode == '1':
-            ssim_of_each = calculate_ssim(y_hat * 255, y * 255)
-        else:
-            ssim_of_each = calculate_ssim(y_hat, y)
-        if not self.mute:
-            for ssim in ssim_of_each:
-                if ssim < 0:
-                    warnings.warn(f'出现了负值SSIM={ssim}！')
-        return ssim_of_each
+        # if self.mode == '1':
+        #     ssim_of_each = calculate_ssim(y_hat * 255, y * 255)
+        # else:
+        #     ssim_of_each = calculate_ssim(y_hat, y)
+        # if not self.mute:
+        #     for ssim in ssim_of_each:
+        #         if ssim < 0:
+        #             warnings.warn(f'出现了负值SSIM={ssim}！')
+        # return ssim_of_each
+        #
+        return pytorch_ssim.ssim(y_hat, y)
+
