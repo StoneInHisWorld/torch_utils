@@ -373,6 +373,9 @@ class BasicNN(nn.Sequential):
                     for pre, lb in zip(pre_batch, lb_batch):
                         acc_s.append(acc_func(pre, lb))
                         loss_es.append(loss(pre, lb))
+                    # for i, (pre, lb) in enumerate(zip(pre_batch, lb_batch)):
+                    #     acc_s.append(i)
+                    #     loss_es.append(i)
                 data_iter.set_description('正对结果进行解包……')
             inputs = torch.cat(inputs, dim=0)
             predictions = torch.cat(predictions, dim=0)

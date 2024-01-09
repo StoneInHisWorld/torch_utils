@@ -18,9 +18,9 @@ def write_log(path: str, **kwargs):
     while file_data is None:
         try:
             file_data = pd.read_csv(path, encoding='utf-8')
-        except FileNotFoundError as _:
+        except FileNotFoundError:
             file_data = pd.DataFrame([])
-        except PermissionError as _:
+        except PermissionError:
             for i in range(10):
                 print(f'\r文件{path}被占用，已等待{wait}秒。请立即关闭此文件，在整10秒处会再次尝试获取文件读取权限。',
                       end='', flush=True)
@@ -36,7 +36,7 @@ def write_log(path: str, **kwargs):
         try:
             file_data.to_csv(path, index=False, encoding='utf-8-sig')
             return
-        except PermissionError as _:
+        except PermissionError:
             for i in range(10):
                 print(f'\r 文件{path}被占用，已等待{wait}秒。请立即关闭此文件，在整10秒处会再次尝试获取文件读取权限。',
                       end='',  flush=True)
@@ -95,11 +95,29 @@ def get_logData(log_path, exp_no) -> dict:
     :param exp_no: 实验编号
     :return: 实验数据字典`{数据名: 数据值}`
     """
-    try:
-        log = pd.read_csv(log_path)
-        log = log.set_index('exp_no').to_dict('index')
-        return log[exp_no]
-    except KeyError:
-        raise Exception(f'日志不存在{exp_no}项，请检查日志文件或重新选择查看的实验标号！')
-    except FileNotFoundError:
-        raise Exception(f'无法找到{log_path}文件，请检查日志文件路径是否输入正确！')
+    # TODO：Untested!
+    log = None
+    wait = 0
+    while log is None:
+        try:
+            log = pd.read_csv(log_path, encoding='utf-8')
+            log = log.set_index('exp_no').to_dict('index')
+            return log[exp_no]
+        except KeyError:
+            raise Exception(f'日志不存在{exp_no}项，请检查日志文件或重新选择查看的实验标号！')
+        except FileNotFoundError:
+            raise Exception(f'无法找到{log_path}文件，请检查日志文件路径是否输入正确！')
+        except PermissionError:
+            for i in range(10):
+                print(f'\r文件{log_path}被占用，已等待{wait}秒。请立即关闭此文件，在整10秒处会再次尝试获取文件读取权限。',
+                      end='', flush=True)
+                wait += 1
+                time.sleep(1)
+    # try:
+    #     log = pd.read_csv(log_path)
+    #     log = log.set_index('exp_no').to_dict('index')
+    #     return log[exp_no]
+    # except KeyError:
+    #     raise Exception(f'日志不存在{exp_no}项，请检查日志文件或重新选择查看的实验标号！')
+    # except FileNotFoundError:
+    #     raise Exception(f'无法找到{log_path}文件，请检查日志文件路径是否输入正确！')
