@@ -7,25 +7,39 @@ from networks.layers.pytorch_ssim import create_window, _ssim
 img_modes = ['L', 'RGB', '1']
 
 
-def calculate_ssim(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+def calculate_ssim(y_hat: torch.Tensor, y: torch.Tensor, R: torch.Tensor) -> torch.Tensor:
     """
     计算SSIM值
     :param y_hat: 计算对象1
     :param y: 计算对象2
+    :param R: 像素范围
     :return: 两张图片的SSIM值
     """
+    # mean_x, mean_y = [torch.mean(t, dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
+    # std_x, std_y = [torch.std(t, dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
+    # conv_xy = torch.mean((y_hat - mean_x) * (y - mean_y), dim=list(range(1, len(y.shape))), keepdim=True)
+    # # 更精确的表达式
+    # # conv_xy =
+    # # torch.sum((y_hat - mean_x) * (y - mean_y), dim=list(range(1, len(y.shape))), keepdim=True)
+    # # /
+    # # (width * height - 1)
+    # R = torch.tensor(255)
+    # c1, c2 = torch.sqrt(R * 0.01), torch.sqrt(R * 0.03)
+    # numerator = (2 * mean_x * mean_y + c1) * (2 * conv_xy + c2)
+    # denominator = (mean_x ** 2 + mean_y ** 2 + c1) * (std_x ** 2 + std_y ** 2 + c2)
+    # return numerator / denominator
     mean_x, mean_y = [torch.mean(t, dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
-    std_x, std_y = [torch.std(t, dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
-    conv_xy = torch.mean((y_hat - mean_x) * (y - mean_y), dim=list(range(1, len(y.shape))), keepdim=True)
+    var_x, var_y = [torch.var(t, dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
+    # conv_xy = torch.mean((y_hat - mean_x) * (y - mean_y), dim=list(range(1, len(y.shape))), keepdim=True)
     # 更精确的表达式
-    # conv_xy =
-    # torch.sum((y_hat - mean_x) * (y - mean_y), dim=list(range(1, len(y.shape))), keepdim=True)
-    # /
-    # (width * height - 1)
-    R = torch.tensor(255)
+    conv_xy = torch.sum(
+        (y_hat - mean_x) * (y - mean_y), dim=list(range(1, len(y.shape))), keepdim=True
+    ) / (
+            y.shape[-1] * y.shape[-2] - 1
+    )
     c1, c2 = torch.sqrt(R * 0.01), torch.sqrt(R * 0.03)
     numerator = (2 * mean_x * mean_y + c1) * (2 * conv_xy + c2)
-    denominator = (mean_x ** 2 + mean_y ** 2 + c1) * (std_x ** 2 + std_y ** 2 + c2)
+    denominator = (mean_x ** 2 + mean_y ** 2 + c1) * (var_x + var_y + c2)
     return numerator / denominator
 
 
@@ -61,11 +75,11 @@ class SSIM(nn.Module):
 
     def forward(self, y_hat: torch.Tensor, y: torch.Tensor):
         # 计算SSIM
-        ssim_of_each = calculate_ssim(y_hat, y)
-        # if self.mode == '1':
-        #     ssim_of_each = calculate_ssim(y_hat, y)
-        # else:
-        #     ssim_of_each = calculate_ssim(y_hat, y)
+        # ssim_of_each = calculate_ssim(y_hat, y)
+        if self.mode == '1':
+            ssim_of_each = calculate_ssim(y_hat, y, torch.tensor(1, dtype=y_hat.dtype, device=y_hat.device))
+        else:
+            ssim_of_each = calculate_ssim(y_hat, y, torch.tensor(255, dtype=y_hat.dtype, device=y_hat.device))
         # if not self.mute:
         #     for ssim in ssim_of_each:
         #         if ssim < 0:
