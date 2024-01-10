@@ -371,7 +371,9 @@ class BasicNN(nn.Sequential):
                     labels.append(lb_batch)
                     # TODO：对单独的每张图片进行acc和loss计算。是否过于效率低下？
                     for pre, lb in zip(pre_batch, lb_batch):
-                        acc_s.append(acc_func(pre, lb))
+                        acc_s.append(
+                            acc_func(pre.reshape(1, *pre.shape), lb.reshape(1, *pre.shape))
+                        )
                         loss_es.append(loss(pre, lb))
                     # for i, (pre, lb) in enumerate(zip(pre_batch, lb_batch)):
                     #     acc_s.append(i)
