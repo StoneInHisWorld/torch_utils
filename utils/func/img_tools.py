@@ -128,6 +128,12 @@ def binarize_img(img: Image, threshold: int = 127) -> Image:
 
 def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
                 **kwargs) -> List[Image]:
+    """
+    拼接图片。将输入图片拼接到白板上，并附以标签和脚注（目前仅支持一张图片一行脚注），一次性生成多张结果图。
+    :param groups_of_imgs_labels_list: 图片-标签序列组。包含多个序列，每个序列中包含有粘贴到单个白板上的所有图片-标签对。
+    :param kwargs: 关键词参数。支持的参数包括：comment，单个白板的脚注；text_size，标签及脚注的文字大小；border_size，图片/标签/边界之间的宽度
+    :return: 生成的结果图序列
+    """
     comments = kwargs['comment'] if 'comment' in kwargs.keys() else ['' for _ in range(len(groups_of_imgs_labels_list))]
     text_size = kwargs['text_size'] if 'text_size' in kwargs.keys() else 15
     border_size = kwargs['border_size'] if 'border_size' in kwargs.keys() else 5
@@ -229,6 +235,9 @@ def extract_and_cat_holes(images: np.ndarray,
     :param num_cols: 孔径矩阵的列数。
     :return: 孔径聚合图片结果。
     """
+    # 检查越界问题
+    assert np.max(np.array(hole_poses)[:, 0]) < images.shape[-2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
+    assert np.max(np.array(hole_poses)[:, 1]) < images.shape[-1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
     hole_sizes = np.array(hole_sizes).reshape([num_rows, num_cols])
     # 逐行求出最大宽度作为最终的特征图片宽度
     fea_width = np.max(hole_sizes.sum(0))
@@ -250,3 +259,16 @@ def extract_and_cat_holes(images: np.ndarray,
         px, py = p
         whiteboards[:, :, ppx: ppx + size, ppy: ppy + size] = images[:, :, px: px + size, py: py + size]
     return whiteboards
+
+
+def mean_LI_of_holes(images: np.ndarray,
+                     hole_poses: List[Tuple[int, int]],
+                     hole_sizes: List[int]):
+    # 检查越界问题
+    assert np.max(np.array(hole_poses)[:, 0]) < images.shape[-2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
+    assert np.max(np.array(hole_poses)[:, 1]) < images.shape[-1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
+    for (x, y), size in zip(hole_poses, hole_sizes):
+        images[:, :, x: x + size, y: y + size] = np.mean(
+            images[:, :, x: x + size, y: y + size], axis=(2, 3), keepdims=True
+        )
+    return images
