@@ -1,7 +1,4 @@
-import torch
-
 from torch import nn
-from torch.nn import Module
 
 from networks.basic_nn import BasicNN
 from networks.layers.multi_output import MultiOutputLayer
@@ -61,8 +58,9 @@ class AdaWZYNet(BasicNN):
         layers.append(nn.Sequential(
             nn.MaxPool2d(compressed_shape),
             MultiOutputLayer(
-                cur_in, out_features, init_meth=kwargs['init_meth'], dropout_rate=dropout_rate,
-                momentum=bn_momen,
+                cur_in, out_features,
+                dropout_rate=dropout_rate, momentum=bn_momen,
+                init_meth=kwargs['init_meth'] if 'init_meth' in kwargs.keys() else 'normal',
             )  # cur_in保存着最后的卷积层的输出通道
         ))
         super().__init__(*layers, **kwargs)
