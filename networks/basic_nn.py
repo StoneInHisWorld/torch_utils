@@ -1,18 +1,17 @@
 import os.path
 import warnings
 from copy import deepcopy
+from queue import Queue
 from threading import Event
 from typing import Callable
 
 import torch
 import torch.nn as nn
-from queue import Queue
 from torch.nn import Module
 from torch.utils import checkpoint
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from data_related.data_related import single_argmax_accuracy
 from data_related.dataloader import LazyDataLoader
 from utils.accumulator import Accumulator
 from utils.func.torch_tools import init_wb
@@ -62,8 +61,6 @@ class BasicNN(nn.Sequential):
             if item == epoch_ending:
                 metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
                 Q.task_done()
-                # epoch += 1
-                # i = 1
                 continue
             ls, state_dict, X, y = item
             net.load_state_dict(state_dict)
@@ -146,8 +143,8 @@ class BasicNN(nn.Sequential):
             pbar.set_description('正在进行收尾工作……')
             pbar.close()
 
-    def train_(self, data_iter, optimizer, num_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
-               acc_fn=single_argmax_accuracy, valid_iter=None) -> History:
+    def train_(self, data_iter, optimizer, acc_fn, num_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
+               valid_iter=None) -> History:
         """
         神经网络训练函数。
         :param data_iter: 训练数据供给迭代器
@@ -196,8 +193,8 @@ class BasicNN(nn.Sequential):
 
     hook_mute = False
 
-    def train__(self, data_iter, optimizer, num_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
-                acc_fn=single_argmax_accuracy, valid_iter=None) -> History:
+    def train__(self, data_iter, optimizer, acc_fn, num_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
+                valid_iter=None) -> History:
         # TODO: 检查一下，为什么使用真实数量的数据集会引发死锁
         """
         神经网络训练函数。
@@ -286,9 +283,10 @@ class BasicNN(nn.Sequential):
         if not BasicNN.hook_mute:
             print('-' * 20)
 
-    def train_with_hook(self, data_iter, optimizer, num_epochs=10,
+    def train_with_hook(self, data_iter, optimizer, acc_func,
+                        num_epochs=10,
                         ls_fn: nn.Module = nn.L1Loss(),
-                        acc_func=single_argmax_accuracy) -> History:
+                        ) -> History:
         """
         支持hook机制的训练过程方法。可以调用本方法对神经网络的前向反馈和后向反馈进行跟踪、监控。
         :param data_iter: 数据加载器
@@ -303,9 +301,10 @@ class BasicNN(nn.Sequential):
             m.register_full_backward_hook(hook=BasicNN.hook_backward_fn)
         return self.train_(data_iter, optimizer, num_epochs, ls_fn, acc_func)
 
-    def train_with_k_fold(self, train_loaders_iter, optimizer, num_epochs: int = 10,
+    def train_with_k_fold(self, train_loaders_iter, optimizer, acc_fn,
+                          num_epochs: int = 10,
                           ls_fn: nn.Module = nn.L1Loss(), k: int = 10,
-                          acc_fn=single_argmax_accuracy) -> History:
+                          ) -> History:
         """
         使用k折验证法进行模型训练
         :param train_loaders_iter: 数据加载器供给，提供k折验证的每一次训练所需训练集加载器、验证集加载器
@@ -327,7 +326,7 @@ class BasicNN(nn.Sequential):
 
     @torch.no_grad()
     def test_(self, test_iter,
-              acc_func: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = single_argmax_accuracy,
+              acc_func: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
               loss: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
               ) -> [float, float]:
         """
@@ -346,7 +345,7 @@ class BasicNN(nn.Sequential):
 
     @torch.no_grad()
     def predict_(self, data_iter: DataLoader or LazyDataLoader,
-                 acc_func: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = single_argmax_accuracy,
+                 acc_func: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
                  loss: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
                  unwrap_fn: Callable[[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor] = None
                  ) -> torch.Tensor:
