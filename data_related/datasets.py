@@ -49,7 +49,6 @@ class DataSet(torch_ds):
         :param labels_calls: 需要对标签集调用的方法列表
         :return: None
         """
-        # TODO: 使用多线程加速
         if features_calls is None:
             features_calls = []
         if labels_calls is None:
