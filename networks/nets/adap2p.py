@@ -8,8 +8,8 @@ from networks.layers.val2img import Val2Fig
 class AdaP2P(BasicNN):
 
     def __init__(self,
-                 input_channel, output_channel,
-                 input_shape, compress_shape, output_shape,
+                 input_channels, output_channels,
+                 input_shape, compressed_shape, output_shape,
                  max_channel=torch.inf, base_channel=4,
                  kernel_size=4, bn_momen=0.8, output_img=None,
                  **kwargs):
@@ -23,10 +23,10 @@ class AdaP2P(BasicNN):
         [2] Phillip Isola, Jun-Yan Zhu, Tinghui Zhou and Alexei A. Efros.
             Image-to-Image Translation with Conditional Adversarial Networks[J].
             CVF, 2017. 1125, 1134
-        :param input_channel: 输入特征集通道数，一般是图片通道数。
-        :param output_channel: 输出通道数，一般是图片通道数。
-        :param input_shape: 输入特征集形状。
-        :param compress_shape: 压缩特征集的最终形状。
+        :param input_channels: 输入特征集通道数，一般是图片通道数。
+        :param output_channels: 输出通道数，一般是图片通道数。
+        :param input_shape: 输入特征集形状。因为受到skip_connection的限制，input_shape值的因数不能含有奇数。
+        :param compressed_shape: 压缩特征集的最终形状。
         :param output_shape: 输出特征集形状。网络会根据输出特征集形状拼凑输出路径。
         :param max_channel: 所需的最大通道数。网络会根据输入特征集形状、压缩特征集最终形状拼凑对抗路径（下采样）和扩展路径（上采样）。
         :param base_channel: 决定网络复杂度的基础通道数，需为大于0的整数。数值越高决定提取的特征维度越高。
@@ -51,22 +51,22 @@ class AdaP2P(BasicNN):
             nn.ReLU()
         )
         cur_shape, _, cur_out = self.construct_cp(
-            input_shape[0], input_channel, base_channel,
-            compress_shape,
+            input_shape[0], input_channels, base_channel,
+            compressed_shape,
             max_channel,
             cp_layer
         )
         # 拼凑扩展路径
         cur_shape, _, cur_out = self.construct_ep(
-            compress_shape, cur_out, cur_out // 2,
-            output_channel, len(self.contracting_path),
+            compressed_shape, cur_out, cur_out // 2,
+            output_channels, len(self.contracting_path),
             ep_layer
         )
         # 拼凑输出路径，确保输出通道数与输入通道数相符，输出形状与指定形状相符
         self.output_path = self.construct_op(
             kernel_size, bn_momen,
             cur_shape // 2, cur_out * 2,
-            output_shape, output_channel,
+            output_shape, output_channels,
             output_img
         )
         super().__init__(*self.contracting_path, *self.expanding_path, *self.output_path,
