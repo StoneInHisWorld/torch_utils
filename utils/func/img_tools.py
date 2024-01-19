@@ -137,6 +137,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     comments = kwargs['comment'] if 'comment' in kwargs.keys() else ['' for _ in range(len(groups_of_imgs_labels_list))]
     text_size = kwargs['text_size'] if 'text_size' in kwargs.keys() else 15
     border_size = kwargs['border_size'] if 'border_size' in kwargs.keys() else 5
+    required_shape = kwargs['required_shape'] if 'required_shape' in kwargs.keys() else None
     # 判断白板所用模式
     mode = '1'
     modes = set()
@@ -154,10 +155,11 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
                      ) -> Image:
         # TODO：将绘制区域大小统一
         # 绘制白板
+        comment_lines = comment.count('\n') + 1
         wb_width = (len(imgs_and_labels) + 1) * border_size + sum(
             [img.width for img, _ in imgs_and_labels]
         )
-        wb_height = 4 * border_size + 2 * text_size + max(
+        wb_height = 4 * border_size + comment_lines * text_size + max(
             [img.height for img, _ in imgs_and_labels]
         )  # 留出一栏填充comment
         # 制作输入、输出、标签对照图
@@ -181,13 +183,16 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
                               border_size + text_size))
         # 绘制脚注
         draw.text(
-            (border_size, wb_height - text_size - border_size), 'COMMENT: ' + comment
+            (border_size, wb_height - comment_lines * text_size - border_size), 'COMMENT: ' + comment
         )
         return whiteboard
 
     rets = []
     for imgs_and_labels, comment in zip(groups_of_imgs_labels_list, comments):
-        rets.append(_concat_imgs(comment, *imgs_and_labels))
+        ret = _concat_imgs(comment, *imgs_and_labels)
+        if required_shape is not None:
+            ret = ret.resize(required_shape)
+        rets.append(ret)
     return rets
 
 
