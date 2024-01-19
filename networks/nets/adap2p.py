@@ -113,10 +113,21 @@ class AdaP2P(BasicNN):
                      output_img
                      ):
         output_path = []
+        # 将形状压缩成输出形状
         if cur_shape < output_shape[0]:
             output_path += [
                 nn.Upsample(output_shape),
+                # nn.BatchNorm2d(cur_out, momentum=bn_momen),
+                # nn.ReLU()
             ]
+        while cur_shape > output_shape[0]:
+            output_path += [
+                nn.Conv2d(cur_out, cur_out, kernel_size=kernel_size, stride=2, padding=1),
+                # nn.BatchNorm2d(cur_out, momentum=bn_momen),
+                # nn.ReLU()
+            ]
+            cur_shape //= 2
+        # 将通道压缩为所需输出通道
         if cur_out > output_channel:
             output_path += [
                 nn.Conv2d(cur_out, output_channel, kernel_size=kernel_size + 1, stride=1, padding=2),

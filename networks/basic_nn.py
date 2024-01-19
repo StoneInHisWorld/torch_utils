@@ -155,6 +155,7 @@ class BasicNN(nn.Sequential):
         :param valid_iter: 验证数据供给迭代器
         :return: 训练数据记录`History`对象
         """
+        # TODO: 编写聚合train()，并整合动态学习率
         history = History('train_l', 'train_acc') if valid_iter is None else \
             History('train_l', 'train_acc', 'valid_l', 'valid_acc')
         with tqdm(total=len(data_iter), unit='批', position=0,
