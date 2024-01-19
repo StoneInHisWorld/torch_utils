@@ -1,8 +1,5 @@
-import PIL.Image
 import torch
-import torchvision.transforms
 from torch import nn
-from networks.layers.pytorch_ssim import create_window, _ssim
 
 img_modes = ['L', 'RGB', '1']
 
@@ -15,13 +12,9 @@ def calculate_ssim(y_hat: torch.Tensor, y: torch.Tensor, R: torch.Tensor) -> tor
     :param R: 像素范围
     :return: 两张图片的SSIM值
     """
-    mean_x, mean_y = [torch.mean(t, dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
-    var_x, var_y = [torch.var(t, dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
-    # conv_xy = torch.mean((y_hat - mean_x) * (y - mean_y), dim=list(range(1, len(y.shape))), keepdim=True)
-    # 更精确的表达式
-    conv_xy = torch.sum(
-        (y_hat - mean_x) * (y - mean_y), dim=list(range(1, len(y.shape))), keepdim=True
-    ) / (
+    mean_x, mean_y = [t.mean(dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
+    var_x, var_y = [t.var(dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
+    conv_xy = ((y_hat - mean_x) * (y - mean_y)).sum(dim=list(range(1, len(y.shape))), keepdim=True) / (
             y.shape[-1] * y.shape[-2] - 1
     )
     c1, c2 = torch.sqrt(R * 0.01), torch.sqrt(R * 0.03)
@@ -32,20 +25,21 @@ def calculate_ssim(y_hat: torch.Tensor, y: torch.Tensor, R: torch.Tensor) -> tor
 
 class SSIMLoss(nn.Module):
 
-    def __init__(self, mode: str = 'L', mute=True):
+    def __init__(self, mode: str = 'L', size_average=True):
         """
         SSIM损失层。计算每对y_hat与y的图片结构相似度，并求其平均逆（1 - mean(ssim)）作为损失值。
         计算公式为：ls =
         """
-        self.mute = mute
         self.mode = mode
+        self.size_average = size_average
         super().__init__()
 
     def forward(self, y_hat, y):
-        # ssim_loss = SSIM(window_size=11)
-        # return ssim_loss(y_hat, y)
         computer = SSIM(self.mode)
-        return 1 - computer(y_hat, y)
+        if self.size_average:
+            return torch.mean(1 - computer(y_hat, y))
+        else:
+            return 1 - computer(y_hat, y)
 
 
 class SSIM(nn.Module):
@@ -62,50 +56,7 @@ class SSIM(nn.Module):
     def forward(self, y_hat: torch.Tensor, y: torch.Tensor):
         # 计算SSIM
         if self.mode == '1':
-            ssim_of_each = calculate_ssim(y_hat, y, torch.tensor(1, dtype=y_hat.dtype, device=y_hat.device))
+            R = torch.tensor(1, dtype=y_hat.dtype, device=y_hat.device)
         else:
-            ssim_of_each = calculate_ssim(y_hat, y, torch.tensor(255, dtype=y_hat.dtype, device=y_hat.device))
-        return ssim_of_each
-
-# class SSIM(torch.nn.Module):
-#     def __init__(self, window_size=11, size_average=True):
-#         super(SSIM, self).__init__()
-#         self.window_size = window_size
-#         self.size_average = size_average
-#         self.channel = 1
-#         self.window = create_window(window_size, self.channel)
-#
-#     def forward(self, img1, img2):
-#         (_, channel, _, _) = img1.size()
-#
-#         # 获取window
-#         if channel == self.channel and self.window.data.type() == img1.data.type():
-#             window = self.window
-#         else:
-#             window = create_window(self.window_size, channel)
-#
-#             if img1.is_cuda:
-#                 window = window.cuda(img1.get_device())
-#             window = window.type_as(img1)
-#
-#             self.window = window
-#             self.channel = channel
-#
-#         return _ssim(img1, img2, window, self.window_size, channel, self.size_average)
-
-
-# img1 = PIL.Image.open('43_lb.jpg').convert('1')
-# img2 = PIL.Image.open('43_pred.jpg').convert('1')
-# T = torchvision.transforms.ToTensor()
-# img1 = T(img1).reshape(1, 1, *img1.size)
-# img2 = T(img2).reshape(1, 1, *img2.size)
-# # img1 = torchvision.transforms.Normalize(img1.mean([2, 3]), img1.std([2, 3]))(img1)
-# # img2 = torchvision.transforms.Normalize(img2.mean([2, 3]), img2.std([2, 3]))(img2)
-# computer = SSIM('1')
-# print(f'ssim_11 = {computer(img1, img1)}')
-# print(f'ssim_12 = {computer(img1, img2)}')
-# print(f'ssim_22 = {computer(img2, img2)}')
-# computer = nn.MSELoss()
-# print(f'mse_11 = {computer(img1, img1)}')
-# print(f'mse_12 = {computer(img1, img2)}')
-# print(f'mse_22 = {computer(img2, img2)}')
+            R = torch.tensor(255, dtype=y_hat.dtype, device=y_hat.device)
+        return calculate_ssim(y_hat, y, R)
