@@ -95,7 +95,6 @@ def get_logData(log_path, exp_no) -> dict:
     :param exp_no: 实验编号
     :return: 实验数据字典`{数据名: 数据值}`
     """
-    # TODO：Untested!
     log = None
     wait = 0
     while log is None:

@@ -90,7 +90,7 @@ for trainer in cp:
         optimizer = utils.func.torch_tools.get_optimizer(net, optim_str, lr, w_decay)
         ls_fn = utils.func.torch_tools.get_loss(ls_fn)
         history = net.train_(
-            train_iter, valid_iter=valid_iter, optimizer=optimizer, num_epochs=epochs,
+            train_iter, valid_iter=valid_iter, optimizer=optimizer, n_epochs=epochs,
             ls_fn=ls_fn, acc_fn=acc_func
         )
 
