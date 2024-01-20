@@ -338,7 +338,7 @@ class BasicNN(nn.Sequential):
     #     return k_fold_history
 
     def train_(self,
-               data_iter, optimizer, acc_fn,
+               data_iter, optimizer, lr_scheduler, acc_fn,
                n_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
                valid_iter=None, k=1, n_workers=1, hook=None
                ):
@@ -362,7 +362,7 @@ class BasicNN(nn.Sequential):
         else:
             with_hook, hook_mute = True, False
         with Trainer(self,
-                     data_iter, optimizer, acc_fn, n_epochs, ls_fn,
+                     data_iter, optimizer, lr_scheduler, acc_fn, n_epochs, ls_fn,
                      with_hook, hook_mute) as trainer:
             if k > 1:
                 return trainer.train_with_k_fold(data_iter, k, n_workers)

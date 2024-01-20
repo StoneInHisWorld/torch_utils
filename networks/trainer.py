@@ -21,7 +21,6 @@ def train_log_impl(
         finish: Event, Q: Queue, timeout=1  # 信号量相关
 ) -> History:
     metric = Accumulator(3)
-    # 当队列非空或者任务尚未结束时，循环往复
     while True:
         # 从队列中获取训练结果
         try:
@@ -66,6 +65,7 @@ def train_and_valid_log_impl(
         net, valid_iter, acc_fn, ls_fn, history,
         finish: Event, Q: Queue, timeout=1  # 信号量相关
 ) -> History:
+    # TODO: 添加动态学习率的支持
     metric = Accumulator(3)
     while True:
         # 从队列中获取训练结果
@@ -107,6 +107,7 @@ def train_impl(
         net, data_iter, n_epochs, optimizer, ls_fn,
         Q: Queue  # 信号量
 ):
+    # TODO: 添加动态学习率的支持
     with tqdm(total=len(data_iter), unit='批', position=0,
               desc=f'训练中...', mininterval=1) as pbar:
         for epoch in range(n_epochs):
@@ -130,13 +131,14 @@ class Trainer:
 
     def __init__(self,
                  module,
-                 data_iter, optimizer, acc_fn,
+                 data_iter, optimizer: torch.optim.Optimizer, lr_scheduler, acc_fn,
                  n_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
                  with_hook=False, hook_mute=True):
         self.module = module
         # 存储必要训练对象
         self.__data_iter = data_iter
         self.__optimizer = optimizer
+        self.__lr_scheduler = lr_scheduler
         self.__acc_fn = acc_fn
         self.__n_epochs = n_epochs
         self.__ls_fn = ls_fn
@@ -155,14 +157,19 @@ class Trainer:
         data_iter = self.__data_iter
         n_epochs = self.__n_epochs
         optimizer = self.__optimizer
+        lr_scheduler = self.__lr_scheduler
         ls_fn = self.__ls_fn
         acc_fn = self.__acc_fn
-        history = History('train_l', 'train_acc', 'valid_l', 'valid_acc')
+        history = History('train_l', 'train_acc', 'valid_l', 'valid_acc', 'lrs')
         with tqdm(total=len(data_iter), unit='批', position=0,
                   desc=f'训练中...', mininterval=1) as pbar:
             for epoch in range(n_epochs):
                 pbar.reset(len(data_iter))
                 pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
+                history.add(
+                    ['lrs'],
+                    [[param['lr'] for param in optimizer.param_groups]]
+                )
                 metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
                 # 训练主循环
                 for X, y in data_iter:
@@ -171,6 +178,7 @@ class Trainer:
                     lo = ls_fn(net(X), y)
                     lo.backward()
                     optimizer.step()
+                    lr_scheduler.step()
                     with torch.no_grad():
                         correct = acc_fn(net(X), y)
                         num_examples = X.shape[0]
@@ -191,6 +199,7 @@ class Trainer:
         神经网络训练函数。
         :return: 训练数据记录`History`对象
         """
+        # TODO: 添加动态学习率的支持
         net = self.module
         data_iter = self.__data_iter
         n_epochs = self.__n_epochs

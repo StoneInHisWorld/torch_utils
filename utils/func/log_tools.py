@@ -44,8 +44,9 @@ def write_log(path: str, **kwargs):
                 time.sleep(1)
 
 
-def plot_history(history, mute=False, title=None, ls_ylabel=None,
-                 acc_ylabel=None, savefig_as=None, accumulative=False):
+def plot_history(history, mute=False, title=None,
+                 ls_ylabel=None, acc_ylabel=None, lr_ylabel=None,
+                 savefig_as=None, accumulative=False):
     """
     绘制训练历史变化趋势图
     :param acc_ylabel: 准确率趋势图的纵轴标签
@@ -57,10 +58,11 @@ def plot_history(history, mute=False, title=None, ls_ylabel=None,
     :param accumulative: 是否将所有趋势图叠加在一起
     :return: None
     """
-    fig, (ax1, ax2) = plt.subplots(2, 1, sharex='col', figsize=(7, 6))
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex='col', figsize=(7, 7.5))
     ax1.set_title('LOSS')
-    ax2.set_xlabel('epochs')
     ax2.set_title('ACCURACY')
+    ax3.set_title('LEARNING_RATE')
+    ax3.set_xlabel('epochs')
     for label, log in history:
         if label.find('_l') != -1:
             # 绘制损失值history
@@ -68,14 +70,22 @@ def plot_history(history, mute=False, title=None, ls_ylabel=None,
         elif label.find('_acc') != -1:
             # 绘制准确率history
             ax2.plot(range(1, len(log) + 1), log, label=label)
+        elif label.find('lr') != -1:
+            # 绘制学习率history
+            for i in range(len(log[0])):
+                lr_of_cur_group = [epoch_lrs[i] for epoch_lrs in log]
+                ax3.plot(range(1, len(log) + 1), lr_of_cur_group, label=f'lr_{i}')
     if ls_ylabel:
         ax1.set_ylabel(ls_ylabel)
     if acc_ylabel:
         ax2.set_ylabel(acc_ylabel)
+    if lr_ylabel:
+        ax3.set_ylabel(lr_ylabel)
     if title:
         fig.suptitle(title)
     ax1.legend()
     ax2.legend()
+    ax3.legend()
     if savefig_as:
         if not os.path.exists(os.path.split(savefig_as)[0]):
             os.makedirs(os.path.split(savefig_as)[0])

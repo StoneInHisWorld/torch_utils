@@ -8,6 +8,7 @@ loss_es = ["l1", "entro", "mse", "huber", "ssim"]
 init_funcs = ["normal", "xavier", "zero"]
 # init_funcs = ["normal", "xavier", "zero", "entire_trained", "state_trained"]
 optimizers = ["sgd", "asgd", "adagrad", "adadelta", "rmsprop", "adam", "adamax"]
+lr_schedulers = ["lambda", "step"]
 
 
 def try_gpu(i=0):
@@ -109,6 +110,7 @@ def init_wb(func_str: str = "xavier"):
         b_init = lambda m: init.normal_(m, 0, 1)
     elif func_str == "xavier":
         w_init, b_init = init.xavier_uniform_, init.zeros_
+    # TODO: 能否在此处加载已经训练好的参数
     # elif func_str == "entire_trained":
     #     pass
     # elif func_str == "state_trained":
@@ -123,3 +125,14 @@ def init_wb(func_str: str = "xavier"):
             b_init(m.bias)
 
     return _init
+
+
+def get_lr_scheduler(optimizer, which: str = 'step', **kwargs):
+    assert which in lr_schedulers, f"不支持的学习率规划器{which}, 当前支持的初始化方式包括{lr_schedulers}"
+    if which == 'step':
+        return torch.optim.lr_scheduler.StepLR(optimizer, **kwargs)
+    elif which == 'lambda':
+        return torch.optim.lr_scheduler.LambdaLR(optimizer, **kwargs)
+    elif which == 'constant':
+        return torch.optim.lr_scheduler.ConstantLR(optimizer, **kwargs)
+    return torch.optim.lr_scheduler.ConstantLR(optimizer, 1, 1)
