@@ -342,22 +342,38 @@ class BasicNN(nn.Sequential):
                n_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
                valid_iter=None, k=1, n_workers=1, hook=None
                ):
+        """
+        神经网络训练函数，调用Trainer进行训练。
+        :param data_iter: 训练数据供给迭代器
+        :param optimizer: 网络参数优化器
+        :param acc_fn: 准确率计算函数
+        :param n_epochs: 迭代世代
+        :param ls_fn: 训练损失函数
+        :param valid_iter: 验证数据供给迭代器
+        :param hook:
+        :param n_workers:
+        :param k:
+        :return: 训练数据记录`History`对象
+        """
         if hook is None:
             with_hook, hook_mute = False, False
         elif hook == 'mute':
             with_hook, hook_mute = True, True
         else:
             with_hook, hook_mute = True, False
-        with Trainer(self, with_hook, hook_mute) as trainer:
-            if n_workers <= 1:
+        with Trainer(self,
+                     data_iter, optimizer, acc_fn, n_epochs, ls_fn,
+                     with_hook, hook_mute) as trainer:
+            if k > 1:
+                return trainer.train_with_k_fold(data_iter, k, n_workers)
+            elif n_workers <= 1:
+                # 判断是否要多线程
                 if valid_iter:
-                    return trainer.train_and_valid(data_iter, valid_iter, optimizer, acc_fn, n_epochs, ls_fn)
+                    return trainer.train_and_valid(valid_iter)
                 else:
-                    return trainer.train(data_iter, optimizer, acc_fn, n_epochs, ls_fn)
-            elif k <= 1:
-                return trainer.train_with_threads(data_iter, optimizer, acc_fn, n_epochs, ls_fn, valid_iter)
+                    return trainer.train()
             else:
-                return trainer.train_with_k_fold(data_iter, optimizer, acc_fn, n_epochs, ls_fn, k, n_workers)
+                return trainer.train_with_threads(valid_iter)
 
     @torch.no_grad()
     def test_(self, test_iter,

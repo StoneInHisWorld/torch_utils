@@ -132,13 +132,27 @@ class ControlPanel:
 
     def register_result(self, history, test_acc=None, test_ls=None,
                         ls_fn=None, acc_fn=None) -> None:
+        """
+        在神经网络训练完成后，需要调用本函数将结果注册到超参数控制台。
+        根据训练历史记录进行输出，并进行日志参数的记录。
+        :param history: 训练历史记录
+        :param test_acc: 测试准确率
+        :param test_ls: 测试损失
+        :param ls_fn: 损失函数
+        :param acc_fn: 准确率函数
+        :return: None
+        """
         train_acc, train_l = history["train_acc"][-1], history["train_l"][-1]
         try:
             valid_acc, valid_l = history["valid_acc"][-1], history["valid_l"][-1]
+            print(f'验证准确率 = {valid_acc * 100:.3f}%, 验证损失 = {valid_l:.5f}')
+            self.__cur_trainer.add_logMsg(
+                True,
+                valid_l=valid_l, valid_acc=valid_acc
+            )
         except AttributeError as _:
-            valid_acc, valid_l = np.nan, np.nan
+            pass
         print(f'\r训练准确率 = {train_acc * 100:.3f}%, 训练损失 = {train_l:.5f}')
-        print(f'验证准确率 = {valid_acc * 100:.3f}%, 验证损失 = {valid_l:.5f}')
         if test_acc is not None and test_ls is not None:
             print(f'测试准确率 = {test_acc * 100:.3f}%, 测试损失 = {test_ls:.5f}')
         self.__plot_history(
@@ -146,8 +160,9 @@ class ControlPanel:
         )
         self.__cur_trainer.add_logMsg(
             True,
-            train_l=train_l, train_acc=train_acc, valid_l=valid_l, valid_acc=valid_acc,
-            test_acc=test_acc, test_ls=test_ls, data_portion=self['data_portion']
+            train_l=train_l, train_acc=train_acc,
+            test_acc=test_acc, test_ls=test_ls,
+            data_portion=self['data_portion']
         )
 
     @property
