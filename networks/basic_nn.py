@@ -344,15 +344,16 @@ class BasicNN(nn.Sequential):
                ):
         """
         神经网络训练函数，调用Trainer进行训练。
-        :param data_iter: 训练数据供给迭代器
-        :param optimizer: 网络参数优化器
-        :param acc_fn: 准确率计算函数
-        :param n_epochs: 迭代世代
-        :param ls_fn: 训练损失函数
-        :param valid_iter: 验证数据供给迭代器
-        :param hook:
-        :param n_workers:
-        :param k:
+        :param data_iter: 训练数据供给迭代器。
+        :param optimizer: 网络参数优化器。
+        :param acc_fn: 准确率计算函数。签名需为：acc_fn(predict: tensor, labels: tensor, size_averaged: bool = True) -> ls: tensor or float
+        :param n_epochs: 迭代世代数。
+        :param ls_fn: 训练损失函数。签名需为：ls_fn(predict: tensor, labels: tensor) -> ls: tensor，其中不允许有销毁梯度的操作。
+        :param lr_scheduler: 学习率规划器，用于动态改变学习率。若不指定，则会使用固定学习率规划器。
+        :param valid_iter: 验证数据供给迭代器。
+        :param hook: 是否使用hook机制跟踪梯度变化。可选填入[None, 'mute', 'full']
+        :param n_workers: 进行训练的处理机数量。
+        :param k: 进行训练的k折数，指定为1则不进行k-折训练，否则进行k-折训练，并且data_iter为k-折训练数据供给器，valid_iter会被忽略.
         :return: 训练数据记录`History`对象
         """
         if hook is None:
@@ -367,6 +368,7 @@ class BasicNN(nn.Sequential):
                      data_iter, optimizer, lr_scheduler, acc_fn, n_epochs, ls_fn,
                      with_hook, hook_mute) as trainer:
             if k > 1:
+                # 是否进行k-折训练
                 return trainer.train_with_k_fold(data_iter, k, n_workers)
             elif n_workers <= 1:
                 # 判断是否要多线程
@@ -379,35 +381,35 @@ class BasicNN(nn.Sequential):
 
     @torch.no_grad()
     def test_(self, test_iter,
-              acc_func: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
-              loss: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
+              acc_fn: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
+              ls_fn: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
               ) -> [float, float]:
         """
         测试方法，取出迭代器中的下一batch数据，进行预测后计算准确度和损失
         :param test_iter: 测试数据迭代器
-        :param acc_func: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
-        :param loss: 计算损失所使用的函数，该函数需要求出整个batch的损失平均值。签名需为：loss(Y_HAT, Y) -> float or torch.Tensor
+        :param acc_fn: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
+        :param ls_fn: 计算损失所使用的函数，该函数需要求出整个batch的损失平均值。签名需为：loss(Y_HAT, Y) -> float or torch.Tensor
         :return: 测试准确率，测试损失
         """
         self.eval()
         metric = Accumulator(3)
         for features, labels in test_iter:
             preds = self(features)
-            metric.add(acc_func(preds, labels), loss(preds, labels) * len(features), len(features))
+            metric.add(acc_fn(preds, labels), ls_fn(preds, labels) * len(features), len(features))
         return metric[0] / metric[2], metric[1] / metric[2]
 
     @torch.no_grad()
     def predict_(self, data_iter: DataLoader or LazyDataLoader,
-                 acc_func: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
-                 loss: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
+                 acc_fn: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
+                 ls_fn: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
                  unwrap_fn: Callable[
                      [torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor] = None
                  ) -> torch.Tensor:
         """
         预测方法。对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
         :param data_iter: 预测数据迭代器。
-        :param acc_func: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
-        :param loss: 计算损失所使用的函数，该函数需要求出整个batch的损失平均值。签名需为：loss(Y_HAT, Y) -> float or torch.Tensor
+        :param acc_fn: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
+        :param ls_fn: 计算损失所使用的函数，该函数需要求出整个batch的损失平均值。签名需为：loss(Y_HAT, Y) -> float or torch.Tensor
         :param unwrap_fn: 对所有数据进行打包的方法。如不指定，则直接返回预测数据。签名需为：unwrap_fn(inputs, predictions, labels, acc_s, loss_es) -> Any
         :return: 打包好的数据集
         """
@@ -425,9 +427,9 @@ class BasicNN(nn.Sequential):
                     # TODO：对单独的每张图片进行acc和loss计算。是否过于效率低下？
                     for pre, lb in zip(pre_batch, lb_batch):
                         acc_s.append(
-                            acc_func(pre.reshape(1, *pre.shape), lb.reshape(1, *pre.shape))
+                            acc_fn(pre.reshape(1, *pre.shape), lb.reshape(1, *pre.shape))
                         )
-                        loss_es.append(loss(pre, lb))
+                        loss_es.append(ls_fn(pre, lb))
                 data_iter.set_description('正对结果进行解包……')
             inputs = torch.cat(inputs, dim=0)
             predictions = torch.cat(predictions, dim=0)

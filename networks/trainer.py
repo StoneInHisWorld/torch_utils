@@ -66,7 +66,8 @@ def train_and_valid_log_impl(
         finish: Event, Q: Queue, timeout=1  # 信号量相关
 ) -> History:
     # TODO: 添加动态学习率的支持
-    metric = Accumulator(3)
+    # metric = Accumulator(3)
+    metric = None
     while True:
         # 从队列中获取训练结果
         try:
@@ -77,11 +78,13 @@ def train_and_valid_log_impl(
                 break
             else:
                 continue
-        # 若是获取到了训练结果
-        if item == epoch_ending:
-            # 如果训练完一个世代，则更新metric
+        # 若是获取到了更新的学习率
+        if len(item) == 1:
+            # 如果训练完一个世代，则更新metric以及记录学习率
             metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
+            history.add(['lrs'], [item])
         else:
+            # 获取到了训练一个批次后需要验证和记录的数据
             ls, state_dict, X, y = item
             net.load_state_dict(state_dict)
             # 开始计算验证数据
@@ -104,16 +107,18 @@ def train_and_valid_log_impl(
 
 
 def train_impl(
-        net, data_iter, n_epochs, optimizer, ls_fn,
+        net, data_iter, n_epochs, optimizer, lr_scheduler, ls_fn,
         Q: Queue  # 信号量
 ):
     # TODO: 添加动态学习率的支持
     with tqdm(total=len(data_iter), unit='批', position=0,
               desc=f'训练中...', mininterval=1) as pbar:
+        # 训练主循环
         for epoch in range(n_epochs):
             pbar.reset(len(data_iter))
             pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
-            # 训练主循环
+            Q.put_nowait(([param['lr'] for param in optimizer.param_groups], ))
+            # 世代主循环
             for X, y in data_iter:
                 net.train()
                 optimizer.zero_grad()
@@ -122,7 +127,8 @@ def train_impl(
                 optimizer.step()
                 Q.put_nowait((ls.item(), net.state_dict(), X, y))
                 pbar.update(1)
-            Q.put_nowait(epoch_ending)
+            # 更新学习率并发送要记录的学习率当作消息
+            lr_scheduler.step()
         pbar.set_description('正在进行日志记录工作……')
         pbar.close()
 
@@ -247,24 +253,25 @@ class Trainer:
         data_iter = self.__data_iter
         n_epochs = self.__n_epochs
         optimizer = self.__optimizer
+        lr_scheduler = self.__lr_scheduler
         ls_fn = self.__ls_fn
         acc_fn = self.__acc_fn
 
         train_thread = Thread(
             train_impl,
-            net, data_iter, n_epochs, optimizer, ls_fn,
+            net, data_iter, n_epochs, optimizer, lr_scheduler, ls_fn,
             Q
         )
         train_thread.start()
         if valid_iter is not None:
-            history = History('train_l', 'train_acc', 'valid_l', 'valid_acc')
+            history = History('train_l', 'train_acc', 'valid_l', 'valid_acc', 'lrs')
             log_thread = Thread(
                 train_and_valid_log_impl,
                 deepcopy(net), valid_iter, acc_fn, ls_fn, history,
                 finish, Q, timeout
             )
         else:
-            history = History('train_l', 'train_acc')
+            history = History('train_l', 'train_acc', 'lrs')
             log_thread = Thread(
                 train_log_impl,
                 deepcopy(net), history, acc_fn,
