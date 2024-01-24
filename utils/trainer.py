@@ -65,7 +65,7 @@ class Trainer:
         print('已编写日志')
 
     def add_logMsg(self, mute=True, **kwargs):
-        self.__extra_lm = kwargs
+        self.__extra_lm.update(kwargs)
         if not mute:
             print(self.__extra_lm)
 
