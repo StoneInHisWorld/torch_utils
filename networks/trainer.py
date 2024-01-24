@@ -178,12 +178,12 @@ class Trainer:
                     lo = ls_fn(net(X), y)
                     lo.backward()
                     optimizer.step()
-                    lr_scheduler.step()
                     with torch.no_grad():
                         correct = acc_fn(net(X), y)
                         num_examples = X.shape[0]
                         metric.add(lo.item() * num_examples, correct, num_examples)
                     pbar.update(1)
+                lr_scheduler.step()
                 # 记录训练数据
                 pbar.set_description('验证中...')
                 valid_acc, valid_l = net.test_(valid_iter, acc_fn, ls_fn)

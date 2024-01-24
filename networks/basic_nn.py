@@ -338,8 +338,8 @@ class BasicNN(nn.Sequential):
     #     return k_fold_history
 
     def train_(self,
-               data_iter, optimizer, lr_scheduler, acc_fn,
-               n_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
+               data_iter, optimizer, acc_fn,
+               n_epochs=10, ls_fn: nn.Module = nn.L1Loss(), lr_scheduler=None,
                valid_iter=None, k=1, n_workers=1, hook=None
                ):
         """
@@ -361,6 +361,8 @@ class BasicNN(nn.Sequential):
             with_hook, hook_mute = True, True
         else:
             with_hook, hook_mute = True, False
+        if lr_scheduler is None:
+            lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, 1)
         with Trainer(self,
                      data_iter, optimizer, lr_scheduler, acc_fn, n_epochs, ls_fn,
                      with_hook, hook_mute) as trainer:
