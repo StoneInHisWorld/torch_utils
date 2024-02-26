@@ -117,7 +117,7 @@ def train_impl(
         for epoch in range(n_epochs):
             pbar.reset(len(data_iter))
             pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
-            Q.put_nowait(([param['lr'] for param in optimizer.param_groups], ))
+            Q.put(([param['lr'] for param in optimizer.param_groups], ))
             # 世代主循环
             for X, y in data_iter:
                 net.train()
