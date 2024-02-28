@@ -153,7 +153,6 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     def _concat_imgs(comment: str = "",
                      *imgs_and_labels: Tuple[Image, str]
                      ) -> Image:
-        # TODO：untested!
         # 计算绘图窗格大小
         cb_height = max([img.height for img, _ in imgs_and_labels])
         cb_width = max([img.width for img, _ in imgs_and_labels])

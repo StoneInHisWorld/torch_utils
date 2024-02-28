@@ -34,10 +34,10 @@ class Trainer:
 
     def __enter__(self):
         self.start = time.time()
-        print(
-            f'\r---------------------------实验{self.__exp_no}号'
-            f'---------------------------'
-        )
+        # print(
+        #     f'\r---------------------------实验{self.__exp_no}号'
+        #     f'---------------------------'
+        # )
         for k, v in self.__hp.items():
             print(k + ': ' + str(v))
         print(

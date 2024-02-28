@@ -6,7 +6,13 @@ img_modes = ['L', 'RGB', '1']
 
 def calculate_ssim(y_hat: torch.Tensor, y: torch.Tensor, R: torch.Tensor) -> torch.Tensor:
     """
-    计算SSIM值
+    计算SSIM值，公式为：
+    .. math::
+        \mathrm{ssim}(\hat{y}, y, R) =
+        ( 2 \mu_{x} \mu_{y} + c_{1}) ( 2 \sigma_{xy} + c_{2})
+        /
+        ( \mathrm{\mu_{x}}^{2} + \mathrm{\mu_{y}}^{2} + \mathrm{c_{1}})
+        ( \mathrm{\sigma_{x}^{2}} + \mathrm{\sigma_{y}^{2}} + \mathrm{c_2})
     :param y_hat: 计算对象1
     :param y: 计算对象2
     :param R: 像素范围
@@ -26,9 +32,15 @@ def calculate_ssim(y_hat: torch.Tensor, y: torch.Tensor, R: torch.Tensor) -> tor
 class SSIMLoss(nn.Module):
 
     def __init__(self, mode: str = 'L', size_average=True):
-        """
-        SSIM损失层。计算每对y_hat与y的图片结构相似度，并求其平均逆（1 - mean(ssim)）作为损失值。
-        计算公式为：ls =
+        """SSIM损失层。计算每对y_hat与y的图片结构相似度，并求其平均逆作为损失值。
+
+        计算公式为：
+
+        .. math::
+            ls = 1 - \mathrm{ssim}(\hat{y}, y, R) =
+            1 - ( 2\mu_{x} \mu_{y} + c_{1}) ( 2 \sigma_{xy} + c_{2})
+            /
+            (\mathrm{\mu_{x}}^{2} + \mathrm{\mu_{y}}^{2} + \mathrm{c_{1}}) ( \mathrm{\sigma_{x}^{2}} + \mathrm{\sigma_{y}^{2}} + \mathrm{c_2})
         """
         self.mode = mode
         self.size_average = size_average
@@ -45,9 +57,16 @@ class SSIMLoss(nn.Module):
 class SSIM(nn.Module):
 
     def __init__(self, mode: str = 'L'):
-        """
-        SSIM计算层。计算批次中，每对y_hat与y的图片结构相似度，并求其平均作为损失值。
-        计算公式为：ls =
+        r"""SSIM计算层。计算批次中，每对y_hat与y的图片结构相似度，并求其平均作为损失值。
+        
+        计算公式为：
+        
+        .. math::
+            \mathrm{ssim}(\hat{y}, y, R) =
+            ( 2 \mu_{x} \mu_{y} + c_{1}) ( 2 \sigma_{xy} + c_{2})
+            /
+            ( \mathrm{\mu_{x}}^{2} + \mathrm{\mu_{y}}^{2} + \mathrm{c_{1}})
+            ( \mathrm{\sigma_{x}^{2}} + \mathrm{\sigma_{y}^{2}} + \mathrm{c_2})
         """
         assert mode in img_modes, f'不支持的图像模式{mode}！'
         self.mode = mode

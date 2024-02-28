@@ -168,7 +168,7 @@ class SelfDefinedDataSet:
 
     @staticmethod
     @abstractmethod
-    def accuracy(Y_HAT: torch.Tensor, Y: torch.Tensor) -> torch.Tensor or float:
+    def accuracy(Y_HAT: torch.Tensor, Y: torch.Tensor, size_average: bool = True) -> torch.Tensor or float:
         pass
 
     @staticmethod

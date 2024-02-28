@@ -52,6 +52,20 @@ class ControlPanel:
         # 设置随机种子
         self.random_seed = self['random_seed']
         torch.random.manual_seed(self.random_seed)
+        # # 读取实验编号
+        # if self.__lp is not None:
+        #     try:
+        #         log = pd.read_csv(self.__lp)
+        #         exp_no = log.iloc[-1]['exp_no'] + 1
+        #     except Exception as _:
+        #         exp_no = 1
+        # else:
+        #     exp_no = 1
+        # assert exp_no > 0, f'训练序号需为正整数，但读取到的序号为{exp_no}'
+        # self.exp_no = int(exp_no)
+        self.__read_expno()
+
+    def __read_expno(self):
         # 读取实验编号
         if self.__lp is not None:
             try:
@@ -63,6 +77,12 @@ class ControlPanel:
             exp_no = 1
         assert exp_no > 0, f'训练序号需为正整数，但读取到的序号为{exp_no}'
         self.exp_no = int(exp_no)
+        with open(self.__hcp, 'r', encoding='utf-8') as cfg:
+            hyper_params = json.load(cfg)
+            n_exp = 1
+            for v in hyper_params.values():
+                n_exp *= len(v)
+        self.last_expno = self.exp_no + n_exp
 
     def __iter__(self):
         with open(self.__hcp, 'r', encoding='utf-8') as cfg:
@@ -72,6 +92,10 @@ class ControlPanel:
                 self.__cur_trainer = Trainer(
                     self.__datasource, hyper_params, self.exp_no,
                     self.__lp, self.__np, self['print_net'], self['save_net']
+                )
+                print(
+                    f'\r---------------------------实验{self.exp_no}号/{self.last_expno}号'
+                    f'---------------------------'
                 )
                 yield self.__cur_trainer
                 self.__read_runtime_cfg()
@@ -168,5 +192,3 @@ class ControlPanel:
     @property
     def device(self):
         return torch.device(self['device'])
-
-
