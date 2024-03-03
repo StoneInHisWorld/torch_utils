@@ -57,6 +57,7 @@ class AdaP2P(BasicNN):
             cp_layer
         )
         # 拼凑扩展路径
+        # TODO： //= 有将shape/out置为0的风险，请解决这个问题，或者弃用本网络，使用pix2pix
         cur_shape, _, cur_out = self.construct_ep(
             compress_shape, cur_out, cur_out // 2,
             output_channel, len(self.contracting_path),
@@ -78,7 +79,7 @@ class AdaP2P(BasicNN):
                      cp_layer):
         self.contracting_path = []
         # 拼凑对抗路径
-        while cur_shape >= compress_shape and cur_out <= max_channel:
+        while cur_shape > compress_shape and cur_out <= max_channel:
             self.contracting_path.append(cp_layer(cur_in, cur_out))
             cur_in = cur_out
             cur_out *= 2
