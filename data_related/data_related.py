@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torchvision.transforms import transforms
+import torchvision.transforms.functional as F
 
 from data_related.dataloader import LazyDataLoader
 from data_related.datasets import DataSet, LazyDataSet
@@ -163,7 +164,17 @@ def data_slicer(data_portion=1., shuffle=True, *args: Sized):
 
 
 def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
+    """
+    进行数据标准化。
+    :param data: 需要进行标准化的数据。
+    :param epsilon: 防止分母为0的无穷小量。
+    :return: 标准化的数据
+    """
     mean, std = [func(data, dim=list(range(2, len(data.shape))), keepdim=True)
                  for func in [torch.mean, torch.std]]
-    computer = transforms.Normalize(mean, std + epsilon)
-    return computer(data)
+    if len(data.shape) == 4:
+        return F.normalize(data, mean, std)
+    elif len(data.shape) == 1:
+        return (data - mean) / (std + epsilon)
+    else:
+        raise Exception(f'不支持的数据形状{data.shape}！')
