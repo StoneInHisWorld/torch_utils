@@ -22,6 +22,7 @@ def __ts_to_BiLevelImg(ts: torch.Tensor) -> Image:
 def tensor_to_img(ts: torch.Tensor, mode: str = 'RGB') -> List[Image]:
     assert mode in img_modes, f'不支持的图像模式{mode}！'
     assert len(ts.shape) == 4, f'本方法只接受四维输入（批量大小，通道数，长，宽），输入的张量形状为{ts.shape}'
+    ts = ts.cpu()
     ret = []
     if mode == '1':
         for t in ts:
