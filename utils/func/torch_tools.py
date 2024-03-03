@@ -130,11 +130,15 @@ def init_wb(func_str: str = "xavier"):
 
 
 def get_lr_scheduler(optimizer, which: str = 'step', **kwargs):
-    assert which in lr_schedulers, f"不支持的学习率规划器{which}, 当前支持的初始化方式包括{lr_schedulers}"
     if which == 'step':
         return torch.optim.lr_scheduler.StepLR(optimizer, **kwargs)
     elif which == 'lambda':
         return torch.optim.lr_scheduler.LambdaLR(optimizer, **kwargs)
     elif which == 'constant':
         return torch.optim.lr_scheduler.ConstantLR(optimizer, **kwargs)
-    return torch.optim.lr_scheduler.ConstantLR(optimizer, 1, 1)
+    elif which == 'multistep':
+        return torch.optim.lr_scheduler.MultiStepLR(optimizer, **kwargs)
+    elif which == 'cosine':
+        return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, **kwargs)
+    else:
+        raise NotImplementedError(f"不支持的学习率规划器{which}, 当前支持的初始化方式包括{lr_schedulers}")
