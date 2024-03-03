@@ -13,6 +13,7 @@ img_modes = ['L', 'RGB', '1']
 
 def __ts_to_BiLevelImg(ts: torch.Tensor) -> Image:
     assert len(ts.shape) == 3, f'本方法只接受三维输入，输入的张量形状为{ts.shape}'
+    # 不转换为灰度值则图片转换后变为全黑
     ts = ts.reshape(ts.shape[1:]) * 255
     ts = ts.cpu().numpy()
     return IMAGE.fromarray(ts).convert('1')
