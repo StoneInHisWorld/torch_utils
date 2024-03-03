@@ -46,18 +46,32 @@ class Trainer:
         return self.__hp.values()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """训练器对象的退出动作。
+        进行日志编写以及网络保存操作。
+
+        :param exc_type: 出现的异常类型
+        :param exc_val: 出现的异常值
+        :param exc_tb: ？
+        :return: None
+        """
         # 进行日志编写
         if exc_type is not None:
-            print(f'exc_type: {exc_type}')
-            print(f'exc_val: {exc_val}')
-            self.__hp.update({'exc_val': exc_val})
+            if exc_type != KeyboardInterrupt:
+                # 出现异常则记录
+                print(f'exc_type: {exc_type}')
+                print(f'exc_val: {exc_val}')
+                self.__hp.update({'exc_val': exc_val})
+            else:
+                # 键盘中断则什么也不做
+                return
+        # 记录时间信息
         time_span = time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start))
         self.__hp.update({'exp_no': self.__exp_no, "duration": time_span, "dataset": self.datasource.__name__})
-        if exc_type != KeyboardInterrupt:
-            if self.__lp is not None:
-                self.__write_log(**self.__hp)
-                # 保存训练生成的网络
-            self.__save_net()
+        if self.__lp is not None:
+            # 指定了日志路径，则进行日志记录
+            self.__write_log(**self.__hp)
+        # 保存训练生成的网络
+        self.__save_net()
 
     def __write_log(self, **kwargs):
         kwargs.update(self.__extra_lm)
