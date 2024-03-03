@@ -1,360 +1,124 @@
 import os.path
 import warnings
-from copy import deepcopy
-from threading import Event
 from typing import Callable
 
 import torch
 import torch.nn as nn
-from queue import Queue
 from torch.nn import Module
 from torch.utils import checkpoint
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from data_related.data_related import single_argmax_accuracy
 from data_related.dataloader import LazyDataLoader
+from networks.trainer import Trainer
 from utils.accumulator import Accumulator
-from utils.func.torch_tools import init_wb
-from utils.history import History
-from utils.thread import Thread
-
-epoch_ending = 'end_of_an_epoch'
+import utils.func.torch_tools as ttools
+import copy
 
 
 class BasicNN(nn.Sequential):
-
     required_shape = (-1,)
 
     def __init__(self, *args: Module, **kwargs) -> None:
-        """
-        基本神经网络。提供神经网络的基本功能，包括权重初始化，训练以及测试。
-        :param device: 网络所处设备
-        :param init_meth: 网络初始化方法
-        :param with_checkpoint: 是否使用检查点机制
+        """基本神经网络。
+        提供神经网络的基本功能，包括权重初始化，训练以及测试。
         :param args: 需要添加的网络层
+        :param kwargs: 可选提供的参数。
+        -- device: 网络所处设备。
+        -- init_meth: 网络初始化方法。
+        -- init_args: 网络初始化方法所用参数。
+        -- with_checkpoint: 是否使用检查点机制。
         """
         # 设置默认值
         init_meth = 'zero' if 'init_meth' not in kwargs.keys() else kwargs['init_meth']
         device = torch.device('cpu') if 'device' not in kwargs.keys() else kwargs['device']
         with_checkpoint = False if 'with_checkpoint' not in kwargs.keys() else kwargs['with_checkpoint']
+        init_args = [] if 'init_args' not in kwargs.keys() else kwargs['init_args']
         # 初始化各模块
         super().__init__(*args)
-        self.apply(init_wb(init_meth))
+        self.__init_submodules(init_meth, *init_args)
         self.apply(lambda m: m.to(device))
 
+
         self.__device = device
-        self.__last_backward_data = {}
-        self.__last_forward_output = {}
         if with_checkpoint:
             warnings.warn('使用“检查点机制”虽然会减少前向传播的内存使用，但是会大大增加反向传播的计算量！')
         self.__checkpoint = with_checkpoint
 
-    @torch.no_grad()
-    def __train_log_impl(
-            self, history, acc_fn,
-            finish, Q
-    ) -> History:
-        metric = Accumulator(3)
-        net = deepcopy(self)
-        while not finish.is_set() or Q.unfinished_tasks > 0:
-            item = Q.get()
-            if item == epoch_ending:
-                metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
-                Q.task_done()
-                # epoch += 1
-                # i = 1
-                continue
-            ls, state_dict, X, y = item
-            net.load_state_dict(state_dict)
-            # 开始计算准确率数据
-            correct = acc_fn(net(X), y)
-            num_examples = X.shape[0]
-            metric.add(ls * num_examples, correct, num_examples)
-            # 记录训练数据
-            history.add(
-                ['train_l', 'train_acc'],
-                [metric[0] / metric[2], metric[1] / metric[2]]
-            )
-            Q.task_done()
-        return history
-
-    @staticmethod
-    @torch.no_grad()
-    def __valid_impl(net, test_iter, acc_fn, ls_fn) -> tuple:
-        net.eval()
-        metric = Accumulator(3)
-        for features, lbs in test_iter:
-            preds = net(features)
-            metric.add(acc_fn(preds, lbs), ls_fn(preds, lbs) * len(features), len(features))
-        return metric[0] / metric[2], metric[1] / metric[2]
-
-    @torch.no_grad()
-    def __train_and_valid_log_impl(
-            self, valid_iter, acc_fn, ls_fn, history,
-            finish, Q: Queue  # 信号量
-    ) -> History:
-        metric = Accumulator(3)
-        net = deepcopy(self)
-        while not finish.is_set() or Q.unfinished_tasks > 0:
-            item = Q.get()
-            if item == epoch_ending:
-                metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
-                Q.task_done()
-                continue
-            ls, state_dict, X, y = item
-            net.load_state_dict(state_dict)
-            # 开始计算验证数据
-            valid_thread = Thread(self.__valid_impl, net, valid_iter, acc_fn, ls_fn)
-            valid_thread.start()
-            # 开始计算准确率数据
-            correct = acc_fn(net(X), y)
-            num_examples = X.shape[0]
-            metric.add(ls * num_examples, correct, num_examples)
-            # 记录训练、验证数据
-            if valid_thread.is_alive():
-                valid_thread.join()
-            valid_acc, valid_l = valid_thread.get_result()
-            history.add(
-                ['train_l', 'train_acc', 'valid_l', 'valid_acc'],
-                [metric[0] / metric[2], metric[1] / metric[2], valid_l, valid_acc]
-            )
-            # i += 1
-            Q.task_done()
-        return history
-
-    def __train_impl(
-            self, data_iter, num_epochs, optimizer, ls_fn,
-            Q: Queue, finish
-    ):
-        with tqdm(total=len(data_iter), unit='批', position=0,
-                  desc=f'训练中...', mininterval=1) as pbar:
-            for epoch in range(num_epochs):
-                pbar.reset(len(data_iter))
-                pbar.set_description(f'世代{epoch + 1}/{num_epochs} 训练中...')
-                # 训练主循环
-                for X, y in data_iter:
-                    self.train()
-                    optimizer.zero_grad()
-                    ls = ls_fn(self(X), y)
-                    ls.backward()
-                    optimizer.step()
-                    Q.put((ls.item(), self.state_dict(), X, y))
-                    pbar.update(1)
-                Q.put_nowait(epoch_ending)
-            finish.set()
-            pbar.set_description('正在进行收尾工作……')
-            pbar.close()
-
-    def train_(self, data_iter, optimizer, num_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
-               acc_fn=single_argmax_accuracy, valid_iter=None) -> History:
+    def train_(self,
+               data_iter, optimizer, acc_fn,
+               n_epochs=10, ls_fn: nn.Module = nn.L1Loss(), lr_scheduler=None,
+               valid_iter=None, k=1, n_workers=1, hook=None
+               ):
         """
-        神经网络训练函数。
-        :param data_iter: 训练数据供给迭代器
-        :param optimizer: 网络参数优化器
-        :param num_epochs: 迭代世代
-        :param ls_fn: 训练损失函数
-        :param acc_fn: 准确率计算函数
-        :param valid_iter: 验证数据供给迭代器
+        神经网络训练函数，调用Trainer进行训练。
+        :param data_iter: 训练数据供给迭代器。
+        :param optimizer: 网络参数优化器。
+        :param acc_fn: 准确率计算函数。签名需为：acc_fn(predict: tensor, labels: tensor, size_averaged: bool = True) -> ls: tensor or float
+        :param n_epochs: 迭代世代数。
+        :param ls_fn: 训练损失函数。签名需为：ls_fn(predict: tensor, labels: tensor) -> ls: tensor，其中不允许有销毁梯度的操作。
+        :param lr_scheduler: 学习率规划器，用于动态改变学习率。若不指定，则会使用固定学习率规划器。
+        :param valid_iter: 验证数据供给迭代器。
+        :param hook: 是否使用hook机制跟踪梯度变化。可选填入[None, 'mute', 'full']
+        :param n_workers: 进行训练的处理机数量。
+        :param k: 进行训练的k折数，指定为1则不进行k-折训练，否则进行k-折训练，并且data_iter为k-折训练数据供给器，valid_iter会被忽略.
         :return: 训练数据记录`History`对象
         """
-        history = History('train_l', 'train_acc') if valid_iter is None else \
-            History('train_l', 'train_acc', 'valid_l', 'valid_acc')
-        with tqdm(total=len(data_iter), unit='批', position=0,
-                  desc=f'训练中...', mininterval=1) as pbar:
-            for epoch in range(num_epochs):
-                pbar.reset(len(data_iter))
-                pbar.set_description(f'世代{epoch + 1}/{num_epochs} 训练中...')
-                metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
-                # 训练主循环
-                for X, y in data_iter:
-                    self.train()
-                    optimizer.zero_grad()
-                    lo = ls_fn(self(X), y)
-                    lo.backward()
-                    optimizer.step()
-                    with torch.no_grad():
-                        correct = acc_fn(self(X), y)
-                        num_examples = X.shape[0]
-                        metric.add(lo.item() * num_examples, correct, num_examples)
-                    pbar.update(1)
-                # 记录训练数据
-                if not valid_iter:
-                    history.add(
-                        ['train_l', 'train_acc'],
-                        [metric[0] / metric[2], metric[1] / metric[2]]
-                    )
-                else:
-                    pbar.set_description('验证中...')
-                    valid_acc, valid_l = self.test_(valid_iter, acc_fn, ls_fn)
-                    history.add(
-                        ['train_l', 'train_acc', 'valid_l', 'valid_acc'],
-                        [metric[0] / metric[2], metric[1] / metric[2], valid_l, valid_acc]
-                    )
-            pbar.close()
-        return history
-
-    hook_mute = False
-
-    def train__(self, data_iter, optimizer, num_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
-                acc_fn=single_argmax_accuracy, valid_iter=None) -> History:
-        # TODO: 检查一下，为什么使用真实数量的数据集会引发死锁
-        """
-        神经网络训练函数。
-        :param data_iter: 训练数据供给迭代器
-        :param optimizer: 网络参数优化器
-        :param num_epochs: 迭代世代
-        :param ls_fn: 训练损失函数
-        :param acc_fn: 准确率计算函数
-        :param valid_iter: 验证数据供给迭代器
-        :return: 训练数据记录`History`对象
-        """
-        Q = Queue()
-        finish = Event()
-
-        train_thread = Thread(
-            self.__train_impl, data_iter, num_epochs, optimizer, ls_fn,
-            Q, finish
-        )
-        train_thread.start()
-        if valid_iter is not None:
-            history = History('train_l', 'train_acc', 'valid_l', 'valid_acc')
-            log_thread = Thread(
-                self.__train_and_valid_log_impl,
-                valid_iter, acc_fn, ls_fn, history,
-                finish, Q
-            )
+        if hook is None:
+            with_hook, hook_mute = False, False
+        elif hook == 'mute':
+            with_hook, hook_mute = True, True
         else:
-            history = History('train_l', 'train_acc')
-            log_thread = Thread(
-                self.__train_log_impl,
-                history, acc_fn,
-                finish, Q
-            )
-        log_thread.start()
-        finish.wait()
-        log_thread.join()
-        return log_thread.get_result()
-
-    def hook_forward_fn(self, module, input, output):
-        if not BasicNN.hook_mute:
-            print(f'{module.__class__.__name__} FORWARD')
-        try:
-            last_input, last_output = self.__last_forward_output.pop(module)
-        except Exception as _:
-            pass
-        else:
-            flag = True
-            for li, i in zip(last_input, input):
-                flag = torch.equal(li, i) and flag
-            if not BasicNN.hook_mute:
-                print(f'input eq: {flag}')
-            flag = True
-            for lo, o in zip(last_output, output):
-                flag = torch.equal(lo, o) and flag
-            if not BasicNN.hook_mute:
-                print(f'output eq: {flag}')
-        self.__last_forward_output[module] = input, output
-        if not BasicNN.hook_mute:
-            print('-' * 20)
-
-    def hook_backward_fn(self, module, grad_input, grad_output):
-        if not BasicNN.hook_mute:
-            print(f'{module.__class__.__name__} BACKWARD')
-        try:
-            last_input, last_output = self.__last_backward_data.pop(module)
-        except Exception as _:
-            pass
-        else:
-            flag = True
-            for li, i in zip(last_input, grad_input):
-                if li is None or i is None:
-                    print(f'{module.__class__.__name__} FORWARD None grad within {li} or {i}')
+            with_hook, hook_mute = True, False
+        # TODO: optimizer以及lr_scheduler需要支持多个
+        if lr_scheduler is None:
+            lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, 1)
+        with Trainer(self,
+                     data_iter, optimizer, lr_scheduler, acc_fn, n_epochs, ls_fn,
+                     with_hook, hook_mute) as trainer:
+            if k > 1:
+                # 是否进行k-折训练
+                return trainer.train_with_k_fold(data_iter, k, n_workers)
+            elif n_workers <= 1:
+                # 判断是否要多线程
+                if valid_iter:
+                    return trainer.train_and_valid(valid_iter)
                 else:
-                    flag = torch.equal(li, i) and flag
-                    if not BasicNN.hook_mute:
-                        print(f'in_grad eq: {flag}')
-            flag = True
-            for lo, o in zip(last_output, grad_output):
-                if lo is None or o is None:
-                    print(f'None grad within {lo} or {o}')
-                else:
-                    flag = torch.equal(lo, o) and flag
-                    if not BasicNN.hook_mute:
-                        print(f'out_grad eq: {flag}')
-        self.__last_backward_data[module] = grad_input, grad_output
-        if not BasicNN.hook_mute:
-            print('-' * 20)
-
-    def train_with_hook(self, data_iter, optimizer, num_epochs=10,
-                        ls_fn: nn.Module = nn.L1Loss(),
-                        acc_func=single_argmax_accuracy) -> History:
-        """
-        支持hook机制的训练过程方法。可以调用本方法对神经网络的前向反馈和后向反馈进行跟踪、监控。
-        :param data_iter: 数据加载器
-        :param optimizer: 网络优化器
-        :param num_epochs: 迭代世代数
-        :param ls_fn: 损失函数
-        :param acc_func: 准确度计算函数
-        :return: 训练过程数据记录表
-        """
-        for m in self:
-            m.register_forward_hook(hook=BasicNN.hook_forward_fn)
-            m.register_full_backward_hook(hook=BasicNN.hook_backward_fn)
-        return self.train_(data_iter, optimizer, num_epochs, ls_fn, acc_func)
-
-    def train_with_k_fold(self, train_loaders_iter, optimizer, num_epochs: int = 10,
-                          ls_fn: nn.Module = nn.L1Loss(), k: int = 10,
-                          acc_fn=single_argmax_accuracy) -> History:
-        """
-        使用k折验证法进行模型训练
-        :param train_loaders_iter: 数据加载器供给，提供k折验证的每一次训练所需训练集加载器、验证集加载器
-        :param optimizer: 优化器
-        :param num_epochs: 迭代次数。数据集的总访问次数为k * num_epochs
-        :param ls_fn: 损失函数
-        :param k: 将数据拆分成k折，每一折轮流作验证集，余下k-1折作训练集
-        :param acc_fn: 准确度函数
-        :return: k折训练记录，包括每一折训练时的('train_l', 'train_acc', 'valid_l', 'valid_acc')
-        """
-        k_fold_history = History('train_l', 'train_acc', 'valid_l', 'valid_acc')
-        with tqdm(range(k), position=0, leave=True, unit='fold') as pbar:
-            for train_iter, valid_iter in train_loaders_iter:
-                pbar.set_description(f'Training fold-{pbar.n}')
-                history = self.train_(train_iter, optimizer, num_epochs, ls_fn, acc_fn, valid_iter=valid_iter)
-                k_fold_history += history
-                pbar.update(1)
-        return k_fold_history
+                    return trainer.train()
+            else:
+                return trainer.train_with_threads(valid_iter)
 
     @torch.no_grad()
     def test_(self, test_iter,
-              acc_func: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = single_argmax_accuracy,
-              loss: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
+              acc_fn: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
+              ls_fn: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
               ) -> [float, float]:
-        """
-        测试方法，取出迭代器中的下一batch数据，进行预测后计算准确度和损失
+        """测试方法。
+        取出迭代器中的下一batch数据，进行预测后计算准确度和损失
         :param test_iter: 测试数据迭代器
-        :param acc_func: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
-        :param loss: 计算损失所使用的函数，该函数需要求出整个batch的损失平均值。签名需为：loss(Y_HAT, Y) -> float or torch.Tensor
+        :param acc_fn: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
+        :param ls_fn: 计算损失所使用的函数，该函数需要求出整个batch的损失平均值。签名需为：loss(Y_HAT, Y) -> float or torch.Tensor
         :return: 测试准确率，测试损失
         """
         self.eval()
         metric = Accumulator(3)
         for features, labels in test_iter:
             preds = self(features)
-            metric.add(acc_func(preds, labels), loss(preds, labels) * len(features), len(features))
+            metric.add(acc_fn(preds, labels), ls_fn(preds, labels) * len(features), len(features))
         return metric[0] / metric[2], metric[1] / metric[2]
 
     @torch.no_grad()
     def predict_(self, data_iter: DataLoader or LazyDataLoader,
-                 acc_func: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = single_argmax_accuracy,
-                 loss: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
-                 unwrap_fn: Callable[[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor] = None
+                 acc_fn: Callable,
+                 ls_fn: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
+                 unwrap_fn: Callable[
+                     [torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor] = None
                  ) -> torch.Tensor:
-        """
-        预测方法。对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
+        """预测方法。
+        对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
         :param data_iter: 预测数据迭代器。
-        :param acc_func: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
-        :param loss: 计算损失所使用的函数，该函数需要求出整个batch的损失平均值。签名需为：loss(Y_HAT, Y) -> float or torch.Tensor
+        :param acc_fn: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
+        :param ls_fn: 计算损失所使用的函数，该函数需要求出整个batch的损失平均值。签名需为：loss(Y_HAT, Y) -> float or torch.Tensor
         :param unwrap_fn: 对所有数据进行打包的方法。如不指定，则直接返回预测数据。签名需为：unwrap_fn(inputs, predictions, labels, acc_s, loss_es) -> Any
         :return: 打包好的数据集
         """
@@ -362,22 +126,22 @@ class BasicNN(nn.Sequential):
         if unwrap_fn is not None:
             # 将本次预测所产生的全部数据打包并返回。
             inputs, predictions, labels, acc_s, loss_es = [], [], [], [], []
-            # 验证acc, loss是否对应
             with tqdm(data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1) as data_iter:
+                # 对每个批次进行预测，并进行acc和loss的计算
                 for fe_batch, lb_batch in data_iter:
                     inputs.append(fe_batch)
                     pre_batch = self(fe_batch)
                     predictions.append(pre_batch)
                     labels.append(lb_batch)
-                    # TODO：对单独的每张图片进行acc和loss计算。是否过于效率低下？
-                    for pre, lb in zip(pre_batch, lb_batch):
-                        acc_s.append(
-                            acc_func(pre.reshape(1, *pre.shape), lb.reshape(1, *pre.shape))
-                        )
-                        loss_es.append(loss(pre, lb))
-                    # for i, (pre, lb) in enumerate(zip(pre_batch, lb_batch)):
-                    #     acc_s.append(i)
-                    #     loss_es.append(i)
+                    # # TODO：对单独的每张图片进行acc和loss计算。是否过于效率低下？
+                    # for pre, lb in zip(pre_batch, lb_batch):
+                    #     acc_s.append(
+                    #         acc_fn(pre.reshape(1, *pre.shape), lb.reshape(1, *pre.shape))
+                    #     )
+                    #     loss_es.append(ls_fn(pre, lb))
+                    acc_s += acc_fn(pre_batch, lb_batch, size_average=False)
+                    keeping_dims = list(range(len(fe_batch.shape)))[1:]
+                    loss_es += ls_fn(pre_batch, lb_batch).mean(dim=keeping_dims)
                 data_iter.set_description('正对结果进行解包……')
             inputs = torch.cat(inputs, dim=0)
             predictions = torch.cat(predictions, dim=0)
@@ -403,6 +167,23 @@ class BasicNN(nn.Sequential):
         assert where.endswith('.ptsd'), f'该文件{where}并非网络参数文件！'
         paras = torch.load(where)
         self.load_state_dict(paras)
+
+    def __init_submodules(self, init_meth, *args):
+        init_meth = ttools.init_wb(init_meth)
+        if init_meth is not None:
+            self.apply(init_meth)
+        else:
+            try:
+                where = args[0]
+                if where.endswith('.ptsd'):
+                    paras = torch.load(where)
+                    self.load_state_dict(paras)
+                elif where.endswith('.ptm'):
+                    raise NotImplementedError('针对预训练好的网络，请使用如下方法获取`net = torch.load("../xx.ptm")`')
+            except IndexError:
+                raise ValueError('选择预训练好的参数初始化网络，需要在初始化方法的第一参数提供参数或者模型的路径！')
+            except FileNotFoundError:
+                raise FileNotFoundError(f'找不到{where}！')
 
     def __str__(self):
         return '网络结构：\n' + super().__str__() + '\n所处设备：' + str(self.__device)
