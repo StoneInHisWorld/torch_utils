@@ -34,10 +34,10 @@ class Trainer:
 
     def __enter__(self):
         self.start = time.time()
-        print(
-            f'\r---------------------------实验{self.__exp_no}号'
-            f'---------------------------'
-        )
+        # print(
+        #     f'\r---------------------------实验{self.__exp_no}号'
+        #     f'---------------------------'
+        # )
         for k, v in self.__hp.items():
             print(k + ': ' + str(v))
         print(
@@ -79,7 +79,7 @@ class Trainer:
         print('已编写日志')
 
     def add_logMsg(self, mute=True, **kwargs):
-        self.__extra_lm = kwargs
+        self.__extra_lm.update(kwargs)
         if not mute:
             print(self.__extra_lm)
 
