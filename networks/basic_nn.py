@@ -4,16 +4,15 @@ from typing import Callable
 
 import torch
 import torch.nn as nn
+from networks.trainer import Trainer
 from torch.nn import Module
 from torch.utils import checkpoint
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from data_related.dataloader import LazyDataLoader
-from networks.trainer import Trainer
-from utils.accumulator import Accumulator
 import utils.func.torch_tools as ttools
-import copy
+from data_related.dataloader import LazyDataLoader
+from utils.accumulator import Accumulator
 
 
 class BasicNN(nn.Sequential):
