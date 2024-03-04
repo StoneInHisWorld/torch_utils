@@ -51,7 +51,7 @@ class Trainer:
 
         :param exc_type: 出现的异常类型
         :param exc_val: 出现的异常值
-        :param exc_tb: ？
+        :param exc_tb: 异常的路径回溯
         :return: None
         """
         # 进行日志编写
