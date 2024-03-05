@@ -13,6 +13,9 @@ from networks.nets.pix2pix_g import Pix2Pix_G
 
 
 class Pix2Pix(BasicNN):
+    
+    # 指定输出的训练损失类型
+    loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
 
     def __init__(self,
                  g_args, g_kwargs,
@@ -20,12 +23,20 @@ class Pix2Pix(BasicNN):
                  gan_mode='lsgan', lr=0.2, beta1=0.1,
                  direction='AtoB', isTrain=True,
                  *args: Module, **kwargs):
-        """
-        实现pix2pix模型，通过给定数据对学习输入图片到输出图片的映射。
+        """实现pix2pix模型，通过给定数据对学习输入图片到输出图片的映射。
 
         pix2pix不使用图片缓存。
 
-        目标函数为 :math:`GAN Loss + lambda_{L1} * ||G(A)-B||_1`
+        生成器目标函数为 :math:`\ell_G = G_GAN + \lambda_{L1}||G(A)-B||_1`
+
+        分辨器目标函数为 :math:`\ell_D = 0.5 D_read + 0.5 D_fake`
+
+        训练过程中输出四个目标值，分别为G_GAN、G_L1、D_real、D_fake：
+
+        - :math:`G_GAN`：生成器的GAN损失
+        - :math:`G_{L1}`：生成器的L1损失
+        - :math:`D_real`：分辨器分辨真图为真的概率，其输入为真实标签。
+        - :math:`D_fake`：分辨器分辨合成图为假的概率，其输入为生成器合成图。
         :param g_args:
         :param g_kwargs:
         :param d_args:
@@ -38,8 +49,6 @@ class Pix2Pix(BasicNN):
         :param kwargs:
         """
         super(Pix2Pix, self).__init__(*args, **kwargs)
-        # 指定输出的训练损失类型
-        self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
         # 指定保存或展示的图片
         self.visual_names = ['real_A', 'fake_B', 'real_B']
         self.direction = direction
@@ -106,7 +115,7 @@ class Pix2Pix(BasicNN):
         real_AB = torch.cat((self.real_A, self.real_B), 1)
         pred_real = self.netD(real_AB)
         self.loss_D_real = self.criterionGAN(pred_real, True)
-        # 组合损失值并计算梯度
+        # 组合损失值并计算梯度，0.5是两个预测值的权重
         self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5
         self.loss_D.backward()
 
@@ -145,6 +154,8 @@ class Pix2Pix(BasicNN):
                     self(data)
                     self.optimize_parameters()
                     ls = self.get_current_losses()
+                    print(ls)
+                    pbar.update(1)
 
     def get_current_losses(self):
         """Return traning losses / errors. train.py will print out these errors on console, and save them to a file"""
