@@ -38,7 +38,6 @@ class BasicNN(nn.Sequential):
         self.__init_submodules(init_meth, *init_args)
         self.apply(lambda m: m.to(device))
 
-
         self.__device = device
         if with_checkpoint:
             warnings.warn('使用“检查点机制”虽然会减少前向传播的内存使用，但是会大大增加反向传播的计算量！')

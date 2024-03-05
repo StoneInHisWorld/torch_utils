@@ -317,7 +317,7 @@ class Trainer:
                         metric.add(lo.item() * num_examples, correct, num_examples)
                     pbar.update(1)
                 lr_scheduler.step()
-                # 记录训练数据
+                # TODO:记录训练数据，可以细化到每个批次
                 history.add(
                     ['train_l', 'train_acc'],
                     [metric[0] / metric[2], metric[1] / metric[2]]

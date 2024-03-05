@@ -2,6 +2,7 @@ import os
 import random
 from typing import Tuple, Iterable, Callable, List
 
+import PIL.Image
 import numpy as np
 from PIL import Image as IMAGE, ImageDraw
 from PIL.Image import Image
@@ -225,9 +226,11 @@ def add_mask(images: List[np.ndarray], mask: np.ndarray) -> np.ndarray:
 def extract_and_cat_holes(images: np.ndarray,
                           hole_poses: List[Tuple[int, int]],
                           hole_sizes: List[int],
-                          num_rows: int, num_cols: int) -> np.ndarray:
+                          num_rows: int, num_cols: int,
+                          required_shape=None) -> np.ndarray:
     """
     根据孔径大小和位置提取图片孔径内容，并将所有孔径粘连到一起，形成孔径聚合图片。
+    :param required_shape:
     :param images: 图片序列。
     :param hole_poses: 孔径位置，即方形孔径的左上角坐标。
     :param hole_sizes: 孔径大小，需为整数列表，内含孔径边长。目前只支持方形孔径。
@@ -258,6 +261,15 @@ def extract_and_cat_holes(images: np.ndarray,
         ppx, ppy = pp
         px, py = p
         whiteboards[:, :, ppx: ppx + size, ppy: ppy + size] = images[:, :, px: px + size, py: py + size]
+    # TODO：效率低下，且resize出的图片边缘不清晰
+    if required_shape is not None:
+        del images
+        images = []
+        for img in whiteboards:
+            img = PIL.Image.fromarray(img.reshape(img.shape[1:]))
+            img = np.array(img.resize(required_shape))
+            images.append(img.reshape(whiteboard_channel, *img.shape))
+        whiteboards = np.array(images)
     return whiteboards
 
 

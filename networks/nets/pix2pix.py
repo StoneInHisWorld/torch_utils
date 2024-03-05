@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from typing import Callable
 
 import torch
 from torch import nn as nn
@@ -10,6 +11,8 @@ from networks.basic_nn import BasicNN
 from networks.layers.ganloss import GANLoss
 from networks.nets.pix2pix_d import Pix2Pix_D
 from networks.nets.pix2pix_g import Pix2Pix_G
+from utils.accumulator import Accumulator
+from utils.history import History
 
 
 class Pix2Pix(BasicNN):
@@ -48,7 +51,6 @@ class Pix2Pix(BasicNN):
         :param args:
         :param kwargs:
         """
-        super(Pix2Pix, self).__init__(*args, **kwargs)
         # 指定保存或展示的图片
         self.visual_names = ['real_A', 'fake_B', 'real_B']
         self.direction = direction
@@ -60,14 +62,19 @@ class Pix2Pix(BasicNN):
         # 定义生成器和分辨器
         # self.netG = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm,
         #                               not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
-        self.netG = Pix2Pix_G(*g_args, **g_kwargs)
+        netG = Pix2Pix_G(*g_args, **g_kwargs)
 
         if isTrain:
             # 定义一个分辨器
             # conditional GANs需要输入和输出图片，因此分辨器的通道数为input_nc + output_nc
             # self.netD = Pix2Pix_D(opt.input_nc + opt.output_nc, opt.ndf, opt.netD,
             #                               opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
-            self.netD = Pix2Pix_D(*d_args, **d_kwargs)
+            netD = Pix2Pix_D(*d_args, **d_kwargs)
+            super(Pix2Pix, self).__init__(netD, netG, **kwargs)
+            self.netD, self.netG = netD, netG
+        else:
+            super(Pix2Pix, self).__init__(netG, **kwargs)
+            self.netG = netG
 
         if isTrain:
             # 定义损失函数
@@ -83,6 +90,8 @@ class Pix2Pix(BasicNN):
             self.optimizers = []
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
+
+        self.isTrain = isTrain
 
     def forward(self, input):
         input_A = input[0]
@@ -122,14 +131,14 @@ class Pix2Pix(BasicNN):
     def optimize_parameters(self):
         # self.forward()                   # 计算虚假图片：G(A)
         # 更新分辨器
-        # self.netD.requires_grad_(True)  # TODO: 请检查与下个语句是否等效？
-        self.set_requires_grad(self.netD, True)  # 开启分辨器的反向传播
+        self.netD.requires_grad_(True)  # TODO: 请检查与下个语句是否等效？
+        # self.set_requires_grad(self.netD, True)  # 开启分辨器的反向传播
         self.optimizer_D.zero_grad()     # 清零分辨器的梯度
         self.backward_D()                # 计算分辨器的梯度
         self.optimizer_D.step()          # 更新分辨器的权重
         # 更新生成器
-        # self.netD.requires_grad_(False)  # TODO: 请检查与下个语句是否等效？
-        self.set_requires_grad(self.netD, False)  # 优化生成器时，分辨器不需要计算梯度
+        self.netD.requires_grad_(False)  # TODO: 请检查与下个语句是否等效？
+        # self.set_requires_grad(self.netD, False)  # 优化生成器时，分辨器不需要计算梯度
         self.optimizer_G.zero_grad()        # 清零生成器的梯度
         self.backward_G()                   # 计算生成器的梯度
         self.optimizer_G.step()             # 更新生成器的权重
@@ -146,16 +155,53 @@ class Pix2Pix(BasicNN):
                                   *lr_scheduler_args)
             for optimizer in self.optimizers
         ]
+        history = History('train_l', 'train_acc', 'lrs')
         with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
                   desc=f'训练中...', mininterval=1) as pbar:
             for epoch in range(n_epochs):
                 pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
+                history.add(
+                    ['lrs'],
+                    [[param['lr'] for param in self.optimizer_D.param_groups + self.optimizer_G.param_groups]]
+                )
+                metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
                 for data in data_iter:
                     self(data)
                     self.optimize_parameters()
                     ls = self.get_current_losses()
-                    print(ls)
+                    with torch.no_grad():
+                        correct = acc_fn(self.fake_B, self.real_B)
+                        num_examples = self.fake_B.shape[0]
+                        metric.add(ls['G_GAN'] * num_examples, correct, num_examples)
                     pbar.update(1)
+                # 记录训练数据
+                history.add(
+                    ['train_l', 'train_acc'],
+                    [metric[0] / metric[2], metric[1] / metric[2]]
+                )
+            pbar.close()
+        return history
+
+    @torch.no_grad()
+    def test_(self, test_iter,
+              acc_fn: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
+              ls_fn: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
+              ) -> [float, float]:
+        self.eval()
+        metric = Accumulator(3)
+        for features, labels in test_iter:
+            self((features, labels))
+            pred = self.fake_B
+            fake_AB = torch.cat((self.real_A, pred), 1)
+            pred_fake = self.netD(fake_AB)
+            self.loss_G_GAN = self.criterionGAN(pred_fake, True)
+            # 接下来，计算G(A) = B
+            self.loss_G_L1 = self.criterionL1(pred, self.real_B) * 100
+            # 组合损失值并计算梯度
+            self.loss_G = self.loss_G_GAN + self.loss_G_L1
+            metric.add(acc_fn(pred, labels), self.loss_G * len(features), len(features))
+        return metric[0] / metric[2], metric[1] / metric[2]
+
 
     def get_current_losses(self):
         """Return traning losses / errors. train.py will print out these errors on console, and save them to a file"""
@@ -217,3 +263,4 @@ class Pix2Pix(BasicNN):
     @property
     def required_shape(self):
         return (256, 256)
+
