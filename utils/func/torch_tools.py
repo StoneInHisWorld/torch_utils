@@ -5,9 +5,9 @@ from torch.nn import init as init
 from networks.layers.ssim import SSIMLoss
 
 loss_es = ["l1", "entro", "mse", "huber", "ssim"]
-# init_funcs = ["normal", "xavier", "zero"]
 init_funcs = ["normal", "xavier", "zero", "state"]
-optimizers = ["sgd", "asgd", "adagrad", "adadelta", "rmsprop", "adam", "adamax"]
+optimizers = ["sgd", "asgd", "adagrad", "adadelta",
+              "rmsprop", "adam", "adamax"]
 lr_schedulers = ["lambda", "step"]
 
 
@@ -22,51 +22,39 @@ def try_gpu(i=0):
     return torch.device("cpu")
 
 
-def get_optimizer(net: torch.nn.Module, optim_str, lr=0.1, w_decay=0., momentum=0.):
-    assert optim_str in optimizers, f"不支持优化器{optim_str}, 支持的优化器包括{optimizers}"
-    if optim_str == "sgd":
-        # 使用随机梯度下降优化器
-        return torch.optim.SGD(
-            net.parameters(),
-            lr=lr,
-            weight_decay=w_decay,
-            momentum=momentum
-        )
-    elif optim_str == "asgd":
+# def get_optimizer(net: torch.nn.Module, optim_str, lr=0.1, w_decay=0., momentum=0.):
+def get_optimizer(net: torch.nn.Module, optim_str='adam', lr=0.1, w_decay=0., **kwargs):
+    if optim_str == "asgd":
         # 使用随机平均梯度下降优化器
         return torch.optim.ASGD(
             net.parameters(),
             lr=lr,
-            weight_decay=w_decay
+            weight_decay=w_decay,
+            **kwargs
         )
     elif optim_str == "adagrad":
         # 使用自适应梯度优化器
         return torch.optim.Adagrad(
             net.parameters(),
             lr=lr,
-            weight_decay=w_decay
+            weight_decay=w_decay,
+            **kwargs
         )
     elif optim_str == "adadelta":
         # 使用Adadelta优化器，Adadelta是Adagrad的改进
         return torch.optim.Adadelta(
             net.parameters(),
             lr=lr,
-            weight_decay=w_decay
-        )
-    elif optim_str == "rmsprop":
-        # 使用RMSprop优化器，RMSprop是Adagrad的改进
-        return torch.optim.RMSprop(
-            net.parameters(),
-            lr=lr,
             weight_decay=w_decay,
-            momentum=momentum
+            **kwargs
         )
     elif optim_str == "adam":
         # 使用Adaptive Moment Estimation优化器。Adam是RMSprop的改进。
         return torch.optim.Adam(
             net.parameters(),
             lr=lr,
-            weight_decay=w_decay
+            weight_decay=w_decay,
+            **kwargs
         )
     elif optim_str == "adamax":
         # 使用Adamax优化器，Adamax是Adam的改进
@@ -74,27 +62,46 @@ def get_optimizer(net: torch.nn.Module, optim_str, lr=0.1, w_decay=0., momentum=
             net.parameters(),
             lr=lr,
             weight_decay=w_decay,
+            **kwargs
         )
+    if optim_str == "rmsprop":
+        # 使用RMSprop优化器，RMSprop是Adagrad的改进
+        return torch.optim.RMSprop(
+            net.parameters(),
+            lr=lr,
+            weight_decay=w_decay,
+            **kwargs
+        )
+    elif optim_str == "sgd":
+        # 使用随机梯度下降优化器
+        return torch.optim.SGD(
+            net.parameters(),
+            lr=lr,
+            weight_decay=w_decay,
+            **kwargs
+        )
+    else:
+        raise NotImplementedError(f"不支持优化器{optim_str}, 支持的优化器包括{optimizers}")
 
 
-def get_loss(loss_str: str = "mse", **kwargs):
+def get_ls_fn(ls_str: str = "mse", **kwargs):
     """
     获取损失函数。
-    :param loss_str: 损失函数对应字符串
+    :param ls_str: 损失函数对应字符串
     :param kwargs: 输入到损失值计算模块中的关键词参数。请注意，每个损失值计算模块的关键词参数可能不同！建议输入关键词参数时只选用一种损失值计算模块。
     :return: 损失函数模块
     """
-    assert loss_str in loss_es, \
-        f"不支持损失函数{loss_str}, 支持的损失函数包括{loss_es}"
-    if loss_str == "l1":
+    assert ls_str in loss_es, \
+        f"不支持损失函数{ls_str}, 支持的损失函数包括{loss_es}"
+    if ls_str == "l1":
         return nn.L1Loss(**kwargs)
-    elif loss_str == "entro":
+    elif ls_str == "entro":
         return nn.CrossEntropyLoss(**kwargs)
-    elif loss_str == "mse":
+    elif ls_str == "mse":
         return nn.MSELoss(**kwargs)
-    elif loss_str == "huber":
+    elif ls_str == "huber":
         return nn.HuberLoss(**kwargs)
-    elif loss_str == "ssim":
+    elif ls_str == "ssim":
         return SSIMLoss(**kwargs)
 
 

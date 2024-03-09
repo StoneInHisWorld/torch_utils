@@ -2,7 +2,7 @@ import warnings
 from copy import deepcopy
 from queue import Queue
 from threading import Event
-from typing import Iterable
+from typing import Iterable, List, Callable
 
 import torch
 from torch import nn
@@ -216,16 +216,19 @@ def train_impl(
 class Trainer:
 
     def __init__(self,
-                 module,
-                 data_iter, optimizer: torch.optim.Optimizer, lr_scheduler, acc_fn,
+                 module, data_iter,
+                 optimizer_s: torch.optim.Optimizer or List[torch.optim.Optimizer],
+                 lr_scheduler_s, acc_fn,
+                 backward: Callable[[torch.Tensor, torch.Tensor], float],
                  n_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
                  with_hook=False, hook_mute=True):
         self.module = module
         # 存储必要训练对象
         self.__data_iter = data_iter
-        self.__optimizer = optimizer
-        self.__lr_scheduler = lr_scheduler
+        self.__optimizer_s = optimizer_s
+        self.__lr_scheduler_s = lr_scheduler_s
         self.__acc_fn = acc_fn
+        self.backward = backward
         self.__n_epochs = n_epochs
         self.__ls_fn = ls_fn
         # 处理hook机制
@@ -242,8 +245,8 @@ class Trainer:
         net = self.module
         data_iter = self.__data_iter
         n_epochs = self.__n_epochs
-        optimizer = self.__optimizer
-        lr_scheduler = self.__lr_scheduler
+        optimizer = self.__optimizer_s
+        lr_scheduler = self.__lr_scheduler_s
         ls_fn = self.__ls_fn
         acc_fn = self.__acc_fn
         history = History('train_l', 'train_acc', 'valid_l', 'valid_acc', 'lrs')
@@ -280,41 +283,83 @@ class Trainer:
             pbar.close()
         return history
 
+    # def train(self) -> History:
+    #     """神经网络训练函数。
+    #     :return: 训练数据记录`History`对象
+    #     """
+    #     # TODO: Untested
+    #     net = self.module
+    #     data_iter = self.__data_iter
+    #     n_epochs = self.__n_epochs
+    #     optimizer = self.__optimizer_s
+    #     lr_scheduler = self.__lr_scheduler_s
+    #     ls_fn = self.__ls_fn
+    #     acc_fn = self.__acc_fn
+    #     history = History('train_l', 'train_acc', 'lrs')
+    #     with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
+    #               desc=f'训练中...', mininterval=1) as pbar:
+    #         for epoch in range(n_epochs):
+    #             pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
+    #             history.add(
+    #                 ['lrs'],
+    #                 [[param['lr'] for param in optimizer.param_groups]]
+    #             )
+    #             metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
+    #             # 训练主循环
+    #             for X, y in data_iter:
+    #                 net.train()
+    #                 optimizer.zero_grad()
+    #                 lo = ls_fn(net(X), y)
+    #                 lo.backward()
+    #                 optimizer.step()
+    #                 with torch.no_grad():
+    #                     correct = acc_fn(net(X), y)
+    #                     num_examples = X.shape[0]
+    #                     metric.add(lo.item() * num_examples, correct, num_examples)
+    #                 pbar.update(1)
+    #             lr_scheduler.step()
+    #             # TODO:记录训练数据，可以细化到每个批次
+    #             history.add(
+    #                 ['train_l', 'train_acc'],
+    #                 [metric[0] / metric[2], metric[1] / metric[2]]
+    #             )
+    #         pbar.close()
+    #     return history
+
     def train(self) -> History:
-        """
-        神经网络训练函数。
+        """神经网络训练函数。
         :return: 训练数据记录`History`对象
         """
         # TODO: Untested
         net = self.module
         data_iter = self.__data_iter
         n_epochs = self.__n_epochs
-        optimizer = self.__optimizer
-        lr_scheduler = self.__lr_scheduler
+        # optimizer = self.__optimizer_s
+        lr_scheduler = self.__lr_scheduler_s
         ls_fn = self.__ls_fn
         acc_fn = self.__acc_fn
         history = History('train_l', 'train_acc', 'lrs')
         with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
                   desc=f'训练中...', mininterval=1) as pbar:
             for epoch in range(n_epochs):
-                # pbar.reset(len(data_iter))
                 pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
+
                 history.add(
                     ['lrs'],
-                    [[param['lr'] for param in optimizer.param_groups]]
+                    [[
+                        [param['lr'] for param in optimizer.param_groups]
+                        for optimizer in self.__optimizer_s
+                    ]]
                 )
                 metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
                 # 训练主循环
                 for X, y in data_iter:
                     net.train()
-                    optimizer.zero_grad()
-                    lo = ls_fn(net(X), y)
-                    lo.backward()
-                    optimizer.step()
+                    ls = self.backward(X, y)
                     with torch.no_grad():
                         correct = acc_fn(net(X), y)
                         num_examples = X.shape[0]
-                        metric.add(lo.item() * num_examples, correct, num_examples)
+                        metric.add(ls * num_examples, correct, num_examples)
                     pbar.update(1)
                 lr_scheduler.step()
                 # TODO:记录训练数据，可以细化到每个批次
@@ -338,8 +383,8 @@ class Trainer:
         net = self.module
         data_iter = self.__data_iter
         n_epochs = self.__n_epochs
-        optimizer = self.__optimizer
-        lr_scheduler = self.__lr_scheduler
+        optimizer = self.__optimizer_s
+        lr_scheduler = self.__lr_scheduler_s
         ls_fn = self.__ls_fn
         acc_fn = self.__acc_fn
 

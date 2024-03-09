@@ -1,6 +1,6 @@
 import os.path
 import warnings
-from typing import Callable
+from typing import Callable, List
 
 import torch
 import torch.nn as nn
@@ -34,8 +34,13 @@ class BasicNN(nn.Sequential):
         with_checkpoint = False if 'with_checkpoint' not in kwargs.keys() else kwargs['with_checkpoint']
         init_args = [] if 'init_args' not in kwargs.keys() else kwargs['init_args']
         # 初始化各模块
-        super().__init__(*args)
+        super(BasicNN, self).__init__(*args)
         self.__init_submodules(init_meth, *init_args)
+        self.optimizers = None
+        self.lr_schedulers = None
+        self.ls_fn = None
+        self.backward = None
+        self.is_train = False
         self.apply(lambda m: m.to(device))
 
         self.__device = device
@@ -43,48 +48,156 @@ class BasicNN(nn.Sequential):
             warnings.warn('使用“检查点机制”虽然会减少前向传播的内存使用，但是会大大增加反向传播的计算量！')
         self.__checkpoint = with_checkpoint
 
-    def train_(self,
-               data_iter, optimizer, acc_fn,
-               n_epochs=10, ls_fn: nn.Module = nn.L1Loss(), lr_scheduler=None,
-               valid_iter=None, k=1, n_workers=1, hook=None
-               ):
+    def prepare_training(self,
+                         o_args: tuple = (), o_kwargs: dict = {},
+                         l_args: tuple = (), l_kwargs: dict = {},
+                         ls_args: tuple = (), ls_kwargs: dict = {}
+                         ):
+        self.optimizers = self._get_optimizer(*o_args, **o_kwargs)
+        self.lr_schedulers = self._get_lr_scheduler(*l_args, **l_kwargs)
+        self.ls_fn = self._get_ls_fn(*ls_args, **ls_kwargs)
+
+        def backward(X, y):
+            if isinstance(self.optimizers, list):
+                for optim in self.optimizers:
+                    optim.zero_grad()
+                lo = self.ls_fn(self(X), y)
+                lo.backward()
+                for optim in self.optimizers:
+                    optim.step()
+            else:
+                self.optimizers.zero_grad()
+                lo = self.ls_fn(self(X), y)
+                lo.backward()
+                self.optimizers.step()
+            return lo.item()
+
+        self.backward = backward
+        self.is_train = True
+
+    def _get_optimizer(self, optim_str='adam', *args,
+                       **kwargs) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
+        return ttools.get_optimizer(self, optim_str, *args, **kwargs)
+
+    def _get_lr_scheduler(self, scheduler_str_s='step', *args, **kwargs):
+        """为优化器定制规划器
+        :param scheduler_str_s:
+        :param args:
+        :param kwargs:
+        :return:
         """
-        神经网络训练函数，调用Trainer进行训练。
+        # TODO：尝试支持多规划器
+        if isinstance(self.optimizers, list):
+            # 如果网络训练使用多个优化器
+            if isinstance(scheduler_str_s, list):
+                assert len(self.optimizers) == len(scheduler_str_s), \
+                    f'指定的规划器数量{len(scheduler_str_s)}与优化器数量{len(self.optimizers)}不对等！'
+            else:
+                scheduler_str_s = [scheduler_str_s for _ in range(len(self.optimizers))]
+            assert len(args) == len(self.optimizers), \
+                f'指定的规划器参数数量{len(args)}与优化器数量{len(self.optimizers)}不对等！'
+            return [
+                ttools.get_lr_scheduler(optim, ss, **kwargs)
+                for ss, optim, kwargs in zip(scheduler_str_s, self.optimizers, args)
+            ]
+        else:
+            if kwargs == {}:
+                kwargs = {'step_size': 1, 'gamma': 1}
+            return ttools.get_lr_scheduler(self.optimizers, scheduler_str_s, **kwargs)
+
+    def _get_ls_fn(self, ls_fn='mse', **kwargs):
+        return ttools.get_ls_fn(ls_fn, **kwargs)
+
+    # def train_(self,
+    #            data_iter, optimizers, acc_fn,
+    #            n_epochs=10, ls_fn: nn.Module = nn.L1Loss(), lr_schedulers=None,
+    #            valid_iter=None, k=1, n_workers=1, hook=None
+    #            ):
+    #     """神经网络训练函数
+    #     调用Trainer进行训练。
+    #     :param data_iter: 训练数据供给迭代器。
+    #     :param optimizers: 网络参数优化器。可以通过list传入多个优化器。
+    #     :param acc_fn: 准确率计算函数。签名需为：acc_fn(predict: tensor, labels: tensor, size_averaged: bool = True) -> ls: tensor or float
+    #     :param n_epochs: 迭代世代数。
+    #     :param ls_fn: 训练损失函数。签名需为：ls_fn(predict: tensor, labels: tensor) -> ls: tensor，其中不允许有销毁梯度的操作。
+    #     :param lr_schedulers: 学习率规划器，用于动态改变学习率。若不指定，则会使用固定学习率规划器。
+    #     :param valid_iter: 验证数据供给迭代器。
+    #     :param hook: 是否使用hook机制跟踪梯度变化。可选填入[None, 'mute', 'full']
+    #     :param n_workers: 进行训练的处理机数量。
+    #     :param k: 进行训练的k折数，指定为1则不进行k-折训练，否则进行k-折训练，并且data_iter为k-折训练数据供给器，valid_iter会被忽略.
+    #     :return: 训练数据记录`History`对象
+    #     """
+    #     assert self.is_train, '在训练之前，请先调用prepare_training()！'
+    #     if hook is None:
+    #         with_hook, hook_mute = False, False
+    #     elif hook == 'mute':
+    #         with_hook, hook_mute = True, True
+    #     else:
+    #         with_hook, hook_mute = True, False
+    #     if lr_schedulers is None:
+    #         if isinstance(optimizers, list):
+    #             lr_schedulers = [torch.optim.lr_scheduler.StepLR(optim, 1, 1) for optim in optimizers]
+    #         else:
+    #             lr_schedulers = torch.optim.lr_scheduler.StepLR(optimizers, 1, 1)
+    #     with Trainer(self,
+    #                  data_iter, optimizers, lr_schedulers, acc_fn, n_epochs, ls_fn,
+    #                  with_hook, hook_mute) as trainer:
+    #         if k > 1:
+    #             # 是否进行k-折训练
+    #             history = trainer.train_with_k_fold(data_iter, k, n_workers)
+    #         elif n_workers <= 1:
+    #             # 判断是否要多线程
+    #             if valid_iter:
+    #                 history = trainer.train_and_valid(valid_iter)
+    #             else:
+    #                 history = trainer.train()
+    #         else:
+    #             history = trainer.train_with_threads(valid_iter)
+    #     self.is_train = False
+    #     return history
+
+    def train_(self,
+               data_iter, criteria,
+               n_epochs=10, valid_iter=None, k=1, n_workers=1, hook=None
+               ):
+        """神经网络训练函数
+        调用Trainer进行训练。
         :param data_iter: 训练数据供给迭代器。
-        :param optimizer: 网络参数优化器。
-        :param acc_fn: 准确率计算函数。签名需为：acc_fn(predict: tensor, labels: tensor, size_averaged: bool = True) -> ls: tensor or float
+        :param optimizers: 网络参数优化器。可以通过list传入多个优化器。
+        :param criteria: 准确率计算函数。签名需为：acc_fn(predict: tensor, labels: tensor, size_averaged: bool = True) -> ls: tensor or float
         :param n_epochs: 迭代世代数。
         :param ls_fn: 训练损失函数。签名需为：ls_fn(predict: tensor, labels: tensor) -> ls: tensor，其中不允许有销毁梯度的操作。
-        :param lr_scheduler: 学习率规划器，用于动态改变学习率。若不指定，则会使用固定学习率规划器。
+        :param lr_schedulers: 学习率规划器，用于动态改变学习率。若不指定，则会使用固定学习率规划器。
         :param valid_iter: 验证数据供给迭代器。
         :param hook: 是否使用hook机制跟踪梯度变化。可选填入[None, 'mute', 'full']
         :param n_workers: 进行训练的处理机数量。
         :param k: 进行训练的k折数，指定为1则不进行k-折训练，否则进行k-折训练，并且data_iter为k-折训练数据供给器，valid_iter会被忽略.
         :return: 训练数据记录`History`对象
         """
+        assert self.is_train, '在训练之前，请先调用prepare_training()！'
         if hook is None:
             with_hook, hook_mute = False, False
         elif hook == 'mute':
             with_hook, hook_mute = True, True
         else:
             with_hook, hook_mute = True, False
-        # TODO: optimizer以及lr_scheduler需要支持多个
-        if lr_scheduler is None:
-            lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, 1)
         with Trainer(self,
-                     data_iter, optimizer, lr_scheduler, acc_fn, n_epochs, ls_fn,
-                     with_hook, hook_mute) as trainer:
+                     data_iter, self.optimizers, self.lr_schedulers, criteria,
+                     n_epochs, self.ls_fn, with_hook, hook_mute) as trainer:
             if k > 1:
                 # 是否进行k-折训练
-                return trainer.train_with_k_fold(data_iter, k, n_workers)
+                history = trainer.train_with_k_fold(data_iter, k, n_workers)
             elif n_workers <= 1:
                 # 判断是否要多线程
                 if valid_iter:
-                    return trainer.train_and_valid(valid_iter)
+                    history = trainer.train_and_valid(valid_iter)
                 else:
-                    return trainer.train()
+                    history = trainer.train()
             else:
-                return trainer.train_with_threads(valid_iter)
+                history = trainer.train_with_threads(valid_iter)
+        del self.optimizers, self.lr_schedulers, self.ls_fn
+        self.is_train = False
+        return history
 
     @torch.no_grad()
     def test_(self, test_iter,

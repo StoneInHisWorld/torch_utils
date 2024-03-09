@@ -3,9 +3,10 @@ from typing import Callable
 
 import torch
 from torch import nn as nn
-from torch.nn import Module
 from torch.optim import lr_scheduler
 from tqdm import tqdm
+
+import utils.func.torch_tools as ttools
 
 from networks.basic_nn import BasicNN
 from networks.layers.ganloss import GANLoss
@@ -16,16 +17,14 @@ from utils.history import History
 
 
 class Pix2Pix(BasicNN):
-    
     # 指定输出的训练损失类型
     loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
 
     def __init__(self,
                  g_args, g_kwargs,
                  d_args, d_kwargs,
-                 gan_mode='lsgan', lr=0.2, beta1=0.1,
-                 direction='AtoB', isTrain=True,
-                 *args: Module, **kwargs):
+                 gan_mode='lsgan', direction='AtoB', isTrain=True,
+                 **kwargs):
         """实现pix2pix模型，通过给定数据对学习输入图片到输出图片的映射。
 
         pix2pix不使用图片缓存。
@@ -45,14 +44,11 @@ class Pix2Pix(BasicNN):
         :param d_args:
         :param d_kwargs:
         :param gan_mode:
-        :param lr:
-        :param beta1:
         :param direction:
-        :param args:
         :param kwargs:
         """
         # 指定保存或展示的图片
-        self.visual_names = ['real_A', 'fake_B', 'real_B']
+        # self.visual_names = ['real_A', 'fake_B', 'real_B']
         self.direction = direction
         # 指定保存的模型
         if isTrain:
@@ -80,141 +76,212 @@ class Pix2Pix(BasicNN):
             # 定义损失函数
             self.criterionGAN = GANLoss(gan_mode).to(self.device)
             self.criterionL1 = torch.nn.L1Loss()
-            # 初始化优化器
-            self.optimizer_G = torch.optim.Adam(
-                self.netG.parameters(), lr=lr, betas=(beta1, 0.999)
-            )
-            self.optimizer_D = torch.optim.Adam(
-                self.netD.parameters(), lr=lr, betas=(beta1, 0.999)
-            )
-            self.optimizers = []
-            self.optimizers.append(self.optimizer_G)
-            self.optimizers.append(self.optimizer_D)
+            # # 初始化优化器
+            # self.optimizer_G = torch.optim.Adam(
+            #     self.netG.parameters(), lr=lr, betas=(beta1, 0.999)
+            # )
+            # self.optimizer_D = torch.optim.Adam(
+            #     self.netD.parameters(), lr=lr, betas=(beta1, 0.999)
+            # )
+            # self.optimizers = []
+            # self.optimizers.append(self.optimizer_G)
+            # self.optimizers.append(self.optimizer_D)
 
         self.isTrain = isTrain
 
     def forward(self, input):
-        input_A = input[0]
-        input_B = input[1]
-        AtoB = self.direction == 'AtoB'
-        self.real_A = input_A if AtoB else input_B
-        self.real_B = input_B if AtoB else input_A
-        self.fake_B = self.netG(self.real_A)
+        # input_A = input[0]
+        # input_B = input[1]
+        # AtoB = self.direction == 'AtoB'
+        # self.real_A = input_A if AtoB else input_B
+        # self.real_B = input_B if AtoB else input_A
+        # self.fake_B = self.netG(self.real_A)
+        # return self.fake_B
+        return self.netG(input)
 
-    def backward_G(self, lambda_l1=100.0):
-        """计算生成器的GAN损失值和L1损失值"""
-        # 首先，G(A)需要骗过分辨器
-        fake_AB = torch.cat((self.real_A, self.fake_B), 1)
-        pred_fake = self.netD(fake_AB)
-        self.loss_G_GAN = self.criterionGAN(pred_fake, True)
-        # 接下来，计算G(A) = B
-        self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * lambda_l1
-        # 组合损失值并计算梯度
-        self.loss_G = self.loss_G_GAN + self.loss_G_L1
-        self.loss_G.backward()
+    # def backward_G(self, lambda_l1=100.0):
+    #     """计算生成器的GAN损失值和L1损失值"""
+    #     # 首先，G(A)需要骗过分辨器
+    #     fake_AB = torch.cat((self.real_A, self.fake_B), 1)
+    #     pred_fake = self.netD(fake_AB)
+    #     self.loss_G_GAN = self.criterionGAN(pred_fake, True)
+    #     # 接下来，计算G(A) = B
+    #     self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * lambda_l1
+    #     # 组合损失值并计算梯度
+    #     self.loss_G = self.loss_G_GAN + self.loss_G_L1
+    #     self.loss_G.backward()
+    #
+    # def backward_D(self):
+    #     """计算分辨器的GANLoss"""
+    #     # 造假。将fake_B解绑以停止向生成器的反向传播
+    #     # 使用conditional GAN，需要向分辨          器投入输入和输出
+    #     fake_AB = torch.cat((self.real_A, self.fake_B), 1)
+    #     pred_fake = self.netD(fake_AB.detach())
+    #     self.loss_D_fake = self.criterionGAN(pred_fake, False)
+    #     # 真实值
+    #     real_AB = torch.cat((self.real_A, self.real_B), 1)
+    #     pred_real = self.netD(real_AB)
+    #     self.loss_D_real = self.criterionGAN(pred_real, True)
+    #     # 组合损失值并计算梯度，0.5是两个预测值的权重
+    #     self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5
+    #     self.loss_D.backward()
 
-    def backward_D(self):
-        """计算分辨器的GANLoss"""
-        # 造假。将fake_B解绑以停止向生成器的反向传播
-        # 使用conditional GAN，需要向分辨器投入输入和输出
-        fake_AB = torch.cat((self.real_A, self.fake_B), 1)
-        pred_fake = self.netD(fake_AB.detach())
-        self.loss_D_fake = self.criterionGAN(pred_fake, False)
-        # 真实值
-        real_AB = torch.cat((self.real_A, self.real_B), 1)
-        pred_real = self.netD(real_AB)
-        self.loss_D_real = self.criterionGAN(pred_real, True)
-        # 组合损失值并计算梯度，0.5是两个预测值的权重
-        self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5
-        self.loss_D.backward()
+    # def optimize_parameters(self):
+    #     # self.forward()                   # 计算虚假图片：G(A)
+    #     # 更新分辨器
+    #     self.netD.requires_grad_(True)  # TODO: 请检查与下个语句是否等效？
+    #     # self.set_requires_grad(self.netD, True)  # 开启分辨器的反向传播
+    #     self.optimizer_D.zero_grad()     # 清零分辨器的梯度
+    #     self.backward_D()                # 计算分辨器的梯度
+    #     self.optimizer_D.step()          # 更新分辨器的权重
+    #     # 更新生成器
+    #     self.netD.requires_grad_(False)  # TODO: 请检查与下个语句是否等效？
+    #     # self.set_requires_grad(self.netD, False)  # 优化生成器时，分辨器不需要计算梯度
+    #     self.optimizer_G.zero_grad()        # 清零生成器的梯度
+    #     self.backward_G()                   # 计算生成器的梯度
+    #     self.optimizer_G.step()             # 更新生成器的权重
 
-    def optimize_parameters(self):
-        # self.forward()                   # 计算虚假图片：G(A)
-        # 更新分辨器
-        self.netD.requires_grad_(True)  # TODO: 请检查与下个语句是否等效？
-        # self.set_requires_grad(self.netD, True)  # 开启分辨器的反向传播
-        self.optimizer_D.zero_grad()     # 清零分辨器的梯度
-        self.backward_D()                # 计算分辨器的梯度
-        self.optimizer_D.step()          # 更新分辨器的权重
-        # 更新生成器
-        self.netD.requires_grad_(False)  # TODO: 请检查与下个语句是否等效？
-        # self.set_requires_grad(self.netD, False)  # 优化生成器时，分辨器不需要计算梯度
-        self.optimizer_G.zero_grad()        # 清零生成器的梯度
-        self.backward_G()                   # 计算生成器的梯度
-        self.optimizer_G.step()             # 更新生成器的权重
+    def prepare_training(self,
+                         o_args: tuple = (), o_kwargs: dict = {},
+                         l_args: tuple = (), l_kwargs: dict = {},
+                         ls_args: tuple = (), ls_kwargs: dict = {}
+                         ):
+        super().prepare_training(
+            o_args, o_kwargs, l_args, l_kwargs, ls_args, ls_kwargs
+        )
 
-    def train_(self,
-               data_iter, optimizer, acc_fn,
-               n_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
-               lr_scheduler=None, valid_iter=None,
-               k=1, n_workers=1, hook=None,
-               lr_scheduler_args=()
-               ):
-        self.schedulers = [
-            Pix2Pix.get_scheduler(optimizer, lr_scheduler,
-                                  *lr_scheduler_args)
-            for optimizer in self.optimizers
-        ]
-        history = History('train_l', 'train_acc', 'lrs')
-        with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
-                  desc=f'训练中...', mininterval=1) as pbar:
-            for epoch in range(n_epochs):
-                pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
-                history.add(
-                    ['lrs'],
-                    [[param['lr'] for param in self.optimizer_D.param_groups + self.optimizer_G.param_groups]]
-                )
-                metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
-                for data in data_iter:
-                    self(data)
-                    self.optimize_parameters()
-                    ls = self.get_current_losses()
-                    with torch.no_grad():
-                        correct = acc_fn(self.fake_B, self.real_B)
-                        num_examples = self.fake_B.shape[0]
-                        metric.add(ls['G_GAN'] * num_examples, correct, num_examples)
-                    pbar.update(1)
-                # 记录训练数据
-                history.add(
-                    ['train_l', 'train_acc'],
-                    [metric[0] / metric[2], metric[1] / metric[2]]
-                )
-            pbar.close()
-        return history
-
-    @torch.no_grad()
-    def test_(self, test_iter,
-              acc_fn: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
-              ls_fn: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
-              ) -> [float, float]:
-        self.eval()
-        metric = Accumulator(3)
-        for features, labels in test_iter:
-            self((features, labels))
-            pred = self.fake_B
-            fake_AB = torch.cat((self.real_A, pred), 1)
+        def backward_G(X, y, pred, lambda_l1=100.0):
+            # """计算生成器的GAN损失值和L1损失值"""
+            # # 首先，G(A)需要骗过分辨器
+            # fake_AB = torch.cat((self.real_A, self.fake_B), 1)
+            # pred_fake = self.netD(fake_AB)
+            # self.loss_G_GAN = self.criterionGAN(pred_fake, True)
+            # # 接下来，计算G(A) = B
+            # self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * lambda_l1
+            # # 组合损失值并计算梯度
+            # self.loss_G = self.loss_G_GAN + self.loss_G_L1
+            # self.loss_G.backward()
+            # return self.loss_G
+            """计算生成器的GAN损失值和L1损失值"""
+            # 首先，G(A)需要骗过分辨器
+            fake_AB = torch.cat((X, pred), 1)
             pred_fake = self.netD(fake_AB)
-            self.loss_G_GAN = self.criterionGAN(pred_fake, True)
+            gan_ls = self.criterionGAN(pred_fake, True)
             # 接下来，计算G(A) = B
-            self.loss_G_L1 = self.criterionL1(pred, self.real_B) * 100
+            l1_ls = self.criterionL1(pred, y) * lambda_l1
             # 组合损失值并计算梯度
-            self.loss_G = self.loss_G_GAN + self.loss_G_L1
-            metric.add(acc_fn(pred, labels), self.loss_G * len(features), len(features))
-        return metric[0] / metric[2], metric[1] / metric[2]
+            ls = gan_ls + l1_ls
+            ls.backward()
+            return ls
 
+        def backward_D(X, y, pred):
+            # """计算分辨器的GANLoss"""
+            # # 造假。将fake_B解绑以停止向生成器的反向传播
+            # # 使用conditional GAN，需要向分辨器投入输入和输出
+            # fake_AB = torch.cat((self.real_A, self.fake_B), 1)
+            # pred_fake = self.netD(fake_AB.detach())
+            # fake_ls = self.criterionGAN(pred_fake, False)
+            # # 真实值
+            # real_AB = torch.cat((self.real_A, self.real_B), 1)
+            # pred_real = self.netD(real_AB)
+            # real_ls = self.criterionGAN(pred_real, True)
+            # # 组合损失值并计算梯度，0.5是两个预测值的权重
+            # ls = (fake_ls + real_ls) * 0.5
+            # ls.backward()
+            # return ls
+            """计算分辨器的GANLoss"""
+            # 造假。将fake_B解绑以停止向生成器的反向传播
+            # 使用conditional GAN，需要向分辨器投入输入和输出
+            fake_AB = torch.cat((X, pred), 1)
+            pred_fake = self.netD(fake_AB.detach())
+            fake_ls = self.criterionGAN(pred_fake, False)
+            # 真实值
+            real_AB = torch.cat((X, y), 1)
+            pred_real = self.netD(real_AB)
+            real_ls = self.criterionGAN(pred_real, True)
+            # 组合损失值并计算梯度，0.5是两个预测值的权重
+            ls = (fake_ls + real_ls) * 0.5
+            ls.backward()
+            return ls
 
-    def get_current_losses(self):
-        """Return traning losses / errors. train.py will print out these errors on console, and save them to a file"""
-        errors_ret = OrderedDict()
-        for name in self.loss_names:
-            if isinstance(name, str):
-                errors_ret[name] = float(
-                    getattr(self, 'loss_' + name))  # float(...) works for both scalar tensor and float number
-        return errors_ret
+        def backward(X, y):
+            # # 更新分辨器
+            # self.netD.requires_grad_(True)  # TODO: 请检查与下个语句是否等效？
+            # self.optimizer_D.zero_grad()     # 清零分辨器的梯度
+            # loss_D = backward_D()                # 计算分辨器的梯度
+            # self.optimizer_D.step()          # 更新分辨器的权重
+            # # 更新生成器
+            # self.netD.requires_grad_(False)  # TODO: 请检查与下个语句是否等效？
+            # self.optimizer_G.zero_grad()        # 清零生成器的梯度
+            # loss_G = backward_G()                   # 计算生成器的梯度
+            # self.optimizer_G.step()             # 更新生成器的权重
+            # return loss_G, loss_D
+            # 前向传播
+            AtoB = self.direction == 'AtoB'
+            X, y = [X, y] if AtoB else [y, X]
+            pred = self(X)
+            # 更新分辨器
+            self.netD.requires_grad_(True)  # TODO: 请检查与下个语句是否等效？
+            self.optimizer_D.zero_grad()  # 清零分辨器的梯度
+            loss_D = backward_D(X, y, pred)  # 计算分辨器的梯度
+            self.optimizer_D.step()  # 更新分辨器的权重
+            # 更新生成器
+            self.netD.requires_grad_(False)  # TODO: 请检查与下个语句是否等效？
+            self.optimizer_G.zero_grad()  # 清零生成器的梯度
+            loss_G = backward_G(X, y, pred)  # 计算生成器的梯度
+            self.optimizer_G.step()  # 更新生成器的权重
+            return loss_G, loss_D
 
-    @staticmethod
-    def get_scheduler(optimizer, lr_policy='linear',
-                      *args):
+        self.backward = backward
+
+    def _get_optimizer(self, optim_str_s=None, *args,
+                       **kwargs):
+        """
+
+        :param optim_str_s:
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        # 检查优化器类型
+        if optim_str_s is None:
+            optim_str_s = ['adam', 'adam']
+        elif isinstance(optim_str_s, str):
+            optim_str_s = [optim_str_s, optim_str_s]
+        elif isinstance(optim_str_s, list):
+            assert len(optim_str_s) == 2, f'{self.__name__}需要同时为生成器和分辨器指定优化器。'
+            assert isinstance(optim_str_s[0], str), f'无法识别的优化器类型{optim_str_s[0]}。'
+            assert isinstance(optim_str_s[1], str), f'无法识别的优化器类型{optim_str_s[1]}。'
+        else:
+            raise TypeError('无法识别的优化器类型')
+        optim_str_g, optim_str_d = optim_str_s
+        # 检查优化器参数
+        try:
+            (g_args, g_kwargs), (d_args, d_kwargs) = args
+        except TypeError:
+            raise TypeError(f'{self.__name__}需要在args参数下同时为生成器和分辨器的优化器指定参数。')
+        except ValueError:
+            # 设置默认参数
+            lr, betas = 0.2, (0.1, 0.999)
+            if len(args) == 0:
+                args = (lr,)
+                kwargs = {'betas': betas}
+                g_args, g_kwargs = args, kwargs
+                d_args, d_kwargs = args, kwargs
+            elif len(args) == 1:
+                g_args, g_kwargs = args
+                d_args, d_kwargs = (lr,), {'betas': betas}
+            else:
+                raise ValueError(f'{self.__name__}在args参数下只需要为生成器和分辨器的优化器指定参数。')
+        self.optimizer_G = ttools.get_optimizer(
+            self.netG, optim_str_g, *g_args, **g_kwargs
+        )
+        self.optimizer_D = ttools.get_optimizer(
+            self.netD, optim_str_d, *d_args, **d_kwargs
+        )
+        return [self.optimizer_G, self.optimizer_D]
+
+    def _get_lr_scheduler(self, scheduler_str_s='step', **kwargs):
         """Return a learning rate scheduler
 
         Parameters:
@@ -227,40 +294,261 @@ class Pix2Pix(BasicNN):
         For other schedulers (step, plateau, and cosine), we use the default PyTorch schedulers.
         See https://pytorch.org/docs/stable/optim.html for more details.
         """
-        if lr_policy == 'linear':
-            epoch_count, n_epochs, n_epochs_decay = args
+        if not isinstance(scheduler_str_s, list):
+            scheduler_str_s = [scheduler_str_s, scheduler_str_s]
+        schedulers = []
+        for ss, optimizer in zip(scheduler_str_s, self.optimizers):
+            if ss == 'linear':
+                epoch_count, n_epochs, n_epochs_decay = kwargs['epoch_count'], kwargs['n_epochs'], kwargs[
+                    'n_epochs_decay']
 
-            def lambda_rule(epoch):
-                lr_l = 1.0 - max(0, epoch + epoch_count - n_epochs) / float(n_epochs_decay + 1)
-                return lr_l
+                def lambda_rule(epoch):
+                    lr_l = 1.0 - max(0, epoch + epoch_count - n_epochs) / float(n_epochs_decay + 1)
+                    return lr_l
 
-            scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
-        elif lr_policy == 'step':
-            lr_decay_iters, = args
-            scheduler = lr_scheduler.StepLR(optimizer, step_size=lr_decay_iters, gamma=0.1)
-        elif lr_policy == 'plateau':
-            scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, threshold=0.01, patience=5)
-        elif lr_policy == 'cosine':
-            n_epochs, = args
-            scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=0)
+                scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
+            elif ss == 'step':
+                scheduler = lr_scheduler.StepLR(optimizer, **kwargs)
+            elif ss == 'plateau':
+                scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, **kwargs)
+            elif ss == 'cosine':
+                scheduler = lr_scheduler.CosineAnnealingLR(optimizer, **kwargs)
+            else:
+                return NotImplementedError(f'不支持的学习率变化策略{scheduler_str_s}')
+            schedulers.append(scheduler)
+        return schedulers
+
+    # def train_(self,
+    #            data_iter, criteria,
+    #            n_epochs=10, valid_iter=None, k=1, n_workers=1, hook=None
+    #            ):
+    #     history = History('train_l', 'train_acc', 'lrs')
+    #     with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
+    #               desc=f'训练中...', mininterval=1) as pbar:
+    #         for epoch in range(n_epochs):
+    #             pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
+    #             history.add(
+    #                 ['lrs'],
+    #                 [[param['lr'] for param in self.optimizer_D.param_groups + self.optimizer_G.param_groups]]
+    #             )
+    #             metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
+    #             for data in data_iter:
+    #                 self(data)
+    #                 self.optimize_parameters()
+    #                 ls = self.get_current_losses()
+    #                 with torch.no_grad():
+    #                     correct = criteria(self.fake_B, self.real_B)
+    #                     num_examples = self.fake_B.shape[0]
+    #                     metric.add(ls['G_GAN'] * num_examples, correct, num_examples)
+    #                 pbar.update(1)
+    #             # 记录训练数据
+    #             history.add(
+    #                 ['train_l', 'train_acc'],
+    #                 [metric[0] / metric[2], metric[1] / metric[2]]
+    #             )
+    #         pbar.close()
+    #     return history
+
+    def train_(self,
+               data_iter, criterion_a,
+               n_epochs=10, valid_iter=None, k=1, n_workers=1, hook=None
+               ):
+        if isinstance(criterion_a, list):
+            # TODO: Untested!
+            history = History(
+                'train_g_ls', 'train_d_ls',
+                *[f'train_{criterion.__name__}' for criterion in criterion_a],
+                'lrs'
+            )
+            with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
+                      desc=f'训练中...', mininterval=1) as pbar:
+                for epoch in range(n_epochs):
+                    pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
+                    history.add(
+                        ['lrs'],
+                        [
+                            [
+                                [param['lr'] for param in optimizer.param_groups]
+                                for optimizer in self.optimizers
+                            ],
+                        ]
+                    )
+                    metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
+                    for X, y in data_iter:
+                        ls = self.backward(X, y)
+                        g_ls, d_ls = ls
+                        with torch.no_grad():
+                            correct_s = []
+                            for criterion in criterion_a:
+                                correct = criterion(self(X), y)
+                                correct_s.append(correct)
+                            num_examples = X.shape[0]
+                            metric.add(
+                                g_ls * num_examples,
+                                d_ls * num_examples,
+                                *correct_s, num_examples
+                            )
+                        pbar.update(1)
+                    # 记录训练数据
+                    history.add(
+                        ['train_g_ls', 'train_d_ls'] + [f'train_{criterion.__name__}' for criterion in criterion_a],
+                        [metric[i] / metric[-1] for i in range(len(metric) - 1)]
+                    )
+                pbar.close()
         else:
-            return NotImplementedError('learning rate policy [%s] is not implemented', lr_policy)
-        return scheduler
+            history = History(
+                'train_g_ls', 'train_d_ls', f'train_{criterion_a.__name__}', 'lrs'
+            )
+            with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
+                      desc=f'训练中...', mininterval=1) as pbar:
+                for epoch in range(n_epochs):
+                    pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
+                    history.add(
+                        ['lrs'],
+                        [
+                            [
+                                [param['lr'] for param in optimizer.param_groups]
+                                for optimizer in self.optimizers
+                            ],
+                        ]
+                    )
+                    metric = Accumulator(4)  # 批次训练损失总和，准确率，样本数
+                    for X, y in data_iter:
+                        ls = self.backward(X, y)
+                        g_ls, d_ls = ls
+                        with torch.no_grad():
+                            correct = criterion_a(self(X), y)
+                            num_examples = X.shape[0]
+                            metric.add(
+                                g_ls * num_examples,
+                                d_ls * num_examples,
+                                correct, num_examples
+                            )
+                        pbar.update(1)
+                    # 记录训练数据
+                    history.add(
+                        ['train_g_ls', 'train_d_ls', f'train_{criterion_a.__name__}'],
+                        [metric[i] / metric[-1] for i in range(len(metric) - 1)]
+                    )
+                pbar.close()
+        return history
 
-    def set_requires_grad(self, nets, requires_grad=False):
-        """Set requies_grad=Fasle for all the networks to avoid unnecessary computations
-        Parameters:
-            nets (network list)   -- a list of networks
-            requires_grad (bool)  -- whether the networks require gradients or not
-        """
-        if not isinstance(nets, list):
-            nets = [nets]
-        for net in nets:
-            if net is not None:
-                for param in net.parameters():
-                    param.requires_grad = requires_grad
+    @torch.no_grad()
+    def test_(self, test_iter,
+              criterion_a: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
+              ls_fn_s: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
+              ) -> [float, float]:
+        self.eval()
+        # 要统计的数据数目
+        n_metric = len(criterion_a) if isinstance(criterion_a, list) else 1
+        n_metric = n_metric + len(ls_fn_s) if isinstance(ls_fn_s, list) else n_metric + 1
+        metric = Accumulator(n_metric + 1)
+        # 逐个批次计算测试数据
+        for features, labels in test_iter:
+            pred = self(features)
+            fake_AB = torch.cat((features, pred), 1)
+            pred_fake = self.netD(fake_AB)
+            self.loss_G_GAN = self.criterionGAN(pred_fake, True)
+            # 接下来，计算G(A) = B
+            self.loss_G_L1 = self.criterionL1(pred, labels) * 100
+            # 组合损失值并计算梯度
+            self.loss_G = self.loss_G_GAN + self.loss_G_L1
+            metric_to_add = [criterion(pred, labels) for criterion in criterion_a] \
+                if isinstance(criterion_a, list) else [criterion_a(pred, labels)]
+            metric_to_add += [ls_fn(pred, labels) for ls_fn in ls_fn_s] \
+                if isinstance(ls_fn_s, list) else [ls_fn_s(pred, labels)]
+            metric_to_add.append(len(features))
+            metric.add(*metric_to_add)
+        # 生成测试日志
+        i = 0
+        test_log = {}
+        if isinstance(criterion_a, list):
+            j = 0
+            for j, criterion in enumerate(criterion_a):
+                try:
+                    test_log[f'test_{criterion.__name__}'] = metric[i + j] / metric[-1]
+                except AttributeError:
+                    test_log[f'test_{criterion.__class__.__name__}'] = metric[i + j] / metric[-1]
+            i += j
+        else:
+            try:
+                test_log[f'test_{criterion_a.__name__}'] = metric[i] / metric[-1]
+            except AttributeError:
+                test_log[f'test_{criterion_a.__class__.__name__}'] = metric[i] / metric[-1]
+            i += 1
+        if isinstance(ls_fn_s, list):
+            j = 0
+            for j, ls_fn in enumerate(ls_fn_s):
+                try:
+                    test_log[f'test_{ls_fn.__name__}'] = metric[i + j] / metric[-1]
+                except AttributeError:
+                    test_log[f'test_{ls_fn.__class__.__name__}'] = metric[i] / metric[-1]
+            i += j
+        else:
+            try:
+                test_log[f'test_{ls_fn_s.__name__}'] = metric[i] / metric[-1]
+            except AttributeError:
+                test_log[f'test_{ls_fn_s.__class__.__name__}'] = metric[i] / metric[-1]
+            i += 1
+        return test_log
+
+    def get_current_losses(self):
+        """Return traning losses / errors. train.py will print out these errors on console, and save them to a file"""
+        errors_ret = OrderedDict()
+        for name in self.loss_names:
+            if isinstance(name, str):
+                errors_ret[name] = float(
+                    getattr(self, 'loss_' + name))  # float(...) works for both scalar tensor and float number
+        return errors_ret
+
+    # @staticmethod
+    # def get_scheduler(optimizer, lr_policy='linear',
+    #                   *args):
+    #     """Return a learning rate scheduler
+    #
+    #     Parameters:
+    #         optimizer          -- the optimizer of the network
+    #         opt (option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions．　
+    #                               opt.lr_policy is the name of learning rate policy: linear | step | plateau | cosine
+    #
+    #     For 'linear', we keep the same learning rate for the first <opt.n_epochs> epochs
+    #     and linearly decay the rate to zero over the next <opt.n_epochs_decay> epochs.
+    #     For other schedulers (step, plateau, and cosine), we use the default PyTorch schedulers.
+    #     See https://pytorch.org/docs/stable/optim.html for more details.
+    #     """
+    #     if lr_policy == 'linear':
+    #         epoch_count, n_epochs, n_epochs_decay = args
+    #
+    #         def lambda_rule(epoch):
+    #             lr_l = 1.0 - max(0, epoch + epoch_count - n_epochs) / float(n_epochs_decay + 1)
+    #             return lr_l
+    #
+    #         scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
+    #     elif lr_policy == 'step':
+    #         lr_decay_iters, = args
+    #         scheduler = lr_scheduler.StepLR(optimizer, step_size=lr_decay_iters, gamma=0.1)
+    #     elif lr_policy == 'plateau':
+    #         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, threshold=0.01, patience=5)
+    #     elif lr_policy == 'cosine':
+    #         n_epochs, = args
+    #         scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=0)
+    #     else:
+    #         return NotImplementedError('learning rate policy [%s] is not implemented', lr_policy)
+    #     return scheduler
+    #
+    # def set_requires_grad(self, nets, requires_grad=False):
+    #     """Set requies_grad=Fasle for all the networks to avoid unnecessary computations
+    #     Parameters:
+    #         nets (network list)   -- a list of networks
+    #         requires_grad (bool)  -- whether the networks require gradients or not
+    #     """
+    #     if not isinstance(nets, list):
+    #         nets = [nets]
+    #     for net in nets:
+    #         if net is not None:
+    #             for param in net.parameters():
+    #                 param.requires_grad = requires_grad
 
     @property
     def required_shape(self):
         return (256, 256)
-

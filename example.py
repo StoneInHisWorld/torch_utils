@@ -88,10 +88,10 @@ for trainer in cp:
         print(f'training on {device}...')
         # 进行训练准备
         optimizer = utils.func.torch_tools.get_optimizer(net, optim_str, lr, w_decay)
-        ls_fn = utils.func.torch_tools.get_loss(ls_fn)
+        ls_fn = utils.func.torch_tools.get_ls_fn(ls_fn)
         history = net.train_(
-            train_iter, valid_iter=valid_iter, optimizer=optimizer, num_epochs=epochs,
-            ls_fn=ls_fn, acc_fn=acc_func
+            train_iter, valid_iter=valid_iter, optimizers=optimizer, num_epochs=epochs,
+            ls_fn=ls_fn, criteria=acc_func
         )
 
         print('testing...')
