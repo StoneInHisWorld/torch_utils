@@ -1,6 +1,7 @@
 import os
 import time
 
+import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
@@ -39,18 +40,18 @@ def write_log(path: str, **kwargs):
         except PermissionError:
             for i in range(10):
                 print(f'\r 文件{path}被占用，已等待{wait}秒。请立即关闭此文件，在整10秒处会再次尝试获取文件读取权限。',
-                      end='',  flush=True)
+                      end='', flush=True)
                 wait += 1
                 time.sleep(1)
 
 
+# def plot_history(history, mute=False, title=None,
+#                  ls_ylabel=None, acc_ylabel=None, lr_ylabel=None,
+#                  savefig_as=None, accumulative=False):
 def plot_history(history, mute=False, title=None,
-                 ls_ylabel=None, acc_ylabel=None, lr_ylabel=None,
                  savefig_as=None, accumulative=False):
     """
     绘制训练历史变化趋势图
-    :param acc_ylabel: 准确率趋势图的纵轴标签
-    :param ls_ylabel: 损失值趋势图的纵轴标签
     :param history: 训练历史数据
     :param mute: 绘制完毕后是否立即展示成果图
     :param title: 绘制图标题
@@ -58,34 +59,31 @@ def plot_history(history, mute=False, title=None,
     :param accumulative: 是否将所有趋势图叠加在一起
     :return: None
     """
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex='col', figsize=(7, 7.5))
-    ax1.set_title('LOSS')
-    ax2.set_title('ACCURACY')
-    ax3.set_title('LEARNING_RATE')
-    ax3.set_xlabel('epochs')
+    subplots_titles = list(set([
+        label.replace('train_', "").replace('valid_', '').upper()
+        for label, _ in history
+    ]))
+    fig, axes = plt.subplots(
+        len(subplots_titles), 1, sharex='col', figsize=(7, 7.5)
+    )
+    for i, axi in enumerate(axes):
+        axi.set_ylabel(subplots_titles[i])
+    axes[-1].set_xlabel('epochs')
+    # 绘制日志内容
     for label, log in history:
-        if label.find('_l') != -1:
-            # 绘制损失值history
-            ax1.plot(range(1, len(log) + 1), log, label=label)
-        elif label.find('_acc') != -1:
-            # 绘制准确率history
-            ax2.plot(range(1, len(log) + 1), log, label=label)
-        elif label.find('lr') != -1:
-            # 绘制学习率history
+        l_type = label.replace('train_', "").replace('valid_', '').upper()
+        index = subplots_titles.index(l_type)
+        try:
+            axes[index].plot(range(1, len(log) + 1), log, label=label)
+        except ValueError:
+            # 处理高维日志内容
+            log = np.array(log)
             for i in range(len(log[0])):
-                lr_of_cur_group = [epoch_lrs[i] for epoch_lrs in log]
-                ax3.plot(range(1, len(log) + 1), lr_of_cur_group, label=f'lr_{i}')
-    if ls_ylabel:
-        ax1.set_ylabel(ls_ylabel)
-    if acc_ylabel:
-        ax2.set_ylabel(acc_ylabel)
-    if lr_ylabel:
-        ax3.set_ylabel(lr_ylabel)
+                axes[index].plot(range(1, len(log) + 1), log[:, i], label=label + f'_{i}')
     if title:
         fig.suptitle(title)
-    ax1.legend()
-    ax2.legend()
-    ax3.legend()
+    for ax in axes:
+        ax.legend()
     if savefig_as:
         if not os.path.exists(os.path.split(savefig_as)[0]):
             os.makedirs(os.path.split(savefig_as)[0])
@@ -96,6 +94,45 @@ def plot_history(history, mute=False, title=None,
     if not accumulative:
         plt.close(fig)
         plt.clf()
+
+    # fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex='col', figsize=(7, 7.5))
+    # ax1.set_title('LOSS')
+    # ax2.set_title('ACCURACY')
+    # ax3.set_title('LEARNING_RATE')
+    # ax3.set_xlabel('epochs')
+    # for label, log in history:
+    #     if label.find('_l') != -1:
+    #         # 绘制损失值history
+    #         ax1.plot(range(1, len(log) + 1), log, label=label)
+    #     elif label.find('_acc') != -1:
+    #         # 绘制准确率history
+    #         ax2.plot(range(1, len(log) + 1), log, label=label)
+    #     elif label.find('lr') != -1:
+    #         # 绘制学习率history
+    #         for i in range(len(log[0])):
+    #             lr_of_cur_group = [epoch_lrs[i] for epoch_lrs in log]
+    #             ax3.plot(range(1, len(log) + 1), lr_of_cur_group, label=f'lr_{i}')
+    # if ls_ylabel:
+    #     ax1.set_ylabel(ls_ylabel)
+    # if acc_ylabel:
+    #     ax2.set_ylabel(acc_ylabel)
+    # if lr_ylabel:
+    #     ax3.set_ylabel(lr_ylabel)
+    # if title:
+    #     fig.suptitle(title)
+    # ax1.legend()
+    # ax2.legend()
+    # ax3.legend()
+    # if savefig_as:
+    #     if not os.path.exists(os.path.split(savefig_as)[0]):
+    #         os.makedirs(os.path.split(savefig_as)[0])
+    #     plt.savefig(savefig_as)
+    #     print('已保存历史趋势图')
+    # if not mute:
+    #     plt.show()
+    # if not accumulative:
+    #     plt.close(fig)
+    #     plt.clf()
 
 
 def get_logData(log_path, exp_no) -> dict:
