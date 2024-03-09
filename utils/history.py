@@ -1,6 +1,5 @@
 class History:
     def __init__(self, *args: str):
-        self.__keys__ = args
         """
         历史记录器
         :param args: 指定记录项的名称
@@ -18,7 +17,7 @@ class History:
             self[k].append(v)
 
     def __iter__(self):
-        for k in self.__keys__:
+        for k in self.__keys:
             yield k, self[k]
 
     def __str__(self):
