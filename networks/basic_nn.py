@@ -49,12 +49,19 @@ class BasicNN(nn.Sequential):
         self.__checkpoint = with_checkpoint
 
     def prepare_training(self,
-                         o_args: tuple = (), o_kwargs: dict = {},
-                         l_args: tuple = (), ls_args: tuple = (),
-                         ls_kwargs: dict = {}
+                         o_args: tuple = (), l_args: tuple = (),
+                         ls_args: tuple = (), ls_kwargs: dict = {}
                          ):
-        optimizer_s = self._get_optimizer(*o_args, **o_kwargs)
-        self.optimizer_s = optimizer_s if isinstance(optimizer_s, list) else [optimizer_s]
+        """进行训练准备
+        :param o_args: 优化器参数。请注意第一项需为优化器类型字符串，其后为每一个优化器的kwargs。
+        :param l_args: 学习率规划器器参数。请注意第一项需为学习率规划器类型字符串，其后为每一个学习率规划器的kwargs。
+        :param ls_args:
+        :param ls_kwargs:
+        :return:
+        """
+        o_args = o_args if isinstance(o_args, list) else ([o_args[0]], *o_args[1:])
+        self.optimizer_s = self._get_optimizer(*o_args)
+        l_args = l_args if isinstance(l_args, list) else ([l_args[0]], *l_args[1:])
         self.lr_scheduler_s = self._get_lr_scheduler(*l_args)
         self.ls_fn = self._get_ls_fn(*ls_args, **ls_kwargs)
 
@@ -224,17 +231,17 @@ class BasicNN(nn.Sequential):
         # 生成测试日志
         log = {}
         prefix = 'valid_' if is_valid else 'test_'
+        i, j = 0, 0
         for i, computer in enumerate(criterion_a):
             try:
                 log[prefix + computer.__name__] = metric[i] / metric[-1]
             except AttributeError:
                 log[prefix + computer.__class__.__name__] = metric[i] / metric[-1]
-        # TODO: loss如何记录？
-        for i, computer in enumerate(loss_names):
+        for j, loss_name in enumerate(loss_names):
             try:
-                log[prefix + computer.__name__] = metric[i] / metric[-1]
+                log[prefix + loss_name] = metric[i + j] / metric[-1]
             except AttributeError:
-                log[prefix + computer.__class__.__name__] = metric[i] / metric[-1]
+                log[prefix + loss_name] = metric[i + j] / metric[-1]
         return log
         # self.eval()
         # metric = Accumulator(3)
