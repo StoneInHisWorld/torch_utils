@@ -82,7 +82,7 @@ class ControlPanel:
             n_exp = 1
             for v in hyper_params.values():
                 n_exp *= len(v)
-        self.last_expno = self.exp_no + n_exp
+        self.last_expno = self.exp_no + n_exp - 1
 
     def __iter__(self):
         with open(self.__hcp, 'r', encoding='utf-8') as cfg:
