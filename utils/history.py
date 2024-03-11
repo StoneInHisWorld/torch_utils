@@ -12,7 +12,7 @@ class History:
         return getattr(self, key)
 
     def add(self, keys, values):
-        assert len(keys) == len(values)
+        assert len(keys) == len(values), '记录的日志项需要与事先声明的项名一一对应！'
         for k, v in zip(keys, values):
             self[k].append(v)
 

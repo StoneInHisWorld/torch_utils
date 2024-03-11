@@ -137,9 +137,10 @@ class ControlPanel:
                 print(net)
 
     # def __plot_history(self, history, cfg, mute, ls_fn, acc_fn) -> None:
-    def __plot_history(self, history, cfg, mute) -> None:
+    def __plot_history(self, history, cfg, mute, **plot_kwargs) -> None:
         # 检查参数设置
         cfg_range = ['plot', 'save', 'no']
+        cfg = self['plot_history']
         if not pytools.check_para('plot_history', cfg, cfg_range):
             print('请检查setting.json中参数plot_history设置是否正确，本次不予绘制历史趋势图！')
             return
@@ -150,13 +151,15 @@ class ControlPanel:
         savefig_as = None if self.__pp is None or cfg == 'plot' else self.__pp + str(self.exp_no) + '.jpg'
         # 绘图
         ltools.plot_history(
-            history, mute=mute, title='EXP NO.' + str(self.exp_no), savefig_as=savefig_as
+            history, mute=self['plot_mute'],
+            title='EXP NO.' + str(self.exp_no),
+            savefig_as=savefig_as, **plot_kwargs
         )
         print('已绘制历史趋势图')
 
     # def register_result(self, history, test_acc=None, test_ls=None,
     #                     ls_fn=None, acc_fn=None) -> None:
-    def register_result(self, history, test_log=None) -> None:
+    def register_result(self, history, test_log=None, **plot_kwargs) -> None:
         """
         在神经网络训练完成后，需要调用本函数将结果注册到超参数控制台。
         根据训练历史记录进行输出，并进行日志参数的记录。
@@ -182,7 +185,7 @@ class ControlPanel:
             print('\b\b')
         log_msg.update(test_log)
         self.__plot_history(
-            history, self['plot_history'], self['plot_mute']
+            history, self['plot_history'], self['plot_mute'], **plot_kwargs
         )
         self.__cur_trainer.add_logMsg(
             True, **log_msg, data_portion=self['data_portion']

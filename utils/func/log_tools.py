@@ -48,8 +48,10 @@ def write_log(path: str, **kwargs):
 # def plot_history(history, mute=False, title=None,
 #                  ls_ylabel=None, acc_ylabel=None, lr_ylabel=None,
 #                  savefig_as=None, accumulative=False):
-def plot_history(history, mute=False, title=None,
-                 savefig_as=None, accumulative=False):
+def plot_history(history,
+                 mute=False, title=None,
+                 savefig_as=None, accumulative=False,
+                 max_nrows=3, figsize=(7, 7.5)):
     """
     绘制训练历史变化趋势图
     :param history: 训练历史数据
@@ -59,16 +61,29 @@ def plot_history(history, mute=False, title=None,
     :param accumulative: 是否将所有趋势图叠加在一起
     :return: None
     """
+    # 获取子图标题以计算趋势图行列数
     subplots_titles = list(set([
         label.replace('train_', "").replace('valid_', '').upper()
         for label, _ in history
     ]))
+    n_cols = int(np.ceil(len(subplots_titles) / max_nrows))
     fig, axes = plt.subplots(
-        len(subplots_titles), 1, sharex='col', figsize=(7, 7.5)
+        # len(subplots_titles), 1, sharex='col', figsize=(7, 7.5)
+        min(max_nrows, len(subplots_titles)), n_cols,
+        sharex='col', figsize=(7, 7.5)
     )
-    for i, axi in enumerate(axes):
-        axi.set_ylabel(subplots_titles[i])
-    axes[-1].set_xlabel('epochs')
+    fig.set_figheight(figsize[1])
+    fig.set_figwidth(figsize[0])
+    # 设置子图横轴标签
+    if n_cols > 1:
+        for axi in axes.T:
+            axi[-1].set_xlabel('epochs')
+    else:
+        axes[-1].set_xlabel('epochs')
+    axes = axes.flatten()
+    # 设置子图纵轴标签
+    for subplots_title, axi in zip(subplots_titles, axes):
+        axi.set_ylabel(subplots_title)
     # 绘制日志内容
     for label, log in history:
         l_type = label.replace('train_', "").replace('valid_', '').upper()
