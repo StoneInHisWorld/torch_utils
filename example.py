@@ -91,7 +91,7 @@ for trainer in cp:
         ls_fn = utils.func.torch_tools.get_ls_fn(ls_fn)
         history = net.train_(
             train_iter, valid_iter=valid_iter, optimizers=optimizer, num_epochs=epochs,
-            ls_fn=ls_fn, criteria=acc_func
+            ls_fn=ls_fn, criterion_a=acc_func
         )
 
         print('testing...')

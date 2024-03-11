@@ -17,8 +17,6 @@ from utils.history import History
 
 
 class Pix2Pix(BasicNN):
-    # 指定输出的训练损失类型
-    loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
 
     def __init__(self,
                  g_args, g_kwargs,
@@ -87,7 +85,7 @@ class Pix2Pix(BasicNN):
             # self.optimizers.append(self.optimizer_G)
             # self.optimizers.append(self.optimizer_D)
 
-        self.isTrain = isTrain
+        # self.isTrain = isTrain
 
     def forward(self, input):
         # input_A = input[0]
@@ -172,7 +170,7 @@ class Pix2Pix(BasicNN):
             # 组合损失值并计算梯度
             ls = gan_ls + l1_ls
             ls.backward()
-            return ls
+            return ls.item(), gan_ls.item(), l1_ls.item()
 
         def backward_D(X, y, pred):
             # """计算分辨器的GANLoss"""
@@ -202,7 +200,7 @@ class Pix2Pix(BasicNN):
             # 组合损失值并计算梯度，0.5是两个预测值的权重
             ls = (fake_ls + real_ls) * 0.5
             ls.backward()
-            return ls
+            return ls.item(), real_ls.item(), fake_ls.item()
 
         def backward(X, y):
             # # 更新分辨器
@@ -230,7 +228,7 @@ class Pix2Pix(BasicNN):
             self.optimizer_G.zero_grad()  # 清零生成器的梯度
             loss_G = backward_G(X, y, pred)  # 计算生成器的梯度
             self.optimizer_G.step()  # 更新生成器的权重
-            return loss_G, loss_D
+            return pred, (*loss_G, *loss_D)
 
         self.backward = backward
 
@@ -279,6 +277,7 @@ class Pix2Pix(BasicNN):
         self.optimizer_D = ttools.get_optimizer(
             self.netD, optim_str_d, *d_args, **d_kwargs
         )
+        self.lr_names = ['G_lrs', 'D_lrs']
         return [self.optimizer_G, self.optimizer_D]
 
     def _get_lr_scheduler(self, scheduler_str_s='step', **kwargs):
@@ -297,7 +296,7 @@ class Pix2Pix(BasicNN):
         if not isinstance(scheduler_str_s, list):
             scheduler_str_s = [scheduler_str_s, scheduler_str_s]
         schedulers = []
-        for ss, optimizer in zip(scheduler_str_s, self.optimizers):
+        for ss, optimizer in zip(scheduler_str_s, self.optimizer_s):
             if ss == 'linear':
                 epoch_count, n_epochs, n_epochs_decay = kwargs['epoch_count'], kwargs['n_epochs'], kwargs[
                     'n_epochs_decay']
@@ -317,6 +316,12 @@ class Pix2Pix(BasicNN):
                 return NotImplementedError(f'不支持的学习率变化策略{scheduler_str_s}')
             schedulers.append(scheduler)
         return schedulers
+
+    def _get_ls_fn(self, ls_fn='mse', **kwargs):
+        ls_fn = super()._get_ls_fn(ls_fn, **kwargs)
+        # 指定输出的训练损失类型
+        self.loss_names = ['G_LS', 'G_GAN', 'G_L1', 'D_LS', 'D_real', 'D_fake']
+        return ls_fn
 
     # def train_(self,
     #            data_iter, criteria,
@@ -353,95 +358,77 @@ class Pix2Pix(BasicNN):
                data_iter, criterion_a,
                n_epochs=10, valid_iter=None, k=1, n_workers=1, hook=None
                ):
-        if isinstance(criterion_a, list):
-            # TODO: Untested!
-            history = History(
-                'train_g_ls', 'train_d_ls',
-                *[f'train_{criterion.__name__}' for criterion in criterion_a],
-                'lrs'
-            )
-            with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
-                      desc=f'训练中...', mininterval=1) as pbar:
-                for epoch in range(n_epochs):
-                    pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
-                    history.add(
-                        ['lrs'],
-                        [
-                            [
-                                [param['lr'] for param in optimizer.param_groups]
-                                for optimizer in self.optimizers
-                            ],
-                        ]
-                    )
-                    metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
-                    for X, y in data_iter:
-                        ls = self.backward(X, y)
-                        g_ls, d_ls = ls
-                        with torch.no_grad():
+        # 损失项
+        loss_names = [f'train_{item}' for item in self.loss_names]
+        # 评价项
+        criteria_names = [f'train_{criterion.__name__}' for criterion in criterion_a] \
+            if isinstance(criterion_a, list) else [f'train_{criterion_a.__name__}']
+        # 学习率项
+        lr_names = self.lr_names
+        history = History(*(loss_names + criteria_names + lr_names))
+        # if isinstance(criterion_a, list):
+        #     # TODO: Untested!
+        #     history = History(
+        #         'train_g_ls', 'train_d_ls',  # 损失项
+        #         *[f'train_{criterion.__name__}' for criterion in criterion_a],  # 评价标准项
+        #         'G_lrs', 'D_lrs'  # 学习率项
+        #     )
+        # else:
+        #     history = History(
+        #         'train_g_ls', 'train_d_ls',
+        #         f'train_{criterion_a.__name__}',
+        #         'G_lrs', 'D_lrs'  # 学习率项
+        #     )
+        with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
+                  desc=f'训练中...', mininterval=1) as pbar:
+            for epoch in range(n_epochs):
+                pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
+                history.add(
+                    lr_names, [
+                        [param['lr'] for param in optimizer.param_groups]
+                        for optimizer in self.optimizer_s
+                    ]
+                )
+                metric = Accumulator(
+                    len(loss_names + criteria_names) + 1
+                )  # 批次训练损失总和，准确率，样本数
+                for X, y in data_iter:
+                    pred, ls_es = self.backward(X, y)
+                    with torch.no_grad():
+                        num_examples = X.shape[0]
+                        if isinstance(criterion_a, list):
                             correct_s = []
                             for criterion in criterion_a:
-                                correct = criterion(self(X), y)
+                                correct = criterion(pred, y)
                                 correct_s.append(correct)
-                            num_examples = X.shape[0]
                             metric.add(
-                                g_ls * num_examples,
-                                d_ls * num_examples,
+                                *[ls * num_examples for ls in ls_es],
                                 *correct_s, num_examples
                             )
-                        pbar.update(1)
-                    # 记录训练数据
-                    history.add(
-                        ['train_g_ls', 'train_d_ls'] + [f'train_{criterion.__name__}' for criterion in criterion_a],
-                        [metric[i] / metric[-1] for i in range(len(metric) - 1)]
-                    )
-                pbar.close()
-        else:
-            history = History(
-                'train_g_ls', 'train_d_ls', f'train_{criterion_a.__name__}', 'lrs'
-            )
-            with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
-                      desc=f'训练中...', mininterval=1) as pbar:
-                for epoch in range(n_epochs):
-                    pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
-                    history.add(
-                        ['lrs'],
-                        [
-                            [
-                                [param['lr'] for param in optimizer.param_groups]
-                                for optimizer in self.optimizers
-                            ],
-                        ]
-                    )
-                    metric = Accumulator(4)  # 批次训练损失总和，准确率，样本数
-                    for X, y in data_iter:
-                        ls = self.backward(X, y)
-                        g_ls, d_ls = ls
-                        with torch.no_grad():
-                            correct = criterion_a(self(X), y)
-                            num_examples = X.shape[0]
+                        else:
+                            correct = criterion_a(pred, y)
                             metric.add(
-                                g_ls * num_examples,
-                                d_ls * num_examples,
+                                *[ls * num_examples for ls in ls_es],
                                 correct, num_examples
                             )
-                        pbar.update(1)
-                    # 记录训练数据
-                    history.add(
-                        ['train_g_ls', 'train_d_ls', f'train_{criterion_a.__name__}'],
-                        [metric[i] / metric[-1] for i in range(len(metric) - 1)]
-                    )
-                pbar.close()
+                    pbar.update(1)
+                # 记录训练数据
+                history.add(
+                    loss_names + criteria_names,
+                    [metric[i] / metric[-1] for i in range(len(metric) - 1)]
+                )
+            pbar.close()
         return history
 
     @torch.no_grad()
     def test_(self, test_iter,
               criterion_a: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
-              ls_fn_s: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
+              loss_names: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
               ) -> [float, float]:
         self.eval()
-        # 要统计的数据数目
+        # 要统计的数据种类数目
         n_metric = len(criterion_a) if isinstance(criterion_a, list) else 1
-        n_metric = n_metric + len(ls_fn_s) if isinstance(ls_fn_s, list) else n_metric + 1
+        n_metric = n_metric + len(loss_names) if isinstance(loss_names, list) else n_metric + 1
         metric = Accumulator(n_metric + 1)
         # 逐个批次计算测试数据
         for features, labels in test_iter:
@@ -455,8 +442,8 @@ class Pix2Pix(BasicNN):
             self.loss_G = self.loss_G_GAN + self.loss_G_L1
             metric_to_add = [criterion(pred, labels) for criterion in criterion_a] \
                 if isinstance(criterion_a, list) else [criterion_a(pred, labels)]
-            metric_to_add += [ls_fn(pred, labels) for ls_fn in ls_fn_s] \
-                if isinstance(ls_fn_s, list) else [ls_fn_s(pred, labels)]
+            metric_to_add += [ls_fn(pred, labels) for ls_fn in loss_names] \
+                if isinstance(loss_names, list) else [loss_names(pred, labels)]
             metric_to_add.append(len(features))
             metric.add(*metric_to_add)
         # 生成测试日志
@@ -476,9 +463,9 @@ class Pix2Pix(BasicNN):
             except AttributeError:
                 test_log[f'test_{criterion_a.__class__.__name__}'] = metric[i] / metric[-1]
             i += 1
-        if isinstance(ls_fn_s, list):
+        if isinstance(loss_names, list):
             j = 0
-            for j, ls_fn in enumerate(ls_fn_s):
+            for j, ls_fn in enumerate(loss_names):
                 try:
                     test_log[f'test_{ls_fn.__name__}'] = metric[i + j] / metric[-1]
                 except AttributeError:
@@ -486,9 +473,9 @@ class Pix2Pix(BasicNN):
             i += j
         else:
             try:
-                test_log[f'test_{ls_fn_s.__name__}'] = metric[i] / metric[-1]
+                test_log[f'test_{loss_names.__name__}'] = metric[i] / metric[-1]
             except AttributeError:
-                test_log[f'test_{ls_fn_s.__class__.__name__}'] = metric[i] / metric[-1]
+                test_log[f'test_{loss_names.__class__.__name__}'] = metric[i] / metric[-1]
             i += 1
         return test_log
 

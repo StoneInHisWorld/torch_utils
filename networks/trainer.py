@@ -227,7 +227,7 @@ class Trainer:
         self.__data_iter = data_iter
         self.__optimizer_s = optimizer_s
         self.__lr_scheduler_s = lr_scheduler_s
-        self.__acc_fn = acc_fn
+        self.__criterion_a = acc_fn
         self.backward = backward
         self.__n_epochs = n_epochs
         self.__ls_fn = ls_fn
@@ -242,46 +242,92 @@ class Trainer:
         :param valid_iter: 验证数据供给迭代器
         :return: 训练数据记录`History`对象
         """
+        # 读取属性以便训练，并将优化器、规划器、评价计算器序列化
         net = self.module
         data_iter = self.__data_iter
         n_epochs = self.__n_epochs
-        optimizer = self.__optimizer_s
-        lr_scheduler = self.__lr_scheduler_s
+        optimizer_s = self.__optimizer_s if isinstance(self.__optimizer_s, list) else [self.__optimizer_s]
+        lr_scheduler_s = self.__lr_scheduler_s if isinstance(self.__lr_scheduler_s, list) else [self.__lr_scheduler_s]
         ls_fn = self.__ls_fn
-        acc_fn = self.__acc_fn
-        history = History('train_l', 'train_acc', 'valid_l', 'valid_acc', 'lrs')
+        criterion_a = self.__criterion_a if isinstance(self.__criterion_a, list) else [self.__criterion_a]
+        # 损失项
+        loss_names = [f'train_{item}' for item in net.loss_names]
+        # 评价项
+        criteria_names = [f'train_{criterion.__name__}' for criterion in criterion_a]
+        # 学习率项
+        lr_names = net.lr_names
+        history = History(*(loss_names + criteria_names + lr_names))
         with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
                   desc=f'训练中...', mininterval=1) as pbar:
             for epoch in range(n_epochs):
-                # pbar.reset(len(data_iter))
                 pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
                 history.add(
-                    ['lrs'],
-                    [[param['lr'] for param in optimizer.param_groups]]
+                    lr_names, [
+                        [param['lr'] for param in optimizer.param_groups]
+                        for optimizer in optimizer_s
+                    ]
                 )
-                metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
+                # 记录批次训练损失总和，评价指标，样本数
+                metric = Accumulator(len(loss_names + criteria_names) + 1)
                 # 训练主循环
                 for X, y in data_iter:
                     net.train()
-                    optimizer.zero_grad()
-                    lo = ls_fn(net(X), y)
-                    lo.backward()
-                    optimizer.step()
+                    pred, ls_es = self.backward(X, y)
                     with torch.no_grad():
-                        correct = acc_fn(net(X), y)
                         num_examples = X.shape[0]
-                        metric.add(lo.item() * num_examples, correct, num_examples)
+                        correct_s = []
+                        for criterion in criterion_a:
+                            correct = criterion(pred, y)
+                            correct_s.append(correct)
+                        metric.add(
+                            *[ls * num_examples for ls in ls_es],
+                            *correct_s, num_examples
+                        )
                     pbar.update(1)
-                lr_scheduler.step()
+                for scheduler in lr_scheduler_s:
+                    scheduler.step()
                 # 记录训练数据
                 pbar.set_description('验证中...')
-                valid_acc, valid_l = net.test_(valid_iter, acc_fn, ls_fn)
+                valid_log = net.test_(valid_iter, criterion_a, ls_fn)
                 history.add(
-                    ['train_l', 'train_acc', 'valid_l', 'valid_acc'],
-                    [metric[0] / metric[2], metric[1] / metric[2], valid_l, valid_acc]
+                    loss_names + criteria_names + valid_log.keys(),
+                    [metric[i] / metric[-1] for i in range(len(metric) - 1)] + valid_log.values()
                 )
             pbar.close()
         return history
+        # history = History('train_l', 'train_acc', 'valid_l', 'valid_acc', 'lrs')
+        # with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
+        #           desc=f'训练中...', mininterval=1) as pbar:
+        #     for epoch in range(n_epochs):
+        #         # pbar.reset(len(data_iter))
+        #         pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
+        #         history.add(
+        #             ['lrs'],
+        #             [[param['lr'] for param in optimizer.param_groups]]
+        #         )
+        #         metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
+        #         # 训练主循环
+        #         for X, y in data_iter:
+        #             net.train()
+        #             optimizer.zero_grad()
+        #             lo = ls_fn(net(X), y)
+        #             lo.backward()
+        #             optimizer.step()
+        #             with torch.no_grad():
+        #                 correct = acc_fn(net(X), y)
+        #                 num_examples = X.shape[0]
+        #                 metric.add(lo.item() * num_examples, correct, num_examples)
+        #             pbar.update(1)
+        #         lr_scheduler.step()
+        #         # 记录训练数据
+        #         pbar.set_description('验证中...')
+        #         valid_acc, valid_l = net.test_(valid_iter, acc_fn, ls_fn)
+        #         history.add(
+        #             ['train_l', 'train_acc', 'valid_l', 'valid_acc'],
+        #             [metric[0] / metric[2], metric[1] / metric[2], valid_l, valid_acc]
+        #         )
+        #     pbar.close()
+        # return history
 
     # def train(self) -> History:
     #     """神经网络训练函数。
@@ -337,7 +383,7 @@ class Trainer:
         # optimizer = self.__optimizer_s
         lr_scheduler = self.__lr_scheduler_s
         ls_fn = self.__ls_fn
-        acc_fn = self.__acc_fn
+        acc_fn = self.__criterion_a
         history = History('train_l', 'train_acc', 'lrs')
         with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
                   desc=f'训练中...', mininterval=1) as pbar:
@@ -386,7 +432,7 @@ class Trainer:
         optimizer = self.__optimizer_s
         lr_scheduler = self.__lr_scheduler_s
         ls_fn = self.__ls_fn
-        acc_fn = self.__acc_fn
+        acc_fn = self.__criterion_a
 
         warnings.warn("多线程训练会造成死锁，目前无法修复，将于将来版本后删除", DeprecationWarning)
         # 创建进度条
