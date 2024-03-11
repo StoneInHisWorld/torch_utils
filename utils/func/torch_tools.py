@@ -138,6 +138,8 @@ def init_wb(func_str: str = "xavier"):
 
 def get_lr_scheduler(optimizer, which: str = 'step', **kwargs):
     if which == 'step':
+        if kwargs == {}:
+            kwargs = {'step_size': 100, 'gamma': 1}
         return torch.optim.lr_scheduler.StepLR(optimizer, **kwargs)
     elif which == 'lambda':
         return torch.optim.lr_scheduler.LambdaLR(optimizer, **kwargs)

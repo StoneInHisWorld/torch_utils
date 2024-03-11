@@ -1,6 +1,6 @@
 import os
 from abc import abstractmethod
-from typing import Iterable, Tuple
+from typing import Iterable, Tuple, Sized
 
 import torch
 
@@ -63,22 +63,24 @@ class SelfDefinedDataSet:
         self._check_path(where, which)
         # 获取特征集、标签集及其索引集的预处理程序
         self._set_preprocess(module)
-        # 进行训练索引获取
+        print('\n进行训练索引获取……')
         self._train_f, self._train_l = [], []
         self._get_fea_index(self._train_f, self._train_fd)
         self._get_lb_index(self._train_l, self._train_ld)
         # 按照数据比例切分数据集索引
         self._train_f, self._train_l = data_slicer(data_portion, shuffle, self._train_f, self._train_l)
-        # 按照懒加载程度加载数据集
+        print('\n按照懒加载程度加载训练数据集……')
         self._train_f = self.read_fea_fn(self._train_f, 16) \
             if not self._f_lazy else self._train_f
         self._train_l = self.read_lb_fn(self._train_l, 16) \
             if not self._l_lazy else self._train_l
-        # 进行测试索引获取
+        print("\n进行测试索引获取……")
         self._test_f, self._test_l = [], []
         self._get_fea_index(self._test_f, self._test_fd)
         self._get_lb_index(self._test_l, self._test_ld)
-        self._test_f, self._test_l = data_slicer(data_portion, shuffle, self._test_f, self._test_l)
+        self._test_f, self._test_l = data_slicer(data_portion, shuffle,
+                                                 self._test_f, self._test_l)
+        print('\n按照懒加载程度加载测试数据集……')
         self._test_f = self.read_fea_fn(self._test_f, 16) \
             if not self._f_lazy else self._test_f
         self._test_l = self.read_lb_fn(self._test_l, 16) \
@@ -146,7 +148,7 @@ class SelfDefinedDataSet:
 
     @staticmethod
     @abstractmethod
-    def read_fea_fn(index: Iterable, n_worker: int = 1) -> Iterable:
+    def read_fea_fn(index: Iterable and Sized, n_worker: int = 1) -> Iterable:
         """
         加载特征集数据批所用方法
         :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
@@ -157,7 +159,7 @@ class SelfDefinedDataSet:
 
     @staticmethod
     @abstractmethod
-    def read_lb_fn(index: Iterable, n_worker: int = 1) -> Iterable:
+    def read_lb_fn(index: Iterable and Sized, n_worker: int = 1) -> Iterable:
         """
         加载标签集数据批所用方法
         :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
