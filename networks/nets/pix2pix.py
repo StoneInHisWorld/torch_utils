@@ -140,12 +140,11 @@ class Pix2Pix(BasicNN):
     #     self.optimizer_G.step()             # 更新生成器的权重
 
     def prepare_training(self,
-                         o_args: tuple = (), o_kwargs: dict = {},
-                         l_args: tuple = (), l_kwargs: dict = {},
+                         o_args: tuple = (), l_args: tuple = (),
                          ls_args: tuple = (), ls_kwargs: dict = {}
                          ):
         super().prepare_training(
-            o_args, o_kwargs, l_args, l_kwargs, ls_args, ls_kwargs
+            o_args, l_args, ls_args, ls_kwargs
         )
 
         def backward_G(X, y, pred, lambda_l1=100.0):
@@ -243,22 +242,18 @@ class Pix2Pix(BasicNN):
         """
         # 检查优化器类型
         if optim_str_s is None:
-            optim_str_s = ['adam', 'adam']
-        elif isinstance(optim_str_s, str):
-            optim_str_s = [optim_str_s, optim_str_s]
-        elif isinstance(optim_str_s, list):
-            assert len(optim_str_s) == 2, f'{self.__name__}需要同时为生成器和分辨器指定优化器。'
-            assert isinstance(optim_str_s[0], str), f'无法识别的优化器类型{optim_str_s[0]}。'
-            assert isinstance(optim_str_s[1], str), f'无法识别的优化器类型{optim_str_s[1]}。'
-        else:
-            raise TypeError('无法识别的优化器类型')
+            optim_str_s = []
+        if len(optim_str_s) < 2:
+            # 如果优化器类型指定太少，则使用默认值补充
+            optim_str_s = (*optim_str_s, *['adam' for _ in range(2 - len(optim_str_s))])
         optim_str_g, optim_str_d = optim_str_s
         # 检查优化器参数
         try:
-            (g_args, g_kwargs), (d_args, d_kwargs) = args
+            g_kwargs, d_kwargs = args
         except TypeError:
             raise TypeError(f'{self.__name__}需要在args参数下同时为生成器和分辨器的优化器指定参数。')
         except ValueError:
+            # TODO: 去掉args，添加默认betas值
             # 设置默认参数
             lr, betas = 0.2, (0.1, 0.999)
             if len(args) == 0:
@@ -272,15 +267,15 @@ class Pix2Pix(BasicNN):
             else:
                 raise ValueError(f'{self.__name__}在args参数下只需要为生成器和分辨器的优化器指定参数。')
         self.optimizer_G = ttools.get_optimizer(
-            self.netG, optim_str_g, *g_args, **g_kwargs
+            self.netG, optim_str_g, **g_kwargs
         )
         self.optimizer_D = ttools.get_optimizer(
-            self.netD, optim_str_d, *d_args, **d_kwargs
+            self.netD, optim_str_d, **d_kwargs
         )
         self.lr_names = ['G_lrs', 'D_lrs']
         return [self.optimizer_G, self.optimizer_D]
 
-    def _get_lr_scheduler(self, scheduler_str_s='step', **kwargs):
+    def _get_lr_scheduler(self, scheduler_str_s=None, *args):
         """Return a learning rate scheduler
 
         Parameters:
@@ -293,13 +288,14 @@ class Pix2Pix(BasicNN):
         For other schedulers (step, plateau, and cosine), we use the default PyTorch schedulers.
         See https://pytorch.org/docs/stable/optim.html for more details.
         """
-        if not isinstance(scheduler_str_s, list):
-            scheduler_str_s = [scheduler_str_s, scheduler_str_s]
+        if scheduler_str_s is None:
+            scheduler_str_s = []
         schedulers = []
-        for ss, optimizer in zip(scheduler_str_s, self.optimizer_s):
+        for ss, optimizer, kwargs in zip(scheduler_str_s, self.optimizer_s, args):
             if ss == 'linear':
-                epoch_count, n_epochs, n_epochs_decay = kwargs['epoch_count'], kwargs['n_epochs'], kwargs[
-                    'n_epochs_decay']
+                epoch_count = 1 if 'epoch_count' not in kwargs.keys() else kwargs['epoch_count']
+                n_epochs_decay = 100 if 'n_epochs_decay' not in kwargs.keys() else kwargs['n_epochs_decay']
+                n_epochs = 100 if 'epoch_count' not in kwargs.keys() else kwargs['n_epochs']
 
                 def lambda_rule(epoch):
                     lr_l = 1.0 - max(0, epoch + epoch_count - n_epochs) / float(n_epochs_decay + 1)
@@ -307,10 +303,21 @@ class Pix2Pix(BasicNN):
 
                 scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
             elif ss == 'step':
+                step_size = 50 if 'step_size' not in kwargs.keys() else kwargs['step_size']
+                gamma = 0.1 if 'gamma' not in kwargs.keys() else kwargs['gamma']
+                kwargs.update({'step_size': step_size, 'gamma': gamma})
                 scheduler = lr_scheduler.StepLR(optimizer, **kwargs)
             elif ss == 'plateau':
+                mode = 'min' if 'mode' not in kwargs.keys() else kwargs['mode']
+                factor = 0.2 if 'factor' not in kwargs.keys() else kwargs['factor']
+                threshold = 0.01 if 'threshold' not in kwargs.keys() else kwargs['threshold']
+                patience = 5 if 'patience' not in kwargs.keys() else kwargs['patience']
+                kwargs.update({'mode': mode, 'factor': factor, 'threshold': threshold, 'patience': patience})
                 scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, **kwargs)
             elif ss == 'cosine':
+                T_max = 100 if 'T_max' not in kwargs.keys() else kwargs['T_max']
+                eta_min = 0 if 'eta_min' not in kwargs.keys() else kwargs['eta_min']
+                kwargs.update({'T_max': T_max, 'eta_min': eta_min})
                 scheduler = lr_scheduler.CosineAnnealingLR(optimizer, **kwargs)
             else:
                 return NotImplementedError(f'不支持的学习率变化策略{scheduler_str_s}')
@@ -424,60 +431,69 @@ class Pix2Pix(BasicNN):
     def test_(self, test_iter,
               criterion_a: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
               loss_names: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
+              is_valid: bool = False
               ) -> [float, float]:
         self.eval()
         # 要统计的数据种类数目
-        n_metric = len(criterion_a) if isinstance(criterion_a, list) else 1
-        n_metric = n_metric + len(loss_names) if isinstance(loss_names, list) else n_metric + 1
-        metric = Accumulator(n_metric + 1)
+        criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
+        # TODO：损失需要进行动态处理
+        loss_names = self.loss_names if isinstance(self.loss_names, list) else [self.loss_names]
+        metric = Accumulator(len(criterion_a) + len(loss_names) + 1)
         # 逐个批次计算测试数据
         for features, labels in test_iter:
-            pred = self(features)
-            fake_AB = torch.cat((features, pred), 1)
+            preds = self(features)
+            fake_AB = torch.cat((features, preds), 1)
             pred_fake = self.netD(fake_AB)
             self.loss_G_GAN = self.criterionGAN(pred_fake, True)
             # 接下来，计算G(A) = B
-            self.loss_G_L1 = self.criterionL1(pred, labels) * 100
+            self.loss_G_L1 = self.criterionL1(preds, labels) * 100
             # 组合损失值并计算梯度
             self.loss_G = self.loss_G_GAN + self.loss_G_L1
-            metric_to_add = [criterion(pred, labels) for criterion in criterion_a] \
-                if isinstance(criterion_a, list) else [criterion_a(pred, labels)]
-            metric_to_add += [ls_fn(pred, labels) for ls_fn in loss_names] \
-                if isinstance(loss_names, list) else [loss_names(pred, labels)]
-            metric_to_add.append(len(features))
-            metric.add(*metric_to_add)
+            metric.add(
+                *[criterion(preds, labels) for criterion in criterion_a],
+                self.loss_G * len(features), len(features)
+            )
         # 生成测试日志
-        i = 0
-        test_log = {}
-        if isinstance(criterion_a, list):
-            j = 0
-            for j, criterion in enumerate(criterion_a):
-                try:
-                    test_log[f'test_{criterion.__name__}'] = metric[i + j] / metric[-1]
-                except AttributeError:
-                    test_log[f'test_{criterion.__class__.__name__}'] = metric[i + j] / metric[-1]
-            i += j
-        else:
+        log = {}
+        prefix = 'valid_' if is_valid else 'test_'
+        i, j = 0, 0
+        for i, computer in enumerate(criterion_a):
             try:
-                test_log[f'test_{criterion_a.__name__}'] = metric[i] / metric[-1]
+                log[prefix + computer.__name__] = metric[i] / metric[-1]
             except AttributeError:
-                test_log[f'test_{criterion_a.__class__.__name__}'] = metric[i] / metric[-1]
-            i += 1
-        if isinstance(loss_names, list):
-            j = 0
-            for j, ls_fn in enumerate(loss_names):
-                try:
-                    test_log[f'test_{ls_fn.__name__}'] = metric[i + j] / metric[-1]
-                except AttributeError:
-                    test_log[f'test_{ls_fn.__class__.__name__}'] = metric[i] / metric[-1]
-            i += j
-        else:
-            try:
-                test_log[f'test_{loss_names.__name__}'] = metric[i] / metric[-1]
-            except AttributeError:
-                test_log[f'test_{loss_names.__class__.__name__}'] = metric[i] / metric[-1]
-            i += 1
-        return test_log
+                log[prefix + computer.__class__.__name__] = metric[i] / metric[-1]
+        log[prefix + 'G_LS'] = metric[-2] / metric[-1]
+        # i = 0
+        # test_log = {}
+        # if isinstance(criterion_a, list):
+        #     j = 0
+        #     for j, criterion in enumerate(criterion_a):
+        #         try:
+        #             test_log[f'test_{criterion.__name__}'] = metric[i + j] / metric[-1]
+        #         except AttributeError:
+        #             test_log[f'test_{criterion.__class__.__name__}'] = metric[i + j] / metric[-1]
+        #     i += j
+        # else:
+        #     try:
+        #         test_log[f'test_{criterion_a.__name__}'] = metric[i] / metric[-1]
+        #     except AttributeError:
+        #         test_log[f'test_{criterion_a.__class__.__name__}'] = metric[i] / metric[-1]
+        #     i += 1
+        # if isinstance(loss_names, list):
+        #     j = 0
+        #     for j, ls_fn in enumerate(loss_names):
+        #         try:
+        #             test_log[f'test_{ls_fn.__name__}'] = metric[i + j] / metric[-1]
+        #         except AttributeError:
+        #             test_log[f'test_{ls_fn.__class__.__name__}'] = metric[i] / metric[-1]
+        #     i += j
+        # else:
+        #     try:
+        #         test_log[f'test_{loss_names.__name__}'] = metric[i] / metric[-1]
+        #     except AttributeError:
+        #         test_log[f'test_{loss_names.__class__.__name__}'] = metric[i] / metric[-1]
+        #     i += 1
+        return log
 
     def get_current_losses(self):
         """Return traning losses / errors. train.py will print out these errors on console, and save them to a file"""
