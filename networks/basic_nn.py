@@ -1,6 +1,6 @@
 import os.path
 import warnings
-from typing import Callable, List
+from typing import Callable, List, Tuple
 
 import torch
 import torch.nn as nn
@@ -36,10 +36,10 @@ class BasicNN(nn.Sequential):
         # 初始化各模块
         super(BasicNN, self).__init__(*args)
         self.__init_submodules(init_meth, *init_args)
-        self.optimizer_s = None
-        self.lr_scheduler_s = None
-        self.ls_fn = None
-        self.backward = None
+        self._optimizer_s = None
+        self._scheduler_s = None
+        self._ls_fn = None
+        self.for_and_backward = None
         self.is_train = False
         self.apply(lambda m: m.to(device))
 
@@ -49,7 +49,7 @@ class BasicNN(nn.Sequential):
         self.__checkpoint = with_checkpoint
 
     def prepare_training(self,
-                         o_args: tuple = (), l_args: tuple = (),
+                         o_args: tuple = ('adam', ()), l_args: tuple = ([], ()),
                          ls_args: tuple = (), ls_kwargs: dict = {}
                          ):
         """进行训练准备
@@ -59,29 +59,40 @@ class BasicNN(nn.Sequential):
         :param ls_kwargs:
         :return:
         """
-        o_args = o_args if isinstance(o_args, list) else ([o_args[0]], *o_args[1:])
-        self.optimizer_s = self._get_optimizer(*o_args)
-        l_args = l_args if isinstance(l_args, list) else ([l_args[0]], *l_args[1:])
-        self.lr_scheduler_s = self._get_lr_scheduler(*l_args)
-        self.ls_fn = self._get_ls_fn(*ls_args, **ls_kwargs)
+        o_args = o_args if isinstance(o_args[0], list) else ([o_args[0]], *o_args[1:])
+        self._optimizer_s = self._get_optimizer(*o_args)
+        l_args = l_args if isinstance(l_args[0], list) else ([l_args[0]], *l_args[1:])
+        self._scheduler_s = self._get_lr_scheduler(*l_args)
+        # TODO：暂时不支持多损失函数
+        self._ls_fn = self._get_ls_fn(*ls_args, **ls_kwargs)
+        #
+        # def for_and_backward():
+        #     def for_and_backward(X, y, backward=True):
+        #
+        #         if backward:
+        #             pred = self(X)
+        #             for optim in self.optimizer_s:
+        #                 optim.zero_grad()
+        #             lo = self.ls_fn(pred, y)
+        #             lo.backward()
+        #             for optim in self.optimizer_s:
+        #                 optim.step()
+        #         else:
+        #             with torch.no_grad():
+        #                 pred = self(X)
+        #                 lo = self.ls_fn(pred, y)
+        #         return pred, (lo.item(), )
 
-        def backward(X, y):
-            pred = self(X)
-            for optim in self.optimizer_s:
-                optim.zero_grad()
-            lo = self.ls_fn(self(X), y)
-            lo.backward()
-            for optim in self.optimizer_s:
-                optim.step()
-            return pred, (lo.item(), )
-
-        self.backward = backward
         self.is_train = True
 
-    def _get_optimizer(self, optim_str='adam', *args,
-                       **kwargs) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
-        self.lr_names = ['LR']
-        return ttools.get_optimizer(self, optim_str, *args, **kwargs)
+    def _get_optimizer(self, optim_str_s, *args,
+                       ) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
+        optimizer_s, self.lr_names = [], []
+        i = 0
+        for s, kwargs in zip(optim_str_s, args):
+            optimizer_s.append(ttools.get_optimizer(self, s, **kwargs))
+            self.lr_names.append(f'LR_{i}')
+        return optimizer_s
 
     def _get_lr_scheduler(self, scheduler_str_s=None, *args):
         """为优化器定制规划器
@@ -92,13 +103,12 @@ class BasicNN(nn.Sequential):
         if scheduler_str_s is None:
             scheduler_str_s = []
         # 如果参数太少，则用空字典补齐
-        if len(args) <= len(self.optimizer_s):
+        if len(args) <= len(self._optimizer_s):
             args = (*args, *[{} for _ in range(len(scheduler_str_s) - len(args))])
-        scheduler_s = [
+        return [
             ttools.get_lr_scheduler(optim, ss, **kwargs)
-            for ss, optim, kwargs in zip(scheduler_str_s, self.optimizer_s, args)
+            for ss, optim, kwargs in zip(scheduler_str_s, self._optimizer_s, args)
         ]
-        return scheduler_s
         # else:
         #     if kwargs == {}:
         #         kwargs = {'step_size': 1, 'gamma': 1}
@@ -107,7 +117,6 @@ class BasicNN(nn.Sequential):
     def _get_ls_fn(self, ls_fn='mse', **kwargs):
         self.loss_names = [ls_fn.upper()]
         ls_fn = ttools.get_ls_fn(ls_fn, **kwargs)
-        # return ls_fn
         return lambda X, y: ls_fn(X, y)
 
     # def train_(self,
@@ -184,8 +193,8 @@ class BasicNN(nn.Sequential):
         else:
             with_hook, hook_mute = True, False
         with Trainer(self,
-                     data_iter, self.optimizer_s, self.lr_scheduler_s, criterion_a,
-                     self.backward, n_epochs, self.ls_fn, with_hook, hook_mute
+                     data_iter, self._optimizer_s, self._scheduler_s, criterion_a,
+                     self.for_and_backward, n_epochs, self._ls_fn, with_hook, hook_mute
                      ) as trainer:
             if k > 1:
                 # 是否进行k-折训练
@@ -198,50 +207,57 @@ class BasicNN(nn.Sequential):
                     history = trainer.train()
             else:
                 history = trainer.train_with_threads(valid_iter)
-        del self.optimizer_s, self.lr_scheduler_s, self.ls_fn
+        # 清楚训练痕迹
+        del self._optimizer_s, self._scheduler_s, self._ls_fn
         self.is_train = False
         return history
 
     @torch.no_grad()
     def test_(self, test_iter,
               criterion_a: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
-              loss_names: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
-              is_valid: bool = False
+              is_valid: bool = False, ls_fn=None, **ls_fn_kwargs
               ) -> [float, float]:
         """测试方法。
         取出迭代器中的下一batch数据，进行预测后计算准确度和损失
         :param test_iter: 测试数据迭代器
         :param criterion_a: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
-        :param loss_names: 计算损失所使用的函数，该函数需要求出整个batch的损失平均值。签名需为：loss(Y_HAT, Y) -> float or torch.Tensor
+        :param l_names: 计算损失所使用的函数，该函数需要求出整个batch的损失平均值。签名需为：loss(Y_HAT, Y) -> float or torch.Tensor
         :return: 测试准确率，测试损失
         """
         self.eval()
-        # 要统计的数据种类数目
         criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
-        loss_names = self.loss_names if isinstance(self.loss_names, list) else [self.loss_names]
-        metric = Accumulator(len(criterion_a) + len(loss_names) + 1)
-        # 计算准确率
-        with tqdm(test_iter, unit='批', position=0, desc=f'测试中...', mininterval=1) as pbar:
-            for features, labels in pbar:
-                preds = self(features)
-                metric.add(
-                    *[criterion(preds, labels) for criterion in criterion_a],
-                    self.ls_fn(preds, labels) * len(features), len(features)
-                )
+        if not is_valid:
+            # 如果是进行测试，则需要先初始化损失函数。
+            # TODO: 如果是测试，则需要进度条
+            if ls_fn is None:
+                ls_fn = 'mse'
+            self._ls_fn = self._get_ls_fn(ls_fn, **ls_fn_kwargs)
+            test_iter = tqdm(test_iter, unit='批', position=0, desc=f'测试中……', mininterval=1)
+        # 要统计的数据种类数目
+        l_names = self.loss_names if isinstance(self.loss_names, list) else [self.loss_names]
+        metric = Accumulator(len(criterion_a) + len(l_names) + 1)
+        # 计算准确率和损失值
+        for features, labels in test_iter:
+            preds, ls_es = self.forward_backward(features, labels, False)
+            metric.add(
+                *[criterion(preds, labels) for criterion in criterion_a],
+                *[ls * len(features) for ls in ls_es], len(features)
+            )
         # 生成测试日志
         log = {}
-        prefix = 'valid_' if is_valid else 'test_'
-        i, j = 0, 0
+        if is_valid:
+            prefix = 'valid_'
+        else:
+            prefix = 'test_'
+            del self._ls_fn
+        i = 0
         for i, computer in enumerate(criterion_a):
             try:
                 log[prefix + computer.__name__] = metric[i] / metric[-1]
             except AttributeError:
                 log[prefix + computer.__class__.__name__] = metric[i] / metric[-1]
-        for j, loss_name in enumerate(loss_names):
-            try:
-                log[prefix + loss_name] = metric[i + j] / metric[-1]
-            except AttributeError:
-                log[prefix + loss_name] = metric[i + j] / metric[-1]
+        for j, loss_name in enumerate(l_names):
+            log[prefix + loss_name] = metric[i + j] / metric[-1]
         return log
         # self.eval()
         # metric = Accumulator(3)
@@ -276,7 +292,6 @@ class BasicNN(nn.Sequential):
                     pre_batch = self(fe_batch)
                     predictions.append(pre_batch)
                     labels.append(lb_batch)
-                    # # TODO：对单独的每张图片进行acc和loss计算。是否过于效率低下？
                     # for pre, lb in zip(pre_batch, lb_batch):
                     #     acc_s.append(
                     #         acc_fn(pre.reshape(1, *pre.shape), lb.reshape(1, *pre.shape))
@@ -327,6 +342,43 @@ class BasicNN(nn.Sequential):
                 raise ValueError('选择预训练好的参数初始化网络，需要在初始化方法的第一参数提供参数或者模型的路径！')
             except FileNotFoundError:
                 raise FileNotFoundError(f'找不到{where}！')
+
+    def forward_backward(self, X, y, backward=True):
+        """前向和反向传播。
+        在进行前向传播后，会利用self.ls_fn()进行损失值计算，随后根据backward的值选择是否进行反向传播。
+        若要更改optimizer.zero_grad()，optimizer.step()的操作顺序，请直接重载本函数。
+        :param X: 特征集
+        :param y: 标签集
+        :param backward: 是否进行反向传播
+        :return: 预测值，损失值集合
+        """
+        if backward:
+            with torch.enable_grad():
+                result = self.__forward_impl(X, y)
+                self.__backward_impl(*result[1])
+        else:
+            with torch.no_grad():
+                result = self.__forward_impl(X, y)
+        assert len(result) == 2, f'前反向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
+        assert len(result[1]) == len(self.loss_names), f'前向传播返回的损失值数量{result[1]}与指定的损失名称数量{len(self.loss_names)}不匹配。'
+        return result
+
+    def __forward_impl(self, X, y) -> Tuple[torch.Tensor, Tuple]:
+        """前向传播实现。
+        进行前向传播后，根据self._ls_fn()计算损失值，并返回。
+        若要更改optimizer.zero_grad()以及backward()的顺序，请直接重载forward_backward()！
+        :param X: 特征集
+        :param y: 标签集
+        :return: （预测值， （损失值集合））
+        """
+        pred = self(X)
+        return pred, (self._ls_fn(pred, y),)
+
+    def __backward_impl(self, ls):
+        ls.backward()
+        for optim in self._optimizer_s:
+            optim.zero_grad()
+            optim.step()
 
     def __str__(self):
         return '网络结构：\n' + super().__str__() + '\n所处设备：' + str(self.__device)
