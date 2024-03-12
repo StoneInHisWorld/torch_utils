@@ -134,7 +134,7 @@ def train_impl(
             net.train()
             optimizer.zero_grad()
             ls = ls_fn(net(X), y)
-            ls.backward()
+            ls.for_and_backward()
             optimizer.step()
             Q.put((ls.item(), net.state_dict(), X, y))
         # 更新学习率并发送要记录的学习率当作消息
@@ -251,9 +251,11 @@ class Trainer:
         ls_fn = self.__ls_fn
         criterion_a = self.__criterion_a if isinstance(self.__criterion_a, list) else [self.__criterion_a]
         # 损失项
-        loss_names = [f'train_{item}' for item in net.loss_names]
+        loss_names = ([f'train_{item}' for item in net.loss_names] +
+                      [f'valid_{item}' for item in net.loss_names])
         # 评价项
-        criteria_names = [f'train_{criterion.__name__}' for criterion in criterion_a]
+        criteria_names = ([f'train_{criterion.__name__}' for criterion in criterion_a] +
+                          [f'valid_{criterion.__name__}' for criterion in criterion_a])
         # 学习率项
         lr_names = net.lr_names
         history = History(*(loss_names + criteria_names + lr_names))
@@ -272,7 +274,7 @@ class Trainer:
                 # 训练主循环
                 for X, y in data_iter:
                     net.train()
-                    pred, ls_es = self.backward(X, y)
+                    pred, ls_es = net.forward_backward(X, y)
                     with torch.no_grad():
                         num_examples = X.shape[0]
                         correct_s = []
@@ -288,10 +290,12 @@ class Trainer:
                     scheduler.step()
                 # 记录训练数据
                 pbar.set_description('验证中...')
-                valid_log = net.test_(valid_iter, criterion_a, ls_fn)
+                valid_log = net.test_(valid_iter, criterion_a, True)
+                # TODO: 请检查train_log和valid_log为何一致？
                 history.add(
-                    loss_names + criteria_names + valid_log.keys(),
-                    [metric[i] / metric[-1] for i in range(len(metric) - 1)] + valid_log.values()
+                    loss_names + criteria_names,
+                    [metric[i] / metric[-1] for i in range(len(metric) - 1)] +
+                    list(valid_log.values())
                 )
             pbar.close()
         return history
