@@ -63,24 +63,24 @@ class SelfDefinedDataSet:
         self._check_path(where, which)
         # 获取特征集、标签集及其索引集的预处理程序
         self._set_preprocess(module)
-        print('\n进行训练索引获取……')
+        print('进行训练索引获取……')
         self._train_f, self._train_l = [], []
         self._get_fea_index(self._train_f, self._train_fd)
         self._get_lb_index(self._train_l, self._train_ld)
         # 按照数据比例切分数据集索引
         self._train_f, self._train_l = data_slicer(data_portion, shuffle, self._train_f, self._train_l)
-        print('\n按照懒加载程度加载训练数据集……')
+        print('按照懒加载程度加载训练数据集……')
         self._train_f = self.read_fea_fn(self._train_f, 16) \
             if not self._f_lazy else self._train_f
         self._train_l = self.read_lb_fn(self._train_l, 16) \
             if not self._l_lazy else self._train_l
-        print("\n进行测试索引获取……")
+        print("进行测试索引获取……")
         self._test_f, self._test_l = [], []
         self._get_fea_index(self._test_f, self._test_fd)
         self._get_lb_index(self._test_l, self._test_ld)
         self._test_f, self._test_l = data_slicer(data_portion, shuffle,
                                                  self._test_f, self._test_l)
-        print('\n按照懒加载程度加载测试数据集……')
+        print('按照懒加载程度加载测试数据集……')
         self._test_f = self.read_fea_fn(self._test_f, 16) \
             if not self._f_lazy else self._test_f
         self._test_l = self.read_lb_fn(self._test_l, 16) \
@@ -214,9 +214,9 @@ class SelfDefinedDataSet:
             test_ds = DataSet(self._test_f, self._test_l)
         # 进行特征集本身的预处理
         train_ds.register_preprocess(features_calls=self.fea_preprocesses, labels_calls=self.lb_preprocesses)
-        train_ds.preprocess()
+        train_ds.preprocess('对训练集进行预处理……')
         test_ds.register_preprocess(features_calls=self.fea_preprocesses, labels_calls=self.lb_preprocesses)
-        test_ds.preprocess()
+        test_ds.preprocess('对测试集进行预处理……')
         return train_ds, test_ds
 
     def _set_preprocess(self, module: type):
