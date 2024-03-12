@@ -228,7 +228,6 @@ class BasicNN(nn.Sequential):
         criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
         if not is_valid:
             # 如果是进行测试，则需要先初始化损失函数。
-            # TODO: 如果是测试，则需要进度条
             if ls_fn is None:
                 ls_fn = 'mse'
             self._ls_fn = self._get_ls_fn(ls_fn, **ls_fn_kwargs)
