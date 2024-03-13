@@ -248,17 +248,20 @@ class Trainer:
         n_epochs = self.__n_epochs
         optimizer_s = self.__optimizer_s if isinstance(self.__optimizer_s, list) else [self.__optimizer_s]
         lr_scheduler_s = self.__lr_scheduler_s if isinstance(self.__lr_scheduler_s, list) else [self.__lr_scheduler_s]
-        ls_fn = self.__ls_fn
         criterion_a = self.__criterion_a if isinstance(self.__criterion_a, list) else [self.__criterion_a]
+        # # 损失项
+        # loss_names = ([f'train_{item}' for item in net.loss_names] +
+        #               [f'valid_{item}' for item in net.loss_names])
+        # # 评价项
+        # criteria_names = ([f'train_{criterion.__name__}' for criterion in criterion_a] +
+        #                   [f'valid_{criterion.__name__}' for criterion in criterion_a])
         # 损失项
-        loss_names = ([f'train_{item}' for item in net.loss_names] +
-                      [f'valid_{item}' for item in net.loss_names])
+        loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
-        criteria_names = ([f'train_{criterion.__name__}' for criterion in criterion_a] +
-                          [f'valid_{criterion.__name__}' for criterion in criterion_a])
+        criteria_names = [f'train_{criterion.__name__}' for criterion in criterion_a]
         # 学习率项
         lr_names = net.lr_names
-        history = History(*(loss_names + criteria_names + lr_names))
+        history = History(*(criteria_names + loss_names + lr_names))
         with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
                   desc=f'训练中...', mininterval=1) as pbar:
             for epoch in range(n_epochs):
@@ -282,8 +285,8 @@ class Trainer:
                             correct = criterion(pred, y)
                             correct_s.append(correct)
                         metric.add(
-                            *[ls * num_examples for ls in ls_es],
-                            *correct_s, num_examples
+                            *correct_s, *[ls * num_examples for ls in ls_es],
+                            num_examples
                         )
                     pbar.update(1)
                 for scheduler in lr_scheduler_s:
@@ -291,9 +294,8 @@ class Trainer:
                 # 记录训练数据
                 pbar.set_description('验证中...')
                 valid_log = net.test_(valid_iter, criterion_a, True)
-                # TODO: 请检查train_log和valid_log为何一致？
                 history.add(
-                    loss_names + criteria_names,
+                    criteria_names + loss_names + list(valid_log.keys()),
                     [metric[i] / metric[-1] for i in range(len(metric) - 1)] +
                     list(valid_log.values())
                 )
