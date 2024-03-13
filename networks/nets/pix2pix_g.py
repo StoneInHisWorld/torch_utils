@@ -38,6 +38,7 @@ class Pix2Pix_G(BasicNN):
             nn.BatchNorm2d(o, momentum=bn_momen),
             nn.ReLU()
         )
+        base_channel = int(base_channel)
         self.contracting_path = [
             cp_layer(input_channel, base_channel),
             cp_layer(base_channel, base_channel * 2),

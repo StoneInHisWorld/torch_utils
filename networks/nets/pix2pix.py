@@ -393,6 +393,8 @@ class Pix2Pix(BasicNN):
                             *correct_s, num_examples
                         )
                     pbar.update(1)
+                for scheduler in self._scheduler_s:
+                    scheduler.step()
                 # 记录训练数据
                 history.add(
                     loss_names + criteria_names,
@@ -419,7 +421,7 @@ class Pix2Pix(BasicNN):
             pred_fake = self.netD(fake_AB)
             loss_G_GAN = self.criterionGAN(pred_fake, True)
             # 接下来，计算G(A) = B
-            loss_G_L1 = self.criterionL1(preds, labels) * 100
+            loss_G_L1 = self.criterionL1(preds, labels)
             # 组合损失值并计算梯度
             loss_G = loss_G_GAN + loss_G_L1
             metric.add(
