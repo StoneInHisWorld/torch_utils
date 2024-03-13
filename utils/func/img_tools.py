@@ -138,6 +138,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     comments = kwargs['comment'] if 'comment' in kwargs.keys() else ['' for _ in range(len(groups_of_imgs_labels_list))]
     text_size = kwargs['text_size'] if 'text_size' in kwargs.keys() else 15
     border_size = kwargs['border_size'] if 'border_size' in kwargs.keys() else 5
+    # TODO：使用cv2处理图片！
     # 判断白板所用模式
     mode = '1'
     modes = set()
