@@ -167,15 +167,19 @@ class ControlPanel:
         :return: None
         """
         log_msg = {}
+        # 输出训练部分的数据
         for name, log in history:
             if name != name.replace('train_', '训练'):
                 # 输出训练信息，并记录
                 print(f"{name.replace('train_', '训练')} = {log[-1]:.5f},", end=' ')
                 log_msg[name] = log[-1]
-            elif name != name.replace('valid_', '验证'):
+        # 输出验证部分的数据
+        print('\b\b')
+        for name, log in history:
+            if name != name.replace('valid_', '验证'):
                 # 输出验证信息，并记录
-                log_msg[name] = log[-1]
                 print(f"{name.replace('valid_', '验证')} = {log[-1]:.5f},", end=' ')
+                log_msg[name] = log[-1]
         print('\b\b')
         if test_log is not None:
             for k, v in test_log.items():
