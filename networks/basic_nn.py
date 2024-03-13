@@ -225,6 +225,7 @@ class BasicNN(nn.Sequential):
         :return: 测试准确率，测试损失
         """
         self.eval()
+        # 要统计的数据种类数目
         criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
         if not is_valid:
             # 如果是进行测试，则需要先初始化损失函数。
@@ -255,6 +256,7 @@ class BasicNN(nn.Sequential):
                 log[prefix + computer.__name__] = metric[i] / metric[-1]
             except AttributeError:
                 log[prefix + computer.__class__.__name__] = metric[i] / metric[-1]
+        i += 1
         for j, loss_name in enumerate(l_names):
             log[prefix + loss_name] = metric[i + j] / metric[-1]
         return log
@@ -268,19 +270,19 @@ class BasicNN(nn.Sequential):
     @torch.no_grad()
     def predict_(self, data_iter: DataLoader or LazyDataLoader,
                  acc_fn: Callable,
-                 ls_fn: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor] = nn.L1Loss,
                  unwrap_fn: Callable[
-                     [torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor] = None
+                     [torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor] = None,
+                 ls_name=None, **ls_fn_kwargs
                  ) -> torch.Tensor:
         """预测方法。
         对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
         :param data_iter: 预测数据迭代器。
         :param acc_fn: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
-        :param ls_fn: 计算损失所使用的函数，该函数需要求出整个batch的损失平均值。签名需为：loss(Y_HAT, Y) -> float or torch.Tensor
         :param unwrap_fn: 对所有数据进行打包的方法。如不指定，则直接返回预测数据。签名需为：unwrap_fn(inputs, predictions, labels, acc_s, loss_es) -> Any
         :return: 打包好的数据集
         """
         self.eval()
+        ls_fn = self._get_ls_fn(ls_name, **ls_fn_kwargs)
         if unwrap_fn is not None:
             # 将本次预测所产生的全部数据打包并返回。
             inputs, predictions, labels, acc_s, loss_es = [], [], [], [], []
