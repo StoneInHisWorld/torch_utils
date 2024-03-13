@@ -4,12 +4,21 @@ class History:
         历史记录器
         :param args: 指定记录项的名称
         """
-        self.__keys = args
+        self.__keys = list(args)
         for k in args:
             self.__setattr__(k, [])
 
+    # def __getitem__(self, key):
+    #     return getattr(self, key)
+
     def __getitem__(self, key):
-        return getattr(self, key)
+        try:
+            return getattr(self, key)
+        except AttributeError:
+            # 如果没有该记录项名，则自动创建
+            self.__setattr__(key, [])
+            self.__keys.append(key)
+            return getattr(self, key)
 
     def add(self, keys, values):
         assert len(keys) == len(values), '记录的日志项需要与事先声明的项名一一对应！'
