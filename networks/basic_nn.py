@@ -88,6 +88,10 @@ class BasicNN(nn.Sequential):
                        ) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
         optimizer_s, self.lr_names = [], []
         i = 0
+        # 如果参数太少，则用空字典补齐
+        if len(args) <= len(optim_str_s):
+            args = (*args, *[{} for _ in range(len(optim_str_s) - len(args))])
+        # 获取优化器
         for s, kwargs in zip(optim_str_s, args):
             optimizer_s.append(ttools.get_optimizer(self, s, **kwargs))
             self.lr_names.append(f'LR_{i}')
@@ -115,10 +119,15 @@ class BasicNN(nn.Sequential):
 
     def _get_ls_fn(self, ls_fn_str_s, *args):
         self.loss_names = [ls_fn_str.upper() for ls_fn_str in ls_fn_str_s]
+        # 如果参数太少，则用空字典补齐
+        if len(args) <= len(ls_fn_str_s):
+            args = (*args, *[{} for _ in range(len(ls_fn_str_s) - len(args))])
+        # 获取损失函数方法
         ls_fn_s = [
             ttools.get_ls_fn(ls_fn_str, **kwargs)
             for ls_fn_str, kwargs in zip(ls_fn_str_s, args)
         ]
+        # TODO：是否需要使用lambda函数进行包裹？
         return [lambda X, y: ls_fn(X, y) for ls_fn in ls_fn_s]
         # ls_fn = ttools.get_ls_fn(ls_fn, **kwargs)
         # return lambda X, y: ls_fn(X, y)
@@ -219,7 +228,7 @@ class BasicNN(nn.Sequential):
     @torch.no_grad()
     def test_(self, test_iter,
               criterion_a: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
-              is_valid: bool = False, ls_fn=None, **ls_fn_kwargs
+              is_valid: bool = False, ls_fn_args: Tuple = ('mse', ())
               ) -> [float, float]:
         """测试方法。
         取出迭代器中的下一batch数据，进行预测后计算准确度和损失
@@ -233,9 +242,7 @@ class BasicNN(nn.Sequential):
         criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
         if not is_valid:
             # 如果是进行测试，则需要先初始化损失函数。
-            if ls_fn is None:
-                ls_fn = 'mse'
-            self._ls_fn_s = self._get_ls_fn(ls_fn, **ls_fn_kwargs)
+            self._ls_fn_s = self._get_ls_fn(ls_fn_args[0], *ls_fn_args[1])
             test_iter = tqdm(test_iter, unit='批', position=0, desc=f'测试中……', mininterval=1)
         # 要统计的数据种类数目
         l_names = self.loss_names if isinstance(self.loss_names, list) else [self.loss_names]
@@ -276,7 +283,7 @@ class BasicNN(nn.Sequential):
                  acc_fn: Callable,
                  unwrap_fn: Callable[
                      [torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor] = None,
-                 ls_name=None, **ls_fn_kwargs
+                 ls_fn_args: Tuple = ('mse', ())
                  ) -> torch.Tensor:
         """预测方法。
         对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
@@ -286,7 +293,8 @@ class BasicNN(nn.Sequential):
         :return: 打包好的数据集
         """
         self.eval()
-        ls_fn = self._get_ls_fn(ls_name, **ls_fn_kwargs)
+        # TODO：Untested!尚未测试多损失函数功能！
+        ls_fn_s = self._get_ls_fn(ls_fn_args[0], *ls_fn_args[1])
         if unwrap_fn is not None:
             # 将本次预测所产生的全部数据打包并返回。
             inputs, predictions, labels, acc_s, loss_es = [], [], [], [], []
@@ -297,15 +305,11 @@ class BasicNN(nn.Sequential):
                     pre_batch = self(fe_batch)
                     predictions.append(pre_batch)
                     labels.append(lb_batch)
-                    # for pre, lb in zip(pre_batch, lb_batch):
-                    #     acc_s.append(
-                    #         acc_fn(pre.reshape(1, *pre.shape), lb.reshape(1, *pre.shape))
-                    #     )
-                    #     loss_es.append(ls_fn(pre, lb))
                     acc_s += acc_fn(pre_batch, lb_batch, size_average=False)
                     keeping_dims = list(range(len(fe_batch.shape)))[1:]
-                    loss_es += ls_fn(pre_batch, lb_batch).mean(dim=keeping_dims)
+                    loss_es += [ls_fn(pre_batch, lb_batch).mean(dim=keeping_dims) for ls_fn in ls_fn_s]
                 data_iter.set_description('正对结果进行解包……')
+            # 将所有数据进行预处理
             inputs = torch.cat(inputs, dim=0)
             predictions = torch.cat(predictions, dim=0)
             labels = torch.cat(labels, dim=0)
