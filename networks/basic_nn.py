@@ -38,7 +38,7 @@ class BasicNN(nn.Sequential):
         self.__init_submodules(init_meth, *init_args)
         self._optimizer_s = None
         self._scheduler_s = None
-        self._ls_fn = None
+        self._ls_fn_s = None
         self.for_and_backward = None
         self.is_train = False
         self.apply(lambda m: m.to(device))
@@ -50,21 +50,20 @@ class BasicNN(nn.Sequential):
 
     def prepare_training(self,
                          o_args: tuple = ('adam', ()), l_args: tuple = ([], ()),
-                         ls_args: tuple = (), ls_kwargs: dict = {}
+                         ls_args: tuple = ('mse', ())
                          ):
         """进行训练准备
         :param o_args: 优化器参数。请注意第一项需为优化器类型字符串，其后为每一个优化器的kwargs。
         :param l_args: 学习率规划器器参数。请注意第一项需为学习率规划器类型字符串，其后为每一个学习率规划器的kwargs。
         :param ls_args:
-        :param ls_kwargs:
         :return:
         """
         o_args = o_args if isinstance(o_args[0], list) else ([o_args[0]], *o_args[1:])
         self._optimizer_s = self._get_optimizer(*o_args)
         l_args = l_args if isinstance(l_args[0], list) else ([l_args[0]], *l_args[1:])
         self._scheduler_s = self._get_lr_scheduler(*l_args)
-        # TODO：暂时不支持多损失函数
-        self._ls_fn = self._get_ls_fn(*ls_args, **ls_kwargs)
+        ls_args = ls_args if isinstance(ls_args[0], list) else ([ls_args[0]], *ls_args[1:])
+        self._ls_fn_s = self._get_ls_fn(*ls_args)
         #
         # def for_and_backward():
         #     def for_and_backward(X, y, backward=True):
@@ -114,10 +113,15 @@ class BasicNN(nn.Sequential):
         #         kwargs = {'step_size': 1, 'gamma': 1}
         #     return ttools.get_lr_scheduler(self.optimizer_s, scheduler_str_s, **kwargs)
 
-    def _get_ls_fn(self, ls_fn='mse', **kwargs):
-        self.loss_names = [ls_fn.upper()]
-        ls_fn = ttools.get_ls_fn(ls_fn, **kwargs)
-        return lambda X, y: ls_fn(X, y)
+    def _get_ls_fn(self, ls_fn_str_s, *args):
+        self.loss_names = [ls_fn_str.upper() for ls_fn_str in ls_fn_str_s]
+        ls_fn_s = [
+            ttools.get_ls_fn(ls_fn_str, **kwargs)
+            for ls_fn_str, kwargs in zip(ls_fn_str_s, args)
+        ]
+        return [lambda X, y: ls_fn(X, y) for ls_fn in ls_fn_s]
+        # ls_fn = ttools.get_ls_fn(ls_fn, **kwargs)
+        # return lambda X, y: ls_fn(X, y)
 
     # def train_(self,
     #            data_iter, optimizers, acc_fn,
@@ -194,7 +198,7 @@ class BasicNN(nn.Sequential):
             with_hook, hook_mute = True, False
         with Trainer(self,
                      data_iter, self._optimizer_s, self._scheduler_s, criterion_a,
-                     self.for_and_backward, n_epochs, self._ls_fn, with_hook, hook_mute
+                     self.for_and_backward, n_epochs, self._ls_fn_s, with_hook, hook_mute
                      ) as trainer:
             if k > 1:
                 # 是否进行k-折训练
@@ -208,7 +212,7 @@ class BasicNN(nn.Sequential):
             else:
                 history = trainer.train_with_threads(valid_iter)
         # 清楚训练痕迹
-        del self._optimizer_s, self._scheduler_s, self._ls_fn
+        del self._optimizer_s, self._scheduler_s, self._ls_fn_s
         self.is_train = False
         return history
 
@@ -231,7 +235,7 @@ class BasicNN(nn.Sequential):
             # 如果是进行测试，则需要先初始化损失函数。
             if ls_fn is None:
                 ls_fn = 'mse'
-            self._ls_fn = self._get_ls_fn(ls_fn, **ls_fn_kwargs)
+            self._ls_fn_s = self._get_ls_fn(ls_fn, **ls_fn_kwargs)
             test_iter = tqdm(test_iter, unit='批', position=0, desc=f'测试中……', mininterval=1)
         # 要统计的数据种类数目
         l_names = self.loss_names if isinstance(self.loss_names, list) else [self.loss_names]
@@ -249,7 +253,7 @@ class BasicNN(nn.Sequential):
             prefix = 'valid_'
         else:
             prefix = 'test_'
-            del self._ls_fn
+            del self._ls_fn_s
         i = 0
         for i, computer in enumerate(criterion_a):
             try:
@@ -355,8 +359,12 @@ class BasicNN(nn.Sequential):
         """
         if backward:
             with torch.enable_grad():
+                for optim in self._optimizer_s:
+                    optim.zero_grad()
                 result = self.__forward_impl(X, y)
                 self.__backward_impl(*result[1])
+                for optim in self._optimizer_s:
+                    optim.step()
         else:
             with torch.no_grad():
                 result = self.__forward_impl(X, y)
@@ -373,13 +381,10 @@ class BasicNN(nn.Sequential):
         :return: （预测值， （损失值集合））
         """
         pred = self(X)
-        return pred, (self._ls_fn(pred, y),)
+        return pred, (self._ls_fn_s(pred, y),)
 
-    def __backward_impl(self, ls):
-        ls.backward()
-        for optim in self._optimizer_s:
-            optim.zero_grad()
-            optim.step()
+    def __backward_impl(self, *ls):
+        ls[0].backward()
 
     def __str__(self):
         return '网络结构：\n' + super().__str__() + '\n所处设备：' + str(self.__device)
