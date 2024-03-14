@@ -318,8 +318,8 @@ class Pix2Pix(BasicNN):
             scheduler_s.append(scheduler)
         return scheduler_s
 
-    def _get_ls_fn(self, ls_fn='mse', **kwargs):
-        ls_fn = super()._get_ls_fn(ls_fn, **kwargs)
+    def _get_ls_fn(self, ls_fn='mse', **args):
+        ls_fn = super()._get_ls_fn(ls_fn, **args)
         # 指定输出的训练损失类型
         self.loss_names = ['G_LS', 'G_GAN', 'G_L1', 'D_LS', 'D_real', 'D_fake']
         return ls_fn

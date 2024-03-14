@@ -62,7 +62,7 @@ class BasicNN(nn.Sequential):
         self._optimizer_s = self._get_optimizer(*o_args)
         l_args = l_args if isinstance(l_args[0], list) else ([l_args[0]], *l_args[1:])
         self._scheduler_s = self._get_lr_scheduler(*l_args)
-        ls_args = ls_args if isinstance(ls_args[0], list) else ([ls_args[0]], *ls_args[1:])
+        # ls_args = ls_args if isinstance(ls_args[0], list) else ([ls_args[0]], *ls_args[1:])
         self._ls_fn_s = self._get_ls_fn(*ls_args)
         #
         # def for_and_backward():
@@ -118,6 +118,7 @@ class BasicNN(nn.Sequential):
         #     return ttools.get_lr_scheduler(self.optimizer_s, scheduler_str_s, **kwargs)
 
     def _get_ls_fn(self, ls_fn_str_s, *args):
+        ls_fn_str_s = ls_fn_str_s if isinstance(ls_fn_str_s, list) else [ls_fn_str_s]
         self.loss_names = [ls_fn_str.upper() for ls_fn_str in ls_fn_str_s]
         # 如果参数太少，则用空字典补齐
         if len(args) <= len(ls_fn_str_s):
@@ -127,8 +128,9 @@ class BasicNN(nn.Sequential):
             ttools.get_ls_fn(ls_fn_str, **kwargs)
             for ls_fn_str, kwargs in zip(ls_fn_str_s, args)
         ]
+        return ls_fn_s
         # TODO：是否需要使用lambda函数进行包裹？
-        return [lambda X, y: ls_fn(X, y) for ls_fn in ls_fn_s]
+        # return [lambda X, y: ls_fn(X, y) for ls_fn in ls_fn_s]
         # ls_fn = ttools.get_ls_fn(ls_fn, **kwargs)
         # return lambda X, y: ls_fn(X, y)
 
@@ -376,7 +378,7 @@ class BasicNN(nn.Sequential):
         assert len(result[1]) == len(self.loss_names), f'前向传播返回的损失值数量{result[1]}与指定的损失名称数量{len(self.loss_names)}不匹配。'
         return result
 
-    def __forward_impl(self, X, y) -> Tuple[torch.Tensor, Tuple]:
+    def __forward_impl(self, X, y) -> Tuple[torch.Tensor, List]:
         """前向传播实现。
         进行前向传播后，根据self._ls_fn()计算损失值，并返回。
         若要更改optimizer.zero_grad()以及backward()的顺序，请直接重载forward_backward()！
@@ -385,7 +387,7 @@ class BasicNN(nn.Sequential):
         :return: （预测值， （损失值集合））
         """
         pred = self(X)
-        return pred, (self._ls_fn_s(pred, y),)
+        return pred, [ls_fn(pred, y) for ls_fn in self._ls_fn_s]
 
     def __backward_impl(self, *ls):
         ls[0].backward()
