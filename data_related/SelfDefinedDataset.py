@@ -1,6 +1,6 @@
 import os
 from abc import abstractmethod
-from typing import Iterable, Tuple, Sized
+from typing import Iterable, Tuple, Sized, List
 
 import torch
 
@@ -180,6 +180,7 @@ class SelfDefinedDataSet:
                   labels: torch.Tensor,
                   acc_s: torch.Tensor,
                   loss_es: torch.Tensor,
+                  comments: List[str]
                   ):
         pass
 
