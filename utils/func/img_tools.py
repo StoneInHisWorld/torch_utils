@@ -135,10 +135,10 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     :param kwargs: 关键词参数。支持的参数包括：comment，单个白板的脚注；text_size，标签及脚注的文字大小；border_size，图片/标签/边界之间的宽度
     :return: 生成的结果图序列
     """
-    comments = kwargs['comment'] if 'comment' in kwargs.keys() else ['' for _ in range(len(groups_of_imgs_labels_list))]
+    comments = kwargs['comments'] if 'comments' in kwargs.keys() else ['' for _ in range(len(groups_of_imgs_labels_list))]
     text_size = kwargs['text_size'] if 'text_size' in kwargs.keys() else 15
     border_size = kwargs['border_size'] if 'border_size' in kwargs.keys() else 5
-    # TODO：使用cv2处理图片！
+    required_shape = kwargs['required_shape'] if 'required_shape' in kwargs.keys() else None
     # 判断白板所用模式
     mode = '1'
     modes = set()
@@ -151,45 +151,94 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     elif 'L' in modes:
         mode = 'L'
 
-    def _concat_imgs(comment,
+    def _concat_imgs(comment: str = "",
                      *imgs_and_labels: Tuple[Image, str]
                      ) -> Image:
-        # TODO：将绘制区域大小统一
+        # 计算绘图窗格大小
+        cb_height = max([img.height for img, _ in imgs_and_labels])
+        cb_width = max([img.width for img, _ in imgs_and_labels])
+        n_cube = len(imgs_and_labels)
+        # 计算脚注空间
+        n_cm_lines = comment.count('\n') + 2  # 加上'COMMENT:'和内容
+        text_indent = int(np.ceil(text_size / 3))
+        cm_height = text_size * n_cm_lines + text_indent * (n_cm_lines - 1)
+        cm_width = int(max([len(l) for l in comment.split('\n')]) * text_size / 2.5)
         # 绘制白板
-        wb_width = (len(imgs_and_labels) + 1) * border_size + sum(
-            [img.width for img, _ in imgs_and_labels]
+        wb_width = max(
+            (n_cube + 1) * border_size + n_cube * cb_width,
+            2 * border_size + cm_width
         )
-        wb_height = 4 * border_size + 2 * text_size + max(
-            [img.height for img, _ in imgs_and_labels]
-        )  # 留出一栏填充comment
+        wb_height = 3 * border_size + text_size + text_indent + cb_height + cm_height
         # 制作输入、输出、标签对照图
         whiteboard = IMAGE.new(
             mode, (wb_width, wb_height), color=255
         )
         draw = ImageDraw.Draw(whiteboard)
-        # 绘制标签
-        for i in range(len(imgs_and_labels)):
-            draw.text(
-                (
-                    (i + 1) * border_size + sum([img.width for img, _ in imgs_and_labels[: i]]),
-                    border_size
-                ),
-                imgs_and_labels[i][1]
-            )
-        # 粘贴图片
+        # 绘制标签和图片
         for i, (img, label) in enumerate(imgs_and_labels):
-            whiteboard.paste(img.convert(mode),
-                             ((i + 1) * border_size + sum([img.width for img, _ in imgs_and_labels[: i]]),
-                              border_size + text_size))
+            draw.text(((i + 1) * border_size + i * cb_width, border_size), label)
+            whiteboard.paste(
+                img.convert(mode),
+                (
+                    (i + 1) * border_size + i * cb_width,
+                    border_size + text_size + text_indent
+                )
+            )
+        # 绘制标签
+        # for i in range(len(imgs_and_labels)):
+        #     draw.text(
+        #         ((i + 1) * border_size + i * cb_width, border_size),
+        #         imgs_and_labels[i][1]
+        #     )
+        # 粘贴图片
+        # for i, (img, _) in enumerate(imgs_and_labels):
+        #     whiteboard.paste(img.convert(mode),
+        #                      ((i + 1) * border_size + sum([img.width for img, _ in imgs_and_labels[: i]]),
+        #                       border_size + text_size))
         # 绘制脚注
         draw.text(
-            (border_size, wb_height - text_size - border_size), 'COMMENT: ' + comment
+            (border_size, wb_height - cm_height - border_size),
+            'COMMENT: \n' + comment
         )
         return whiteboard
+        # # 绘制白板
+        # wb_width = (len(imgs_and_labels) + 1) * border_size + sum(
+        #     [img.width for img, _ in imgs_and_labels]
+        # )
+        # wb_height = 4 * border_size + 2 * text_size + max(
+        #     [img.height for img, _ in imgs_and_labels]
+        # )  # 留出一栏填充comment
+        # # 制作输入、输出、标签对照图
+        # whiteboard = IMAGE.new(
+        #     mode, (wb_width, wb_height), color=255
+        # )
+        # draw = ImageDraw.Draw(whiteboard)
+        # # 绘制标签
+        # for i in range(len(imgs_and_labels)):
+        #     draw.text(
+        #         (
+        #             (i + 1) * border_size + sum([img.width for img, _ in imgs_and_labels[: i]]),
+        #             border_size
+        #         ),
+        #         imgs_and_labels[i][1]
+        #     )
+        # # 粘贴图片
+        # for i, (img, label) in enumerate(imgs_and_labels):
+        #     whiteboard.paste(img.convert(mode),
+        #                      ((i + 1) * border_size + sum([img.width for img, _ in imgs_and_labels[: i]]),
+        #                       border_size + text_size))
+        # # 绘制脚注
+        # draw.text(
+        #     (border_size, wb_height - text_size - border_size), 'COMMENT: ' + comment
+        # )
+        # return whiteboard
 
     rets = []
     for imgs_and_labels, comment in zip(groups_of_imgs_labels_list, comments):
-        rets.append(_concat_imgs(comment, *imgs_and_labels))
+        ret = _concat_imgs(comment, *imgs_and_labels)
+        if required_shape is not None:
+            ret = ret.resize(required_shape)
+        rets.append(ret)
     return rets
 
 
