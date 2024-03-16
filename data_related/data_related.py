@@ -4,19 +4,21 @@ from typing import Iterable, Sized
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
-from torchvision.transforms import transforms
 import torchvision.transforms.functional as F
+from torch.utils.data import DataLoader
 
 from data_related.dataloader import LazyDataLoader
 from data_related.datasets import DataSet, LazyDataSet
 
 
-def single_argmax_accuracy(Y_HAT: torch.Tensor, Y: torch.Tensor) -> float:
+def single_argmax_accuracy(Y_HAT: torch.Tensor, Y: torch.Tensor, size_average=True) -> float:
     y_hat = torch.argmax(Y_HAT, dim=1)
     y = torch.argmax(Y, dim=1)
     cmp = (y_hat == y).type(Y.dtype)
-    return float(sum(cmp))
+    if size_average:
+        return float(sum(cmp))
+    else:
+        return cmp
 
 
 def split_real_data(features: torch.Tensor, labels: torch.Tensor, train, test, valid=.0,
