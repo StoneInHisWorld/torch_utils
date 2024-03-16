@@ -57,12 +57,14 @@ class AdaWZYNet(BasicNN):
             i, cur_in, cur_out = i + 1, cur_out, base_channels * (i + 2)
             cur_shape //= 2
         # 构造输出通道
+        init_meth = kwargs['init_meth'] if ('init_meth' in kwargs.keys()
+                                            and kwargs['init_meth'] != 'state') \
+            else 'normal'
         layers.append(nn.Sequential(
             nn.MaxPool2d(compressed_shape),
             MultiOutputLayer(
                 cur_in, out_features,
-                dropout_rate=dropout_rate, momentum=bn_momen,
-                init_meth=kwargs['init_meth'] if 'init_meth' in kwargs.keys() else 'normal',
+                dropout_rate=dropout_rate, momentum=bn_momen, init_meth=init_meth,
             )  # cur_in保存着最后的卷积层的输出通道
         ))
         super().__init__(*layers, **kwargs)
