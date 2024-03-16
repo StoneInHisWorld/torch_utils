@@ -18,7 +18,7 @@ from utils.accumulator import Accumulator
 class BasicNN(nn.Sequential):
     required_shape = (-1,)
 
-    def __init__(self, *args: Module, **kwargs) -> None:
+    def __init__(self, *args, **kwargs) -> None:
         """基本神经网络。
         提供神经网络的基本功能，包括权重初始化，训练以及测试。
         :param args: 需要添加的网络层
@@ -120,6 +120,7 @@ class BasicNN(nn.Sequential):
     def _get_ls_fn(self, ls_fn_str_s, *args):
         ls_fn_str_s = ls_fn_str_s if isinstance(ls_fn_str_s, list) else [ls_fn_str_s]
         self.loss_names = [ls_fn_str.upper() for ls_fn_str in ls_fn_str_s]
+        self.test_ls_names = self.loss_names
         # 如果参数太少，则用空字典补齐
         if len(args) <= len(ls_fn_str_s):
             args = (*args, *[{} for _ in range(len(ls_fn_str_s) - len(args))])
@@ -230,7 +231,7 @@ class BasicNN(nn.Sequential):
     @torch.no_grad()
     def test_(self, test_iter,
               criterion_a: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
-              is_valid: bool = False, ls_fn_args: Tuple = ('mse', ())
+              is_valid: bool = False, ls_fn_args: Tuple = ('mse',)
               ) -> [float, float]:
         """测试方法。
         取出迭代器中的下一batch数据，进行预测后计算准确度和损失
@@ -244,10 +245,11 @@ class BasicNN(nn.Sequential):
         criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
         if not is_valid:
             # 如果是进行测试，则需要先初始化损失函数。
-            self._ls_fn_s = self._get_ls_fn(ls_fn_args[0], *ls_fn_args[1])
+            # self._ls_fn_s = self._get_ls_fn(ls_fn_args[0], *ls_fn_args[1])
+            self._ls_fn_s = self._get_ls_fn(*ls_fn_args)
             test_iter = tqdm(test_iter, unit='批', position=0, desc=f'测试中……', mininterval=1)
         # 要统计的数据种类数目
-        l_names = self.loss_names if isinstance(self.loss_names, list) else [self.loss_names]
+        l_names = self.test_ls_names if isinstance(self.test_ls_names, list) else [self.test_ls_names]
         metric = Accumulator(len(criterion_a) + len(l_names) + 1)
         # 计算准确率和损失值
         for features, labels in test_iter:
@@ -282,43 +284,66 @@ class BasicNN(nn.Sequential):
 
     @torch.no_grad()
     def predict_(self, data_iter: DataLoader or LazyDataLoader,
-                 acc_fn: Callable,
-                 unwrap_fn: Callable[
-                     [torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor] = None,
+                 criterion_a: Callable or List[Callable],
+                 unwrap_fn: Callable = None,
                  ls_fn_args: Tuple = ('mse', ())
                  ) -> torch.Tensor:
         """预测方法。
         对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
+        :param ls_fn_args:
         :param data_iter: 预测数据迭代器。
-        :param acc_fn: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
-        :param unwrap_fn: 对所有数据进行打包的方法。如不指定，则直接返回预测数据。签名需为：unwrap_fn(inputs, predictions, labels, acc_s, loss_es) -> Any
+        :param criterion_a: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
+        :param unwrap_fn: 对所有数据进行打包的方法。如不指定，则直接返回预测数据。签名需为：unwrap_fn(inputs, predictions, labels, metrics, losses) -> Any
         :return: 打包好的数据集
         """
         self.eval()
-        # TODO：Untested!尚未测试多损失函数功能！
-        ls_fn_s = self._get_ls_fn(ls_fn_args[0], *ls_fn_args[1])
+        criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
+        self._ls_fn_s = self._get_ls_fn(*ls_fn_args)
         if unwrap_fn is not None:
             # 将本次预测所产生的全部数据打包并返回。
-            inputs, predictions, labels, acc_s, loss_es = [], [], [], [], []
+            inputs, predictions, labels, metrics, losses = [], [], [], [], []
             with tqdm(data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1) as data_iter:
                 # 对每个批次进行预测，并进行acc和loss的计算
                 for fe_batch, lb_batch in data_iter:
+                    # inputs.append(fe_batch)
+                    # pre_batch = self(fe_batch)
+                    # predictions.append(pre_batch)
+                    # labels.append(lb_batch)
+                    result = self.forward_backward(fe_batch, lb_batch, False)
+                    pre_batch, ls_es = result
                     inputs.append(fe_batch)
-                    pre_batch = self(fe_batch)
                     predictions.append(pre_batch)
                     labels.append(lb_batch)
-                    acc_s += acc_fn(pre_batch, lb_batch, size_average=False)
-                    keeping_dims = list(range(len(fe_batch.shape)))[1:]
-                    loss_es += [ls_fn(pre_batch, lb_batch).mean(dim=keeping_dims) for ls_fn in ls_fn_s]
+                    # TODO: 出现形状问题
+                    metrics_to_be_appended = [
+                        criterion(pre_batch, lb_batch, size_average=False)
+                        for criterion in criterion_a
+                    ]
+                    metrics.append(torch.vstack(metrics_to_be_appended).T)
+                    losses_to_be_appended = [
+                        ls.mean(dim=list(range(len(ls_es[0].shape)))[1:]) for ls in ls_es
+                    ]
+                    losses.append(torch.vstack(losses_to_be_appended).T)
+                    # losses += [ls_fn(pre_batch, lb_batch).mean(dim=keeping_dims) for ls_fn in ls_fn_s]
                 data_iter.set_description('正对结果进行解包……')
-            # 将所有数据进行预处理
+            # 将所有批次的数据堆叠在一起
             inputs = torch.cat(inputs, dim=0)
             predictions = torch.cat(predictions, dim=0)
             labels = torch.cat(labels, dim=0)
-            acc_s = torch.tensor(acc_s)
-            loss_es = torch.tensor(loss_es)
-            predictions = unwrap_fn(inputs, predictions, labels, acc_s, loss_es)
+            metrics = torch.cat(metrics, dim=0)
+            losses = torch.cat(losses, dim=0)
+            # 获取输出结果需要的注解
+            comments = self._get_comment(
+                inputs, predictions, labels,
+                metrics, [criterion.__name__ for criterion in criterion_a],
+                losses
+            )
+            # 将注解与所有数据打包，输出
+            predictions = unwrap_fn(
+                inputs, predictions, labels, metrics, losses, comments
+            )
         else:
+            # TODO: Untested!
             # 如果不需要打包数据，则直接返回预测数据集
             predictions = []
             with tqdm(data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1) as data_iter:
@@ -331,11 +356,28 @@ class BasicNN(nn.Sequential):
     def device(self):
         return self.__device
 
-    def load_state_dict_(self, where: str):
-        assert os.path.exists(where), f'目录{where}无效！'
-        assert where.endswith('.ptsd'), f'该文件{where}并非网络参数文件！'
-        paras = torch.load(where)
-        self.load_state_dict(paras)
+    def _get_comment(self, inputs, predictions, labels, metrics, mfn_names, losses):
+        comments = []
+        for input, pred, lb, metric_s, ls_es in zip(inputs, predictions, labels, metrics, losses):
+            comments.append(self._comment_impl(
+                input, pred, lb, metric_s, mfn_names, ls_es
+            ))
+        return comments
+
+    def _comment_impl(self, input, pred, lb, metric_s, mfn_name_s, ls_es):
+        comment = ''
+        for metric, name in zip(metric_s, mfn_name_s):
+            comment += f'{name} = {float(metric) * 100: .3f}%, '
+        comment += '\b\b'
+        for ls, name in zip(ls_es, self.test_ls_names):
+            comment += f'{name} = {float(ls): .4f}, '
+        return comment + '\b\b'
+
+    # def load_state_dict_(self, where: str):
+    #     assert os.path.exists(where), f'目录{where}无效！'
+    #     assert where.endswith('.ptsd'), f'该文件{where}并非网络参数文件！'
+    #     paras = torch.load(where)
+    #     self.load_state_dict(paras)
 
     def __init_submodules(self, init_meth, *args):
         init_meth = ttools.init_wb(init_meth)
@@ -351,8 +393,8 @@ class BasicNN(nn.Sequential):
                     raise NotImplementedError('针对预训练好的网络，请使用如下方法获取`net = torch.load("../xx.ptm")`')
             except IndexError:
                 raise ValueError('选择预训练好的参数初始化网络，需要在初始化方法的第一参数提供参数或者模型的路径！')
-            except FileNotFoundError:
-                raise FileNotFoundError(f'找不到{where}！')
+            # except FileNotFoundError:
+            #     raise FileNotFoundError(f'找不到{where}！')
 
     def forward_backward(self, X, y, backward=True):
         """前向和反向传播。
@@ -367,18 +409,19 @@ class BasicNN(nn.Sequential):
             with torch.enable_grad():
                 for optim in self._optimizer_s:
                     optim.zero_grad()
-                result = self.__forward_impl(X, y)
-                self.__backward_impl(*result[1])
+                result = self._forward_impl(X, y)
+                self._backward_impl(*result[1])
                 for optim in self._optimizer_s:
                     optim.step()
         else:
             with torch.no_grad():
-                result = self.__forward_impl(X, y)
+                result = self._forward_impl(X, y)
         assert len(result) == 2, f'前反向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
-        assert len(result[1]) == len(self.loss_names), f'前向传播返回的损失值数量{result[1]}与指定的损失名称数量{len(self.loss_names)}不匹配。'
+        assert len(result[1]) == len(
+            self.loss_names), f'前向传播返回的损失值数量{result[1]}与指定的损失名称数量{len(self.loss_names)}不匹配。'
         return result
 
-    def __forward_impl(self, X, y) -> Tuple[torch.Tensor, List]:
+    def _forward_impl(self, X, y) -> Tuple[torch.Tensor, List]:
         """前向传播实现。
         进行前向传播后，根据self._ls_fn()计算损失值，并返回。
         若要更改optimizer.zero_grad()以及backward()的顺序，请直接重载forward_backward()！
@@ -389,7 +432,7 @@ class BasicNN(nn.Sequential):
         pred = self(X)
         return pred, [ls_fn(pred, y) for ls_fn in self._ls_fn_s]
 
-    def __backward_impl(self, *ls):
+    def _backward_impl(self, *ls):
         ls[0].backward()
 
     def __str__(self):

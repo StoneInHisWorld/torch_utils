@@ -246,8 +246,6 @@ class Trainer:
         net = self.module
         data_iter = self.__data_iter
         n_epochs = self.__n_epochs
-        optimizer_s = self.__optimizer_s if isinstance(self.__optimizer_s, list) else [self.__optimizer_s]
-        lr_scheduler_s = self.__lr_scheduler_s if isinstance(self.__lr_scheduler_s, list) else [self.__lr_scheduler_s]
         criterion_a = self.__criterion_a if isinstance(self.__criterion_a, list) else [self.__criterion_a]
         # # 损失项
         # loss_names = ([f'train_{item}' for item in net.loss_names] +
@@ -269,7 +267,7 @@ class Trainer:
                 history.add(
                     lr_names, [
                         [param['lr'] for param in optimizer.param_groups]
-                        for optimizer in optimizer_s
+                        for optimizer in self.__optimizer_s
                     ]
                 )
                 # 记录批次训练损失总和，评价指标，样本数
@@ -289,7 +287,7 @@ class Trainer:
                             num_examples
                         )
                     pbar.update(1)
-                for scheduler in lr_scheduler_s:
+                for scheduler in self.__lr_scheduler_s:
                     scheduler.step()
                 # 记录训练数据
                 pbar.set_description('验证中...')
@@ -386,41 +384,88 @@ class Trainer:
         net = self.module
         data_iter = self.__data_iter
         n_epochs = self.__n_epochs
-        # optimizer = self.__optimizer_s
-        lr_scheduler = self.__lr_scheduler_s
-        ls_fn = self.__ls_fn
-        acc_fn = self.__criterion_a
-        history = History('train_l', 'train_acc', 'lrs')
+        criterion_a = self.__criterion_a if isinstance(self.__criterion_a, list) else [self.__criterion_a]
+        # 损失项
+        loss_names = [f'train_{item}' for item in net.loss_names]
+        # 评价项
+        criteria_names = [f'train_{criterion.__name__}' for criterion in criterion_a]
+        # 学习率项
+        lr_names = net.lr_names
+        history = History(*(criteria_names + loss_names + lr_names))
         with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
                   desc=f'训练中...', mininterval=1) as pbar:
             for epoch in range(n_epochs):
                 pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
-
                 history.add(
-                    ['lrs'],
-                    [[
+                    lr_names, [
                         [param['lr'] for param in optimizer.param_groups]
                         for optimizer in self.__optimizer_s
-                    ]]
+                    ]
                 )
-                metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
+                # 记录批次训练损失总和，评价指标，样本数
+                metric = Accumulator(len(loss_names + criteria_names) + 1)
                 # 训练主循环
                 for X, y in data_iter:
                     net.train()
-                    ls = self.backward(X, y)
+                    pred, ls_es = net.forward_backward(X, y)
                     with torch.no_grad():
-                        correct = acc_fn(net(X), y)
                         num_examples = X.shape[0]
-                        metric.add(ls * num_examples, correct, num_examples)
+                        correct_s = []
+                        for criterion in criterion_a:
+                            correct = criterion(pred, y)
+                            correct_s.append(correct)
+                        metric.add(
+                            *correct_s, *[ls * num_examples for ls in ls_es],
+                            num_examples
+                        )
                     pbar.update(1)
-                lr_scheduler.step()
+                for scheduler in self.__lr_scheduler_s:
+                    scheduler.step()
                 # TODO:记录训练数据，可以细化到每个批次
                 history.add(
-                    ['train_l', 'train_acc'],
-                    [metric[0] / metric[2], metric[1] / metric[2]]
+                    criteria_names + loss_names,
+                    [metric[i] / metric[-1] for i in range(len(metric) - 1)]
                 )
             pbar.close()
         return history
+        # # TODO: Untested
+        # net = self.module
+        # data_iter = self.__data_iter
+        # n_epochs = self.__n_epochs
+        # # optimizer = self.__optimizer_s
+        # lr_scheduler = self.__lr_scheduler_s
+        # ls_fn = self.__ls_fn
+        # criterion_a = self.__criterion_a
+        # history = History('train_l', 'train_acc', 'lrs')
+        # with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
+        #           desc=f'训练中...', mininterval=1) as pbar:
+        #     for epoch in range(n_epochs):
+        #         pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
+        #         history.add(
+        #             ['lrs'],
+        #             [[
+        #                 [param['lr'] for param in optimizer.param_groups]
+        #                 for optimizer in self.__optimizer_s
+        #             ]]
+        #         )
+        #         metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
+        #         # 训练主循环
+        #         for X, y in data_iter:
+        #             net.train()
+        #             ls = self.backward(X, y)
+        #             with torch.no_grad():
+        #                 correct = criterion_a(net(X), y)
+        #                 num_examples = X.shape[0]
+        #                 metric.add(ls * num_examples, correct, num_examples)
+        #             pbar.update(1)
+        #         lr_scheduler.step()
+        #         # TODO:记录训练数据，可以细化到每个批次
+        #         history.add(
+        #             ['train_l', 'train_acc'],
+        #             [metric[0] / metric[2], metric[1] / metric[2]]
+        #         )
+        #     pbar.close()
+        # return history
 
     def train_with_threads(self, valid_iter=None, timeout=1) -> History:
         """
