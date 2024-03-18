@@ -388,7 +388,7 @@ class Pix2Pix(BasicNN):
                 reduced_form = False
                 lambda_l1 = 100.
                 kwargs = {}
-                size_averaged = False
+                size_averaged = True
             # 定义损失函数
             criterionGAN = GANLoss(gan_mode, **kwargs).to(self.device)
             self.criterionGAN = lambda pred, target_is_real: criterionGAN(pred, target_is_real)
