@@ -368,10 +368,9 @@ class BasicNN(nn.Sequential):
         comment = ''
         for metric, name in zip(metric_s, mfn_name_s):
             comment += f'{name} = {float(metric) * 100: .3f}%, '
-        comment += '\b\b'
         for ls, name in zip(ls_es, self.test_ls_names):
             comment += f'{name} = {float(ls): .4f}, '
-        return comment + '\b\b'
+        return comment
 
     # def load_state_dict_(self, where: str):
     #     assert os.path.exists(where), f'目录{where}无效！'
