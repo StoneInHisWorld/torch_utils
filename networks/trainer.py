@@ -236,7 +236,7 @@ class Trainer:
         self.hook_mute = hook_mute
         pass
 
-    def train_and_valid(self, valid_iter) -> History:
+    def train_and_valid(self, valid_iter, pbar=None) -> History:
         """
         神经网络训练函数。
         :param valid_iter: 验证数据供给迭代器
@@ -260,44 +260,47 @@ class Trainer:
         # 学习率项
         lr_names = net.lr_names
         history = History(*(criteria_names + loss_names + lr_names))
-        with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
-                  desc=f'训练中...', mininterval=1) as pbar:
-            for epoch in range(n_epochs):
-                pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
-                history.add(
-                    lr_names, [
-                        [param['lr'] for param in optimizer.param_groups]
-                        for optimizer in self.__optimizer_s
-                    ]
-                )
-                # 记录批次训练损失总和，评价指标，样本数
-                metric = Accumulator(len(loss_names + criteria_names) + 1)
-                # 训练主循环
-                for X, y in data_iter:
-                    net.train()
-                    pred, ls_es = net.forward_backward(X, y)
-                    with torch.no_grad():
-                        num_examples = X.shape[0]
-                        correct_s = []
-                        for criterion in criterion_a:
-                            correct = criterion(pred, y)
-                            correct_s.append(correct)
-                        metric.add(
-                            *correct_s, *[ls * num_examples for ls in ls_es],
-                            num_examples
-                        )
-                    pbar.update(1)
-                for scheduler in self.__lr_scheduler_s:
-                    scheduler.step()
-                # 记录训练数据
-                pbar.set_description('验证中...')
-                valid_log = net.test_(valid_iter, criterion_a, True)
-                history.add(
-                    criteria_names + loss_names + list(valid_log.keys()),
-                    [metric[i] / metric[-1] for i in range(len(metric) - 1)] +
-                    list(valid_log.values())
-                )
-            pbar.close()
+        # 设置进度条
+        if pbar is None:
+            pbar = tqdm(total=len(data_iter) * n_epochs, unit='批', position=0, desc=f'训练中...', mininterval=1)
+        # with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
+        #           desc=f'训练中...', mininterval=1) as pbar:
+        for epoch in range(n_epochs):
+            pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
+            history.add(
+                lr_names, [
+                    [param['lr'] for param in optimizer.param_groups]
+                    for optimizer in self.__optimizer_s
+                ]
+            )
+            # 记录批次训练损失总和，评价指标，样本数
+            metric = Accumulator(len(loss_names + criteria_names) + 1)
+            # 训练主循环
+            for X, y in data_iter:
+                net.train()
+                pred, ls_es = net.forward_backward(X, y)
+                with torch.no_grad():
+                    num_examples = X.shape[0]
+                    correct_s = []
+                    for criterion in criterion_a:
+                        correct = criterion(pred, y)
+                        correct_s.append(correct)
+                    metric.add(
+                        *correct_s, *[ls * num_examples for ls in ls_es],
+                        num_examples
+                    )
+                pbar.update(1)
+            for scheduler in self.__lr_scheduler_s:
+                scheduler.step()
+            # 记录训练数据
+            pbar.set_description('验证中...')
+            valid_log = net.test_(valid_iter, criterion_a, True)
+            history.add(
+                criteria_names + loss_names + list(valid_log.keys()),
+                [metric[i] / metric[-1] for i in range(len(metric) - 1)] +
+                list(valid_log.values())
+            )
+            # pbar.close()
         return history
         # history = History('train_l', 'train_acc', 'valid_l', 'valid_acc', 'lrs')
         # with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
@@ -574,21 +577,26 @@ class Trainer:
         :param k: 将数据拆分成k折，每一折轮流作验证集，余下k-1折作训练集
         :return: k折训练记录，包括每一折训练时的('train_l', 'train_acc', 'valid_l', 'valid_acc')
         """
-        # TODO: Untested!
-        k_fold_history = History('train_l', 'train_acc', 'valid_l', 'valid_acc', 'lrs')
-        with tqdm(range(k), position=0, leave=True, unit='折') as pbar:
-            for train_iter, valid_iter in train_loaders_iter:
+        k_fold_history = None
+        with tqdm(total=k * self.__n_epochs, position=0, leave=True, unit='批', mininterval=1) as pbar:
+            for i, (train_iter, valid_iter) in enumerate(train_loaders_iter):
                 pbar.set_description(f'\r训练折{pbar.n}……')
                 self.__data_iter = train_iter
+                # 计算训练批次数
+                pbar.total = k * self.__n_epochs * len(train_iter)
                 if n_workers <= 1:
-                    history = self.train_and_valid(valid_iter)
+                    history = self.train_and_valid(valid_iter, pbar)
                 else:
+                    # TODO: Untested!
                     history = self.train_with_threads(valid_iter, timeout=timeout)
-                k_fold_history += history
-                pbar.update(1)
-            if pbar.n != k:
-                warnings.warn(f'数据加载器供给长度与k不相等！数据加载器长度为{pbar.n}, k={k}')
-            pbar.close()
+                if k_fold_history is None:
+                    k_fold_history = history
+                else:
+                    k_fold_history += history
+                pbar.set_description(f'\r折{i + 1}训练完毕')
+                # pbar.update(1)
+            # if pbar.n != k:
+            #     warnings.warn(f'数据加载器供给长度与k不相等！数据加载器长度为{pbar.n}, k={k}')
         return k_fold_history
 
     def __deal_with_hook(self, net: Iterable[nn.Module]):
