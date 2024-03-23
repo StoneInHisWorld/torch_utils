@@ -476,7 +476,7 @@ class GoogLeNet(BasicNN):
     required_shape = (224, 224)
 
     def __init__(self, in_channels, out_features,
-                 version='1', regression=False,
+                 version='1', regression=False, dropout_rate=0.,
                  **kwargs):
         """经典GoogLeNet模型。
 
@@ -493,39 +493,6 @@ class GoogLeNet(BasicNN):
             multi_in = 2048
         else:
             raise NotImplementedError(f'暂不支持的GoogLeNet类型{version}，当前支持的类型包括{supported}')
-        # b1 = nn.Sequential(
-        #     nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3),
-        #     nn.ReLU(),
-        #     nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        # )
-        #
-        # b2 = nn.Sequential(
-        #     nn.Conv2d(64, 64, kernel_size=1), nn.ReLU(),
-        #     nn.Conv2d(64, 192, kernel_size=3, padding=1), nn.ReLU(),
-        #     nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        # )
-        #
-        # b3 = nn.Sequential(
-        #     inception(192, 64, (96, 128), (16, 32), 32),
-        #     inception(256, 128, (128, 192), (32, 96), 64),
-        #     nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        # )
-        #
-        # b4 = nn.Sequential(
-        #     inception(480, 192, (96, 208), (16, 48), 64),
-        #     inception(512, 160, (112, 224), (24, 64), 64),
-        #     inception(512, 128, (128, 256), (24, 64), 64),
-        #     inception(512, 112, (144, 288), (32, 64), 64),
-        #     inception(528, 256, (160, 320), (32, 128), 128),
-        #     nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        # )
-        #
-        # b5 = nn.Sequential(
-        #     inception(832, 256, (160, 320), (32, 128), 128),
-        #     inception(832, 384, (192, 384), (48, 128), 128),
-        #     nn.AdaptiveAvgPool2d((1, 1)),
-        #     nn.Flatten()
-        # )
         super().__init__(
             *get_blocks(in_channels),
             MultiOutputLayer(multi_in, out_features, init_meth=kwargs['init_meth']) if isinstance(out_features, Iterable)
@@ -534,8 +501,9 @@ class GoogLeNet(BasicNN):
         )
 
     @staticmethod
-    def __get_version1(in_channels):
+    def __get_version1(in_channels, dropout_rate=0.):
         inception = Inception_v1
+        dropout = nn.Dropout(dropout_rate)
         b1 = nn.Sequential(
             nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3),
             nn.ReLU(),
@@ -544,27 +512,36 @@ class GoogLeNet(BasicNN):
 
         b2 = nn.Sequential(
             nn.Conv2d(64, 64, kernel_size=1), nn.ReLU(),
+            dropout,
             nn.Conv2d(64, 192, kernel_size=3, padding=1), nn.ReLU(),
+            dropout,
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         )
 
         b3 = nn.Sequential(
             inception(192, 64, (96, 128), (16, 32), 32),
+            dropout,
             inception(256, 128, (128, 192), (32, 96), 64),
+            dropout,
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         )
 
         b4 = nn.Sequential(
             inception(480, 192, (96, 208), (16, 48), 64),
+            dropout,
             inception(512, 160, (112, 224), (24, 64), 64),
+            dropout,
             inception(512, 128, (128, 256), (24, 64), 64),
+            dropout,
             inception(512, 112, (144, 288), (32, 64), 64),
+            dropout,
             inception(528, 256, (160, 320), (32, 128), 128),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         )
 
         b5 = nn.Sequential(
             inception(832, 256, (160, 320), (32, 128), 128),
+            dropout,
             inception(832, 384, (192, 384), (48, 128), 128),
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten()
