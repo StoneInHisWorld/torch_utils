@@ -231,7 +231,7 @@ class BasicNN(nn.Sequential):
     @torch.no_grad()
     def test_(self, test_iter,
               criterion_a: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
-              is_valid: bool = False, ls_fn_args: Tuple = ('mse',)
+              pbar=None, ls_fn_args: Tuple = ('mse',)
               ) -> [float, float]:
         """测试方法。
         取出迭代器中的下一batch数据，进行预测后计算准确度和损失
@@ -243,11 +243,14 @@ class BasicNN(nn.Sequential):
         self.eval()
         # 要统计的数据种类数目
         criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
-        if not is_valid:
-            # 如果是进行测试，则需要先初始化损失函数。
+        is_test = pbar is None
+        if is_test:
+            # 如果不指定进度条，则是进行测试，需要先初始化损失函数。
             # self._ls_fn_s = self._get_ls_fn(ls_fn_args[0], *ls_fn_args[1])
             self._ls_fn_s = self._get_ls_fn(*ls_fn_args)
-            test_iter = tqdm(test_iter, unit='批', position=0, desc=f'测试中……', mininterval=1)
+            pbar = tqdm(test_iter, unit='批', position=0, desc=f'测试中……', mininterval=1)
+        else:
+            pbar.set_description('验证中...')
         # 要统计的数据种类数目
         l_names = self.test_ls_names if isinstance(self.test_ls_names, list) else [self.test_ls_names]
         metric = Accumulator(len(criterion_a) + len(l_names) + 1)
@@ -258,13 +261,14 @@ class BasicNN(nn.Sequential):
                 *[criterion(preds, labels) for criterion in criterion_a],
                 *[ls * len(features) for ls in ls_es], len(features)
             )
+            pbar.update(1)
         # 生成测试日志
         log = {}
-        if is_valid:
-            prefix = 'valid_'
-        else:
+        if is_test:
             prefix = 'test_'
             del self._ls_fn_s
+        else:
+            prefix = 'valid_'
         i = 0
         for i, computer in enumerate(criterion_a):
             try:

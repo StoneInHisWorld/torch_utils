@@ -262,7 +262,8 @@ class Trainer:
         history = History(*(criteria_names + loss_names + lr_names))
         # 设置进度条
         if pbar is None:
-            pbar = tqdm(total=len(data_iter) * n_epochs, unit='批', position=0, desc=f'训练中...', mininterval=1)
+            pbar = tqdm(total=(len(data_iter) + len(valid_iter)) * n_epochs, unit='批', position=0,
+                        desc=f'训练中...', mininterval=1)
         # with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
         #           desc=f'训练中...', mininterval=1) as pbar:
         for epoch in range(n_epochs):
@@ -293,8 +294,8 @@ class Trainer:
             for scheduler in self.__lr_scheduler_s:
                 scheduler.step()
             # 记录训练数据
-            pbar.set_description('验证中...')
-            valid_log = net.test_(valid_iter, criterion_a, True)
+            # pbar.set_description('验证中...')
+            valid_log = net.test_(valid_iter, criterion_a, pbar)
             history.add(
                 criteria_names + loss_names + list(valid_log.keys()),
                 [metric[i] / metric[-1] for i in range(len(metric) - 1)] +
@@ -583,7 +584,7 @@ class Trainer:
                 pbar.set_description(f'\r训练折{pbar.n}……')
                 self.__data_iter = train_iter
                 # 计算训练批次数
-                pbar.total = k * self.__n_epochs * len(train_iter)
+                pbar.total = k * self.__n_epochs * (len(train_iter) + len(valid_iter))
                 if n_workers <= 1:
                     history = self.train_and_valid(valid_iter, pbar)
                 else:
