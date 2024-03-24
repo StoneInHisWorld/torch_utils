@@ -246,7 +246,7 @@ class BasicNN(nn.Sequential):
                     predictions.append(pre_batch)
                     labels.append(lb_batch)
                     metrics_to_be_appended = [
-                        criterion(pre_batch, lb_batch, size_average=False)
+                        criterion(pre_batch, lb_batch, size_averaged=False)
                         for criterion in criterion_a
                     ]
                     metrics.append(torch.vstack(metrics_to_be_appended).T)
