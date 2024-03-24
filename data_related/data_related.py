@@ -1,23 +1,24 @@
 import random
 import warnings
+from typing import Iterable, Sized
 
 import numpy as np
 import torch
-from PIL import Image
-from typing import Iterable, Sized, Callable, List
-
+import torchvision.transforms.functional as F
 from torch.utils.data import DataLoader
-from torchvision.transforms import transforms
 
 from data_related.dataloader import LazyDataLoader
 from data_related.datasets import DataSet, LazyDataSet
 
 
-def single_argmax_accuracy(Y_HAT: torch.Tensor, Y: torch.Tensor) -> float:
+def single_argmax_accuracy(Y_HAT: torch.Tensor, Y: torch.Tensor, size_average=True) -> float:
     y_hat = torch.argmax(Y_HAT, dim=1)
     y = torch.argmax(Y, dim=1)
     cmp = (y_hat == y).type(Y.dtype)
-    return float(sum(cmp))
+    if size_average:
+        return float(sum(cmp))
+    else:
+        return cmp
 
 
 def split_real_data(features: torch.Tensor, labels: torch.Tensor, train, test, valid=.0,
@@ -72,7 +73,7 @@ def split_data(dataset: DataSet or LazyDataSet, train=0.8, test=0.2, valid=.0, s
     """
     assert train + test + valid == 1.0, '训练集、测试集、验证集比例之和须为1'
     # 数据集分割
-    print('正对数据集进行分割……')
+    print('\r正在进行数据集分割……', flush=True)
     data_len = len(dataset)
     train_len = int(data_len * train)
     valid_len = int(data_len * valid)
@@ -85,44 +86,6 @@ def split_data(dataset: DataSet or LazyDataSet, train=0.8, test=0.2, valid=.0, s
         )
         for r in ret
     ]
-
-
-# def read_img(path: str, required_shape: Tuple[int, int] = None, mode: str = 'L',
-#              requires_id: bool = False) -> np.ndarray:
-def read_img(path: str, mode: str = 'L', requires_id: bool = False,
-             preprocess: List[Callable] = None, prepro_kwargs: List[dict] = None) -> np.ndarray:
-    """
-    读取图片
-    :param preprocess: 预处理过程，方法签名需为def __(img:Image, ...) -> Image
-    :param path: 图片所在路径
-    :param mode: 图片读取模式
-    :param requires_id: 是否需要给图片打上ID
-    :param kwargs: 输入到预处理过程中的关键词参数
-    :return: 图片对应numpy数组，形状为（通道，图片高，图片宽，……）
-    """
-    img_modes = ['L', 'RGB']
-    assert mode in img_modes, f'不支持的图像模式{mode}！'
-    img = Image.open(path).convert(mode)
-    # # 若有要求shape，则进行resize，边缘填充黑条
-    # if required_shape and required_shape != (-1, -1):
-    #     img = tools.resize_img(img, required_shape)
-    if preprocess is not None:
-        for func, kwargs in zip(preprocess, prepro_kwargs):
-            img = func(img, **kwargs)
-    img = np.array(img)
-    # 复原出通道。1表示样本数量维
-    if mode == 'L':
-        img_channels = 1
-    elif mode == 'RGB':
-        img_channels = 3
-    else:
-        img_channels = -1
-    img = img.reshape((img_channels, *img.shape[:2]))
-    if requires_id:
-        # 添加上读取文件名
-        print(path.split('/')[-1])
-        img = np.hstack((path.split('/')[-1], img))
-    return img
 
 
 def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=True,
@@ -143,20 +106,17 @@ def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=T
     if not batch_size:
         batch_size = dataset.feature_shape[0]
     if type(dataset) == LazyDataSet:
-        # dataset.preprocess()
-        loader = LazyDataLoader(
-            dataset, dataset.read_fn, batch_size, max_load=max_load, shuffle=shuffle,
-            collate_fn=dataset.collate_fn, sampler=sampler, **kwargs
+        return LazyDataLoader(
+            dataset, batch_size,
+            max_load=max_load, shuffle=shuffle, collate_fn=dataset.collate_fn,
+            sampler=sampler,
+            **kwargs
         )
-        loader.register_preprocess(dataset.fea_preprocesses, dataset.lb_preprocesses)
-        # return LazyDataLoader(
-        #     dataset, dataset.read_fn, batch_size, max_load=max_load, shuffle=shuffle,
-        #     collate_fn=dataset.collate_fn, sampler=sampler, **kwargs
-        # )
-        return loader
     elif type(dataset) == DataSet:
         return DataLoader(
-            dataset, batch_size, shuffle=shuffle, collate_fn=dataset.collate_fn, sampler=sampler, **kwargs
+            dataset, batch_size,
+            shuffle=shuffle, collate_fn=dataset.collate_fn, sampler=sampler,
+            **kwargs
         )
 
 
@@ -185,16 +145,6 @@ def k_fold_split(dataset: DataSet or LazyDataSet, k: int = 10, shuffle: bool = T
         ]
 
 
-# def data_slicer(data, data_portion=1., shuffle=True) -> np.ndarray:
-#     assert 0 <= data_portion <= 1.0, '切分的数据集需为源数据集的子集！'
-#     if isinstance(data, np.ndarray):
-#         shuffle_fn = np.random.shuffle
-#     else:
-#         shuffle_fn = random.shuffle
-#     if shuffle:
-#         shuffle_fn(data)
-#     return data[:int(data_portion * len(data))]
-
 def data_slicer(data_portion=1., shuffle=True, *args: Sized):
     """
     数据集切分器
@@ -215,11 +165,18 @@ def data_slicer(data_portion=1., shuffle=True, *args: Sized):
     return zip(*args[: data_portion])  # 返回值总为元组
 
 
-def normalize(data: torch.Tensor) -> torch.Tensor:
-    # mean = torch.mean(data, dim=list(range(1, len(data.shape))))
-    # std = torch.std(data, dim=list(range(1, len(data.shape))))
+def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
+    """
+    进行数据标准化。
+    :param data: 需要进行标准化的数据。
+    :param epsilon: 防止分母为0的无穷小量。
+    :return: 标准化的数据
+    """
     mean, std = [func(data, dim=list(range(2, len(data.shape))), keepdim=True)
                  for func in [torch.mean, torch.std]]
-    computer = transforms.Normalize(mean, std)
-    return computer(data)
-    # return torch.nn.functional.normalize(data)
+    if len(data.shape) == 4:
+        return F.normalize(data, mean, std)
+    elif len(data.shape) == 1:
+        return (data - mean) / (std + epsilon)
+    else:
+        raise Exception(f'不支持的数据形状{data.shape}！')

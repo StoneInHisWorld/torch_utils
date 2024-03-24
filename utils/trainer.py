@@ -1,10 +1,10 @@
 import time
-import warnings
 
 import torch
 from torchsummary import summary
 
-from utils import tools
+import utils.func.log_tools as ltools
+from utils.func import pytools
 
 
 class Trainer:
@@ -34,58 +34,54 @@ class Trainer:
 
     def __enter__(self):
         self.start = time.time()
-        print(
-            f'---------------------------EXP NO.{self.__exp_no}'
-            f'---------------------------'
-        )
+        # print(
+        #     f'\r---------------------------实验{self.__exp_no}号'
+        #     f'---------------------------'
+        # )
         for k, v in self.__hp.items():
             print(k + ': ' + str(v))
         print(
-            '----------------------------------------------------------------'
+            '\r----------------------------------------------------------------'
         )
-        # TODO: 打印超参数
         return self.__hp.values()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """训练器对象的退出动作。
+        进行日志编写以及网络保存操作。
+
+        :param exc_type: 出现的异常类型
+        :param exc_val: 出现的异常值
+        :param exc_tb: 异常的路径回溯
+        :return: None
+        """
         # 进行日志编写
         if exc_type is not None:
-            print(f'exc_type: {exc_type}')
-            print(f'exc_val: {exc_val}')
-            self.__hp.update({'exc_val': exc_val})
+            if exc_type != KeyboardInterrupt:
+                # 出现异常则记录
+                print(f'exc_type: {exc_type}')
+                print(f'exc_val: {exc_val}')
+                self.__hp.update({'exc_val': exc_val})
+            else:
+                # 键盘中断则什么也不做
+                return
+        # 记录时间信息
         time_span = time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start))
         self.__hp.update({'exp_no': self.__exp_no, "duration": time_span, "dataset": self.datasource.__name__})
-        if self.__lp is not None and exc_type != KeyboardInterrupt:
+        if self.__lp is not None:
+            # 指定了日志路径，则进行日志记录
             self.__write_log(**self.__hp)
         # 保存训练生成的网络
         self.__save_net()
 
     def __write_log(self, **kwargs):
         kwargs.update(self.__extra_lm)
-        tools.write_log(self.__lp, **kwargs)
+        ltools.write_log(self.__lp, **kwargs)
         print('已编写日志')
 
     def add_logMsg(self, mute=True, **kwargs):
-        self.__extra_lm = kwargs
+        self.__extra_lm.update(kwargs)
         if not mute:
             print(self.__extra_lm)
-
-    # def save_net(self, net: torch.nn.Module, exp_no: int, entire=False):
-    # def save_net(self, net: torch.nn.Module, entire=False) -> None:
-    #     """
-    #     保存当前网络net
-    #     :param net: 需要保存的网络
-    #     :param entire: 是否保存整个网络
-    #     :return: None
-    #     """
-    #     warnings.warn('将在未来的版本中删除，由settings.json中的save_net参数自动指示对网络的保存，由__save_net()进行该动作',
-    #                   DeprecationWarning)
-    #     if self.__np is None:
-    #         print("未指定模型保存路径，不予保存模型！")
-    #         return
-    #     if entire:
-    #         torch.save(net, self.__np + f'{self.__exp_no}.ptm')
-    #     else:
-    #         torch.save(net.state_dict(), self.__np + f'{self.__exp_no}.ptsd')
 
     def __save_net(self) -> None:
         """
@@ -98,7 +94,7 @@ class Trainer:
         if not isinstance(self.__net, torch.nn.Module):
             print('训练器对象未得到训练网络对象，因此不予保存网络！')
             return
-        if not tools.check_para('save_net', self.__sn, self.sn_range):
+        if not pytools.check_para('save_net', self.__sn, self.sn_range):
             print('请检查setting.json中参数save_net设置是否正确，本次不予保存模型！')
             return
         if self.__sn == 'entire':
@@ -123,4 +119,7 @@ class Trainer:
 
     def register_net(self, net: torch.nn.Module):
         self.__net = net
-        self.__list_net(net, (self.datasource.img_channel, *net.required_shape), self.__hp['batch_size'])
+        self.__list_net(
+            net, (self.datasource.fea_channel, *net.required_shape),
+            self.__hp['batch_size']
+        )

@@ -1,9 +1,10 @@
 import numpy as np
 import torch
 
+import utils.func.torch_tools
 from data_related import data_related as dr
 from networks.nets.wzynet_essay import WZYNetEssay
-from utils import tools
+from utils.func import pytools
 from data_related.datasets import DataSet
 from utils.hypa_control import ControlPanel
 
@@ -82,15 +83,15 @@ for trainer in cp:
         in_channel = _
         out_features = _
         net = Net(in_channel, base, out_features, init_meth=init_meth, device=device)
-        cp.list_net(net, (in_channel, *train_data.feature_shape), batch_size)
+        cp.__list_net(net, (in_channel, *train_data.feature_shape), batch_size)
 
         print(f'training on {device}...')
         # 进行训练准备
-        optimizer = tools.get_optimizer(net, optim_str, lr, w_decay)
-        ls_fn = tools.get_loss(ls_fn)
+        optimizer = utils.func.torch_tools.get_optimizer(net, optim_str, lr, w_decay)
+        ls_fn = utils.func.torch_tools.get_ls_fn(ls_fn)
         history = net.train_(
-            train_iter, valid_iter=valid_iter, optimizer=optimizer, num_epochs=epochs,
-            ls_fn=ls_fn, acc_fn=acc_func
+            train_iter, valid_iter=valid_iter, optimizers=optimizer, num_epochs=epochs,
+            ls_fn=ls_fn, criterion_a=acc_func
         )
 
         print('testing...')
