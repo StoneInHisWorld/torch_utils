@@ -11,11 +11,11 @@ from data_related.dataloader import LazyDataLoader
 from data_related.datasets import DataSet, LazyDataSet
 
 
-def single_argmax_accuracy(Y_HAT: torch.Tensor, Y: torch.Tensor, size_average=True) -> float:
+def single_argmax_accuracy(Y_HAT: torch.Tensor, Y: torch.Tensor, size_averaged=True) -> float:
     y_hat = torch.argmax(Y_HAT, dim=1)
     y = torch.argmax(Y, dim=1)
     cmp = (y_hat == y).type(Y.dtype)
-    if size_average:
+    if size_averaged:
         return float(sum(cmp))
     else:
         return cmp
