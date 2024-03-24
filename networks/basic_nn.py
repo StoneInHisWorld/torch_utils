@@ -1,17 +1,15 @@
-import os.path
 import warnings
 from typing import Callable, List, Tuple
 
 import torch
 import torch.nn as nn
-from networks.trainer import Trainer
-from torch.nn import Module
 from torch.utils import checkpoint
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import utils.func.torch_tools as ttools
 from data_related.dataloader import LazyDataLoader
+from networks.trainer import Trainer
 from utils.accumulator import Accumulator
 
 
@@ -62,30 +60,19 @@ class BasicNN(nn.Sequential):
         self._optimizer_s = self._get_optimizer(*o_args)
         l_args = l_args if isinstance(l_args[0], list) else ([l_args[0]], *l_args[1:])
         self._scheduler_s = self._get_lr_scheduler(*l_args)
-        # ls_args = ls_args if isinstance(ls_args[0], list) else ([ls_args[0]], *ls_args[1:])
         self._ls_fn_s = self._get_ls_fn(*ls_args)
-        #
-        # def for_and_backward():
-        #     def for_and_backward(X, y, backward=True):
-        #
-        #         if backward:
-        #             pred = self(X)
-        #             for optim in self.optimizer_s:
-        #                 optim.zero_grad()
-        #             lo = self.ls_fn(pred, y)
-        #             lo.backward()
-        #             for optim in self.optimizer_s:
-        #                 optim.step()
-        #         else:
-        #             with torch.no_grad():
-        #                 pred = self(X)
-        #                 lo = self.ls_fn(pred, y)
-        #         return pred, (lo.item(), )
 
         self.is_train = True
 
-    def _get_optimizer(self, optim_str_s, *args,
+    def _get_optimizer(self, optim_str_s: str or List[str],
+                       *args,
                        ) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
+        """获取网络优化器。
+        此方法会在prepare_training()中被调用。
+        :param optim_str_s: 优化器类型字符串序列
+        :param args: 每个优化器对应关键词参数
+        :return: 优化器序列
+        """
         optimizer_s, self.lr_names = [], []
         i = 0
         # 如果参数太少，则用空字典补齐
@@ -112,10 +99,6 @@ class BasicNN(nn.Sequential):
             ttools.get_lr_scheduler(optim, ss, **kwargs)
             for ss, optim, kwargs in zip(scheduler_str_s, self._optimizer_s, args)
         ]
-        # else:
-        #     if kwargs == {}:
-        #         kwargs = {'step_size': 1, 'gamma': 1}
-        #     return ttools.get_lr_scheduler(self.optimizer_s, scheduler_str_s, **kwargs)
 
     def _get_ls_fn(self, ls_fn_str_s, *args):
         ls_fn_str_s = ls_fn_str_s if isinstance(ls_fn_str_s, list) else [ls_fn_str_s]
@@ -130,58 +113,6 @@ class BasicNN(nn.Sequential):
             for ls_fn_str, kwargs in zip(ls_fn_str_s, args)
         ]
         return ls_fn_s
-        # TODO：是否需要使用lambda函数进行包裹？
-        # return [lambda X, y: ls_fn(X, y) for ls_fn in ls_fn_s]
-        # ls_fn = ttools.get_ls_fn(ls_fn, **kwargs)
-        # return lambda X, y: ls_fn(X, y)
-
-    # def train_(self,
-    #            data_iter, optimizers, acc_fn,
-    #            n_epochs=10, ls_fn: nn.Module = nn.L1Loss(), lr_schedulers=None,
-    #            valid_iter=None, k=1, n_workers=1, hook=None
-    #            ):
-    #     """神经网络训练函数
-    #     调用Trainer进行训练。
-    #     :param data_iter: 训练数据供给迭代器。
-    #     :param optimizers: 网络参数优化器。可以通过list传入多个优化器。
-    #     :param acc_fn: 准确率计算函数。签名需为：acc_fn(predict: tensor, labels: tensor, size_averaged: bool = True) -> ls: tensor or float
-    #     :param n_epochs: 迭代世代数。
-    #     :param ls_fn: 训练损失函数。签名需为：ls_fn(predict: tensor, labels: tensor) -> ls: tensor，其中不允许有销毁梯度的操作。
-    #     :param lr_schedulers: 学习率规划器，用于动态改变学习率。若不指定，则会使用固定学习率规划器。
-    #     :param valid_iter: 验证数据供给迭代器。
-    #     :param hook: 是否使用hook机制跟踪梯度变化。可选填入[None, 'mute', 'full']
-    #     :param n_workers: 进行训练的处理机数量。
-    #     :param k: 进行训练的k折数，指定为1则不进行k-折训练，否则进行k-折训练，并且data_iter为k-折训练数据供给器，valid_iter会被忽略.
-    #     :return: 训练数据记录`History`对象
-    #     """
-    #     assert self.is_train, '在训练之前，请先调用prepare_training()！'
-    #     if hook is None:
-    #         with_hook, hook_mute = False, False
-    #     elif hook == 'mute':
-    #         with_hook, hook_mute = True, True
-    #     else:
-    #         with_hook, hook_mute = True, False
-    #     if lr_schedulers is None:
-    #         if isinstance(optimizers, list):
-    #             lr_schedulers = [torch.optim.lr_scheduler.StepLR(optim, 1, 1) for optim in optimizers]
-    #         else:
-    #             lr_schedulers = torch.optim.lr_scheduler.StepLR(optimizers, 1, 1)
-    #     with Trainer(self,
-    #                  data_iter, optimizers, lr_schedulers, acc_fn, n_epochs, ls_fn,
-    #                  with_hook, hook_mute) as trainer:
-    #         if k > 1:
-    #             # 是否进行k-折训练
-    #             history = trainer.train_with_k_fold(data_iter, k, n_workers)
-    #         elif n_workers <= 1:
-    #             # 判断是否要多线程
-    #             if valid_iter:
-    #                 history = trainer.train_and_valid(valid_iter)
-    #             else:
-    #                 history = trainer.train()
-    #         else:
-    #             history = trainer.train_with_threads(valid_iter)
-    #     self.is_train = False
-    #     return history
 
     def train_(self,
                data_iter, criterion_a,
@@ -230,7 +161,7 @@ class BasicNN(nn.Sequential):
 
     @torch.no_grad()
     def test_(self, test_iter,
-              criterion_a: Callable[[torch.Tensor, torch.Tensor], float or torch.Tensor],
+              criterion_a: List[Callable],
               pbar=None, ls_fn_args: Tuple = ('mse',)
               ) -> [float, float]:
         """测试方法。
@@ -246,7 +177,6 @@ class BasicNN(nn.Sequential):
         is_test = pbar is None
         if is_test:
             # 如果不指定进度条，则是进行测试，需要先初始化损失函数。
-            # self._ls_fn_s = self._get_ls_fn(ls_fn_args[0], *ls_fn_args[1])
             self._ls_fn_s = self._get_ls_fn(*ls_fn_args)
             pbar = tqdm(test_iter, unit='批', position=0, desc=f'测试中……', mininterval=1)
         else:
@@ -259,7 +189,8 @@ class BasicNN(nn.Sequential):
             preds, ls_es = self.forward_backward(features, labels, False)
             metric.add(
                 *[criterion(preds, labels) for criterion in criterion_a],
-                *[ls * len(features) for ls in ls_es], len(features)
+                *[ls * len(features) for ls in ls_es],
+                len(features)
             )
             pbar.update(1)
         # 生成测试日志
@@ -294,9 +225,9 @@ class BasicNN(nn.Sequential):
                  ) -> torch.Tensor:
         """预测方法。
         对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
-        :param ls_fn_args:
+        :param ls_fn_args: 损失函数序列的关键词参数
         :param data_iter: 预测数据迭代器。
-        :param criterion_a: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
+        :param criterion_a: 计算准确度所使用的函数序列，该函数需要求出每个样本的准确率。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
         :param unwrap_fn: 对所有数据进行打包的方法。如不指定，则直接返回预测数据。签名需为：unwrap_fn(inputs, predictions, labels, metrics, losses) -> Any
         :return: 打包好的数据集
         """
@@ -309,16 +240,11 @@ class BasicNN(nn.Sequential):
             with tqdm(data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1) as data_iter:
                 # 对每个批次进行预测，并进行acc和loss的计算
                 for fe_batch, lb_batch in data_iter:
-                    # inputs.append(fe_batch)
-                    # pre_batch = self(fe_batch)
-                    # predictions.append(pre_batch)
-                    # labels.append(lb_batch)
                     result = self.forward_backward(fe_batch, lb_batch, False)
                     pre_batch, ls_es = result
                     inputs.append(fe_batch)
                     predictions.append(pre_batch)
                     labels.append(lb_batch)
-                    # TODO: 出现形状问题
                     metrics_to_be_appended = [
                         criterion(pre_batch, lb_batch, size_average=False)
                         for criterion in criterion_a
@@ -328,7 +254,6 @@ class BasicNN(nn.Sequential):
                         ls.mean(dim=list(range(len(ls_es[0].shape)))[1:]) for ls in ls_es
                     ]
                     losses.append(torch.vstack(losses_to_be_appended).T)
-                    # losses += [ls_fn(pre_batch, lb_batch).mean(dim=keeping_dims) for ls_fn in ls_fn_s]
                 data_iter.set_description('正对结果进行解包……')
             # 将所有批次的数据堆叠在一起
             inputs = torch.cat(inputs, dim=0)
@@ -376,12 +301,6 @@ class BasicNN(nn.Sequential):
             comment += f'{name} = {float(ls): .4f}, '
         return comment
 
-    # def load_state_dict_(self, where: str):
-    #     assert os.path.exists(where), f'目录{where}无效！'
-    #     assert where.endswith('.ptsd'), f'该文件{where}并非网络参数文件！'
-    #     paras = torch.load(where)
-    #     self.load_state_dict(paras)
-
     def __init_submodules(self, init_meth, *args):
         init_meth = ttools.init_wb(init_meth)
         if init_meth is not None:
@@ -396,8 +315,6 @@ class BasicNN(nn.Sequential):
                     raise NotImplementedError('针对预训练好的网络，请使用如下方法获取`net = torch.load("../xx.ptm")`')
             except IndexError:
                 raise ValueError('选择预训练好的参数初始化网络，需要在初始化方法的第一参数提供参数或者模型的路径！')
-            # except FileNotFoundError:
-            #     raise FileNotFoundError(f'找不到{where}！')
 
     def forward_backward(self, X, y, backward=True):
         """前向和反向传播。

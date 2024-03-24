@@ -1,6 +1,6 @@
 import os
 from abc import abstractmethod
-from typing import Iterable, Tuple, Sized, List
+from typing import Iterable, Tuple, Sized, List, Callable
 
 import torch
 
@@ -170,7 +170,16 @@ class SelfDefinedDataSet:
 
     @staticmethod
     @abstractmethod
-    def accuracy(Y_HAT: torch.Tensor, Y: torch.Tensor, size_average: bool = True) -> torch.Tensor or float:
+    def get_criterion_a() -> List[
+        Callable[
+            [torch.Tensor, torch.Tensor, bool],
+            float or torch.Tensor
+        ]
+    ]:
+        """获取数据集的准确率指标函数
+        :return: 一系列指标函数。签名均为criterion(Y_HAT, Y, size_averaged) -> float or torch.Tensor
+                其中size_averaged表示是否要进行批量平均。
+        """
         pass
 
     @staticmethod
