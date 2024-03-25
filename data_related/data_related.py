@@ -11,16 +11,6 @@ from data_related.dataloader import LazyDataLoader
 from data_related.datasets import DataSet, LazyDataSet
 
 
-def single_argmax_accuracy(Y_HAT: torch.Tensor, Y: torch.Tensor, size_average=True) -> float:
-    y_hat = torch.argmax(Y_HAT, dim=1)
-    y = torch.argmax(Y, dim=1)
-    cmp = (y_hat == y).type(Y.dtype)
-    if size_average:
-        return float(sum(cmp))
-    else:
-        return cmp
-
-
 def split_real_data(features: torch.Tensor, labels: torch.Tensor, train, test, valid=.0,
                     shuffle=True, requires_id=False):
     """

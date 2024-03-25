@@ -1,7 +1,6 @@
 import json
 import warnings
 
-import numpy as np
 import pandas as pd
 import torch
 from torchsummary import summary
@@ -53,16 +52,6 @@ class ControlPanel:
         self.random_seed = self['random_seed']
         torch.random.manual_seed(self.random_seed)
         # # 读取实验编号
-        # if self.__lp is not None:
-        #     try:
-        #         log = pd.read_csv(self.__lp)
-        #         exp_no = log.iloc[-1]['exp_no'] + 1
-        #     except Exception as _:
-        #         exp_no = 1
-        # else:
-        #     exp_no = 1
-        # assert exp_no > 0, f'训练序号需为正整数，但读取到的序号为{exp_no}'
-        # self.exp_no = int(exp_no)
         self.__read_expno()
 
     def __read_expno(self):
@@ -137,7 +126,7 @@ class ControlPanel:
                 print(net)
 
     # def __plot_history(self, history, cfg, mute, ls_fn, acc_fn) -> None:
-    def __plot_history(self, history, cfg, mute, **plot_kwargs) -> None:
+    def __plot_history(self, history, **plot_kwargs) -> None:
         # 检查参数设置
         cfg_range = ['plot', 'save', 'no']
         cfg = self['plot_history']
@@ -160,10 +149,10 @@ class ControlPanel:
     # def register_result(self, history, test_acc=None, test_ls=None,
     #                     ls_fn=None, acc_fn=None) -> None:
     def register_result(self, history, test_log=None, **plot_kwargs) -> None:
-        """
+        """根据训练历史记录进行输出，并进行日志参数的记录。
         在神经网络训练完成后，需要调用本函数将结果注册到超参数控制台。
-        根据训练历史记录进行输出，并进行日志参数的记录。
         :param history: 训练历史记录
+        :param test_log: 测试记录
         :return: None
         """
         log_msg = {}
@@ -187,33 +176,11 @@ class ControlPanel:
             print('\b\b')
         log_msg.update(test_log)
         self.__plot_history(
-            history, self['plot_history'], self['plot_mute'], **plot_kwargs
+            history, **plot_kwargs
         )
         self.__cur_trainer.add_logMsg(
             True, **log_msg, data_portion=self['data_portion']
         )
-        # train_acc, train_l = history["train_acc"][-1], history["train_l"][-1]
-        # print(f'\r训练准确率 = {train_acc * 100:.3f}%, 训练损失 = {train_l:.5f}')
-        # try:
-        #     valid_acc, valid_l = history["valid_acc"][-1], history["valid_l"][-1]
-        #     print(f'验证准确率 = {valid_acc * 100:.3f}%, 验证损失 = {valid_l:.5f}')
-        #     self.__cur_trainer.add_logMsg(
-        #         True,
-        #         valid_l=valid_l, valid_acc=valid_acc
-        #     )
-        # except AttributeError as _:
-        #     pass
-        # if test_acc is not None and test_ls is not None:
-        #     print(f'测试准确率 = {test_acc * 100:.3f}%, 测试损失 = {test_ls:.5f}')
-        # self.__plot_history(
-        #     history, self['plot_history'], self['plot_mute'], ls_fn, acc_fn
-        # )
-        # self.__cur_trainer.add_logMsg(
-        #     True,
-        #     train_l=train_l, train_acc=train_acc,
-        #     test_acc=test_acc, test_ls=test_ls,
-        #     data_portion=self['data_portion']
-        # )
 
     @property
     def device(self):
