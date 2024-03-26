@@ -31,12 +31,12 @@ class Pix2Pix(BasicNN):
         - :math:`G_{L1}`：生成器的L1损失
         - :math:`D_real`：分辨器分辨真图为真的概率，其输入为真实标签。
         - :math:`D_fake`：分辨器分辨合成图为假的概率，其输入为生成器合成图。
-        :param g_args:
-        :param g_kwargs:
-        :param d_args:
-        :param d_kwargs:
-        :param direction:
-        :param kwargs:
+        :param g_args: 生成器位置参数
+        :param g_kwargs: 生成器关键词参数
+        :param d_args: 分辨器位置参数
+        :param d_kwargs: 分辨器关键词参数
+        :param direction: 方向，'AtoB'意为从特征集预测到标签集，'BtoA'意为从标签集预测到特征集
+        :param kwargs: BasicNN关键词参数
         """
         self.direction = direction
         netG = Pix2Pix_G(*g_args, **g_kwargs)
