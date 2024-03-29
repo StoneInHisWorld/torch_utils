@@ -285,12 +285,19 @@ class BasicNN(nn.Sequential):
     def device(self):
         return self.__device
 
-    def _get_comment(self, inputs, predictions, labels, metrics, mfn_names, losses):
+    def _get_comment(self, inputs, predictions, labels, metrics, mfn_name_s, losses):
+        size_averaged_msg = ''
+        for i, name in enumerate(mfn_name_s):
+            metric = metrics[:, i].mean()
+            size_averaged_msg += f'{name} = {float(metric) * 100: .3f}%, '
+        for i, name in enumerate(self.test_ls_names):
+            ls = losses[:, i].mean()
+            size_averaged_msg += f'{name} = {float(ls): .4f}, '
         comments = []
         for input, pred, lb, metric_s, ls_es in zip(inputs, predictions, labels, metrics, losses):
             comments.append(self._comment_impl(
-                input, pred, lb, metric_s, mfn_names, ls_es
-            ))
+                input, pred, lb, metric_s, mfn_name_s, ls_es
+            ) + '\nSIZE_AVERAGED:\n' + size_averaged_msg)
         return comments
 
     def _comment_impl(self, input, pred, lb, metric_s, mfn_name_s, ls_es):
@@ -309,7 +316,7 @@ class BasicNN(nn.Sequential):
             try:
                 where = args[0]
                 if where.endswith('.ptsd'):
-                    paras = torch.load(where)
+                    paras = torch.load(where) if torch.cuda.is_available() else torch.load(where, map_location=torch.device('cpu'))
                     self.load_state_dict(paras)
                 elif where.endswith('.ptm'):
                     raise NotImplementedError('针对预训练好的网络，请使用如下方法获取`net = torch.load("../xx.ptm")`')
