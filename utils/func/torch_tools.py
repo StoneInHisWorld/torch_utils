@@ -2,9 +2,11 @@ import torch
 from torch import cuda, nn as nn
 from torch.nn import init as init
 
+from networks.layers.ganloss import GANLoss
+from networks.layers.pcc import PCCLoss
 from networks.layers.ssim import SSIMLoss
 
-loss_es = ["l1", "entro", "mse", "huber", "ssim"]
+loss_es = ["l1", "entro", "mse", "huber", "ssim", "pcc", 'gan']
 init_funcs = ["normal", "xavier", "zero", "state"]
 optimizers = ["sgd", "asgd", "adagrad", "adadelta",
               "rmsprop", "adam", "adamax"]
@@ -91,8 +93,6 @@ def get_ls_fn(ls_str: str = "mse", **kwargs):
     :param kwargs: 输入到损失值计算模块中的关键词参数。请注意，每个损失值计算模块的关键词参数可能不同！建议输入关键词参数时只选用一种损失值计算模块。
     :return: 损失函数模块
     """
-    assert ls_str in loss_es, \
-        f"不支持损失函数{ls_str}, 支持的损失函数包括{loss_es}"
     if ls_str == "l1":
         return nn.L1Loss(**kwargs)
     elif ls_str == "entro":
@@ -103,6 +103,13 @@ def get_ls_fn(ls_str: str = "mse", **kwargs):
         return nn.HuberLoss(**kwargs)
     elif ls_str == "ssim":
         return SSIMLoss(**kwargs)
+    elif ls_str == 'pcc':
+        return PCCLoss(**kwargs)
+    elif ls_str == 'gan':
+        return GANLoss(**kwargs)
+    else:
+        raise NotImplementedError(f"不支持损失函数{ls_str}, 支持的损失函数包括{loss_es}")
+
 
 
 def init_wb(func_str: str = "xavier"):
