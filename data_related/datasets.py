@@ -1,4 +1,4 @@
-from typing import Iterable, Callable, List
+from typing import Iterable, Callable, List, Tuple
 
 import torch
 from torch.utils.data import Dataset as torch_ds, DataLoader
@@ -40,6 +40,7 @@ class DataSet(torch_ds):
         assert type(self._features) == torch.Tensor, f'数据集标签集数据未转换成张量，无法迁移到{device}中！请在数据读取步骤和预处理步骤将标签集转换成张量。'
         self._features = self._features.to(device)
         self._labels = self._labels.to(device)
+        # self.collate_fn = lambda input:
 
     def apply(self, features_calls: List[Callable[[torch.Tensor], torch.Tensor]] = None,
               labels_calls: List[Callable[[torch.Tensor], torch.Tensor]] = None,
@@ -84,7 +85,7 @@ class DataSet(torch_ds):
                   sampler: Iterable = None, preprocess: bool = True,
                   **kwargs) -> DataLoader:
         """
-        生成普通数据集的加载器
+        生成普通数据集的加载器，生成加载器前，会将所有预处理方法抛弃。
         :param preprocess: 是否进行预处理
         :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
         :param batch_size: 每次供给的数据量。默认为整个数据集
@@ -98,6 +99,7 @@ class DataSet(torch_ds):
             batch_size = self.feature_shape[0]
         if preprocess:
             self.preprocess()
+            self.pop_preprocesses()
         return DataLoader(
             self, batch_size, shuffle=shuffle, collate_fn=self.collate_fn, sampler=sampler, **kwargs
         )
@@ -118,6 +120,16 @@ class DataSet(torch_ds):
             labels_calls = []
         self.fea_preprocesses += features_calls
         self.lb_preprocesses += labels_calls
+
+    def pop_preprocesses(self):
+        """弹出所有的预处理程序。
+        此方法用于对Dataset的序列化，将所有预处理的本地化方法转移到内存中。
+        """
+        # return self.fea_preprocesses, self.lb_preprocesses
+        try:
+            del self.fea_preprocesses, self.lb_preprocesses
+        except AttributeError:
+            return
 
     def preprocess(self, desc='对数据集进行操作……'):
         self.apply(self.fea_preprocesses, self.lb_preprocesses, desc)
@@ -182,6 +194,11 @@ class LazyDataSet(DataSet):
         self.feaIndex_preprocess += feaIndex_calls
         self.lbIndex_preprocess += lbIndex_calls
         super().register_preprocess(features_calls, labels_calls)
+
+    def pop_preprocesses(self):
+        # return (self.feaIndex_preprocess, self.lbIndex_preprocess, *super().pop_preprocesses())
+        del self.feaIndex_preprocess, self.lbIndex_preprocess
+        super().pop_preprocesses()
 
     def preprocess(self, desc='对懒加载数据集进行操作……'):
         self.apply(self.feaIndex_preprocess, self.lbIndex_preprocess, desc=desc)
