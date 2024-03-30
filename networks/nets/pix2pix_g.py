@@ -32,7 +32,9 @@ class UNet256Genarator(nn.Sequential):
         )
         # TODO：会使数据变得越来越大
         ep_layer = lambda i, o: nn.Sequential(
-            nn.Upsample(scale_factor=2),
+            # nn.Upsample(scale_factor=2),
+            nn.ConvTranspose2d(i, i,
+                               kernel_size=kernel_size, stride=2, padding=1),
             nn.Conv2d(i, o, kernel_size=kernel_size + 1, stride=1, padding=2),
             nn.BatchNorm2d(o, momentum=bn_momen),
             nn.ReLU()
@@ -140,7 +142,6 @@ class ResNetGenerator(nn.Sequential):
 
 
 class Pix2Pix_G(BasicNN):
-
     required_shape = (256, 256)
 
     # def __init__(self, input_channel, out_channel,
