@@ -203,6 +203,10 @@ class BasicNN(nn.Sequential):
         metric = Accumulator(len(criterion_a) + len(l_names) + 1)
         # 计算准确率和损失值
         for features, labels in test_iter:
+            features, labels = (
+                features.to(self.device, non_blocking=features.is_cuda and features.pin_memory()),
+                labels.to(self.device, non_blocking=labels.is_cuda and labels.pin_memory())
+            )
             preds, ls_es = self.forward_backward(features, labels, False)
             metric.add(
                 *[criterion(preds, labels) for criterion in criterion_a],
@@ -338,7 +342,8 @@ class BasicNN(nn.Sequential):
             try:
                 where = args[0]
                 if where.endswith('.ptsd'):
-                    paras = torch.load(where) if torch.cuda.is_available() else torch.load(where, map_location=torch.device('cpu'))
+                    paras = torch.load(where) if torch.cuda.is_available() else\
+                        torch.load(where, map_location=torch.device('cpu'))
                     self.load_state_dict(paras)
                 elif where.endswith('.ptm'):
                     raise NotImplementedError('针对预训练好的网络，请使用如下方法获取`net = torch.load("../xx.ptm")`')
