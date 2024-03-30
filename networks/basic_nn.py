@@ -189,6 +189,7 @@ class BasicNN(nn.Sequential):
         :return: 测试准确率，测试损失
         """
         self.eval()
+        non_blocking = self.device.type == 'cuda' and test_iter.pin_memory
         # 要统计的数据种类数目
         criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
         is_test = pbar is None
@@ -204,8 +205,8 @@ class BasicNN(nn.Sequential):
         # 计算准确率和损失值
         for features, labels in test_iter:
             features, labels = (
-                features.to(self.device, non_blocking=features.is_cuda and features.pin_memory()),
-                labels.to(self.device, non_blocking=labels.is_cuda and labels.pin_memory())
+                features.to(self.device, non_blocking=non_blocking),
+                labels.to(self.device, non_blocking=non_blocking)
             )
             preds, ls_es = self.forward_backward(features, labels, False)
             metric.add(
