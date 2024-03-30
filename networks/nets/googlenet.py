@@ -495,7 +495,7 @@ class GoogLeNet(BasicNN):
             raise NotImplementedError(f'暂不支持的GoogLeNet类型{version}，当前支持的类型包括{supported}')
         super().__init__(
             *get_blocks(in_channels, dropout_rate),
-            MultiOutputLayer(multi_in, out_features, init_meth=kwargs['init_meth']) if isinstance(out_features, Iterable)
+            MultiOutputLayer(multi_in, out_features) if isinstance(out_features, Iterable)
             else nn.Sequential(*linear_output(multi_in, out_features, softmax=not regression)),
             **kwargs
         )

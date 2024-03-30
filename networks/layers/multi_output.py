@@ -61,32 +61,41 @@ def linear_output(in_features: int, out_features: int,
     return layers
 
 
-class MultiOutputLayer(nn.Module):
+# class MultiOutputLayer(nn.Module):
+class MultiOutputLayer(nn.Sequential):
 
     def __init__(self, in_features, out_or_strategy: Iterable, self_defined=False,
-                 init_meth='normal', dropout_rate=0., momentum=0.
+                 dropout_rate=0., momentum=0.
                  ) -> None:
         """
         多通道输出层。将单通道输入扩展为多通道输出。
         :param in_features: 输入特征列数。
-        :param init_meth: 线性层或卷积层初始化方法。
         :param self_defined: 是否使用自定义通道。若为True，则需要用户通过out_or_strategy自定义路径结构
         :param dropout_rate: Dropout层比例
         :param momentum: BatchNorm层动量超参数
         :param out_or_strategy: 若self_defined为False，则该项为输出特征列数，列数的数量对应输出路径数
         """
-        super().__init__()
+        # super().__init__()
         self.in_features = in_features
-        self._paths = [
+        # self._paths = [
+        #     nn.Sequential(*linear_output(in_features, o, dropout=dropout_rate, bn_momen=momentum))
+        #     for o in out_or_strategy
+        # ] if not self_defined else [
+        #     nn.Sequential(*s)
+        #     for s in out_or_strategy
+        # ]
+        # for i, p in enumerate(self._paths):
+        #     p.apply(utils.func.torch_tools.init_wb(init_meth))
+        #     self.add_module(f'path{i}', p)
+        # self._paths = [
+        paths = [
             nn.Sequential(*linear_output(in_features, o, dropout=dropout_rate, bn_momen=momentum))
             for o in out_or_strategy
         ] if not self_defined else [
             nn.Sequential(*s)
             for s in out_or_strategy
         ]
-        for i, p in enumerate(self._paths):
-            p.apply(utils.func.torch_tools.init_wb(init_meth))
-            self.add_module(f'path{i}', p)
+        super().__init__(*paths)
 
     def forward(self, features):
         outs = [m(features) for _, m in self]
@@ -95,8 +104,8 @@ class MultiOutputLayer(nn.Module):
     def __iter__(self):
         return self.named_children()
 
-    def __getitem__(self, item: int):
-        children = self.named_children()
-        for _ in range(item):
-            next(children)
-        return next(children)[1]  # next()得到的是（名字，模块）
+    # def __getitem__(self, item: int):
+    #     children = self.named_children()
+    #     for _ in range(item):
+    #         next(children)
+    #     return next(children)[1]  # next()得到的是（名字，模块）
