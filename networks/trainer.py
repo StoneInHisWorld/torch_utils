@@ -249,6 +249,7 @@ class Trainer:
         data_iter = self.__data_iter
         n_epochs = self.__n_epochs
         criterion_a = self.__criterion_a if isinstance(self.__criterion_a, list) else [self.__criterion_a]
+        non_blocking = self.device.type == 'cuda' and data_iter.pin_memory
         # 损失项
         loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
@@ -272,8 +273,8 @@ class Trainer:
             metric = Accumulator(len(loss_names + criteria_names) + 1)
             # 训练主循环
             for X, y in data_iter:
-                X, y = (X.to(self.device, non_blocking=X.is_cuda and X.pin_memory()),
-                        y.to(self.device, non_blocking=y.is_cuda and y.pin_memory()))
+                X, y = (X.to(self.device, non_blocking=non_blocking),
+                        y.to(self.device, non_blocking=non_blocking))
                 net.train()
                 pred, ls_es = net.forward_backward(X, y)
                 with torch.no_grad():
@@ -383,6 +384,7 @@ class Trainer:
         data_iter = self.__data_iter
         n_epochs = self.__n_epochs
         criterion_a = self.__criterion_a if isinstance(self.__criterion_a, list) else [self.__criterion_a]
+        non_blocking = self.device.type == 'cuda' and data_iter.pin_memory
         # 损失项
         loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
@@ -404,6 +406,8 @@ class Trainer:
                 metric = Accumulator(len(loss_names + criteria_names) + 1)
                 # 训练主循环
                 for X, y in data_iter:
+                    X, y = (X.to(self.device, non_blocking=non_blocking),
+                            y.to(self.device, non_blocking=non_blocking))
                     net.train()
                     pred, ls_es = net.forward_backward(X, y)
                     with torch.no_grad():
