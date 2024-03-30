@@ -13,6 +13,7 @@ def calculate_ssim(y_hat: torch.Tensor, y: torch.Tensor, R: torch.Tensor) -> tor
         /
         ( \mathrm{\mu_{x}}^{2} + \mathrm{\mu_{y}}^{2} + \mathrm{c_{1}})
         ( \mathrm{\sigma_{x}^{2}} + \mathrm{\sigma_{y}^{2}} + \mathrm{c_2})
+
     :param y_hat: 计算对象1
     :param y: 计算对象2
     :param R: 像素范围

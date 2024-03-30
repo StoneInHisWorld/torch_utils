@@ -64,7 +64,6 @@ class AdaWZYNet(BasicNN):
             nn.MaxPool2d(compressed_shape),
             MultiOutputLayer(
                 cur_in, out_features,
-                dropout_rate=dropout_rate, momentum=bn_momen, init_meth=init_meth,
-            )  # cur_in保存着最后的卷积层的输出通道
+                dropout_rate=dropout_rate, momentum=bn_momen, )  # cur_in保存着最后的卷积层的输出通道
         ))
         super().__init__(*layers, **kwargs)

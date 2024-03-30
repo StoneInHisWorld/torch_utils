@@ -47,7 +47,7 @@ class WZYNetEssay(BasicNN):
                       stride=2, padding=1), nn.LeakyReLU(),
             nn.BatchNorm2d(base_channels * 4, momentum=bn_momen), nn.MaxPool2d(2),
             MultiOutputLayer(
-                base_channels * 4, out_features, init_meth=kwargs['init_meth'], dropout_rate=dropout_rate,
+                base_channels * 4, out_features, dropout_rate=dropout_rate,
                 momentum=bn_momen,
             ),
         ]

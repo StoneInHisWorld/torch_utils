@@ -213,7 +213,8 @@ class Pix2Pix(BasicNN):
                 kwargs = {}
                 size_averaged = True
             # 定义损失函数
-            criterionGAN = GANLoss(gan_mode, **kwargs).to(self.device)
+            # criterionGAN = GANLoss(gan_mode, **kwargs).to(self.device)
+            criterionGAN = ttools.get_ls_fn('gan', gan_mode=gan_mode, device=self.device, **kwargs)
             self.criterionGAN = lambda pred, target_is_real: criterionGAN(pred, target_is_real)
             self.criterionL1 = lambda X, y: torch.nn.L1Loss(**kwargs)(X, y) * lambda_l1
 

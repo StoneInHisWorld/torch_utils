@@ -6,6 +6,7 @@ import PIL.Image
 import numpy as np
 from PIL import Image as IMAGE, ImageDraw
 from PIL.Image import Image
+from tqdm import tqdm
 
 
 def resize_img(image: Image, required_shape: Tuple[int, int]) -> Image:
@@ -135,7 +136,8 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     :param kwargs: 关键词参数。支持的参数包括：comment，单个白板的脚注；text_size，标签及脚注的文字大小；border_size，图片/标签/边界之间的宽度
     :return: 生成的结果图序列
     """
-    comments = kwargs['comments'] if 'comments' in kwargs.keys() else ['' for _ in range(len(groups_of_imgs_labels_list))]
+    comments = kwargs['comments'] if 'comments' in kwargs.keys() else ['' for _ in
+                                                                       range(len(groups_of_imgs_labels_list))]
     text_size = kwargs['text_size'] if 'text_size' in kwargs.keys() else 15
     border_size = kwargs['border_size'] if 'border_size' in kwargs.keys() else 5
     required_shape = kwargs['required_shape'] if 'required_shape' in kwargs.keys() else None
@@ -234,11 +236,16 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
         # return whiteboard
 
     rets = []
-    for imgs_and_labels, comment in zip(groups_of_imgs_labels_list, comments):
-        ret = _concat_imgs(comment, *imgs_and_labels)
-        if required_shape is not None:
-            ret = ret.resize(required_shape)
-        rets.append(ret)
+    with tqdm(
+        total=min(len(groups_of_imgs_labels_list), len(comments)),
+        unit='张', position=0, desc=f"正在拼装图片中……", mininterval=1, leave=True
+    ) as pbar:
+        for imgs_and_labels, comment in zip(groups_of_imgs_labels_list, comments):
+            ret = _concat_imgs(comment, *imgs_and_labels)
+            if required_shape is not None:
+                ret = ret.resize(required_shape)
+            rets.append(ret)
+            pbar.update(1)
     return rets
 
 
@@ -289,8 +296,10 @@ def extract_and_cat_holes(images: np.ndarray,
     :return: 孔径聚合图片结果。
     """
     # 检查越界问题
-    assert np.max(np.array(hole_poses)[:, 0]) < images.shape[-2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
-    assert np.max(np.array(hole_poses)[:, 1]) < images.shape[-1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
+    assert np.max(np.array(hole_poses)[:, 0]) < images.shape[
+        -2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
+    assert np.max(np.array(hole_poses)[:, 1]) < images.shape[
+        -1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
     hole_sizes = np.array(hole_sizes).reshape([num_rows, num_cols])
     # 逐行求出最大宽度作为最终的特征图片宽度
     fea_width = np.max(hole_sizes.sum(0))
@@ -327,8 +336,10 @@ def mean_LI_of_holes(images: np.ndarray,
                      hole_poses: List[Tuple[int, int]],
                      hole_sizes: List[int]):
     # 检查越界问题
-    assert np.max(np.array(hole_poses)[:, 0]) < images.shape[-2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
-    assert np.max(np.array(hole_poses)[:, 1]) < images.shape[-1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
+    assert np.max(np.array(hole_poses)[:, 0]) < images.shape[
+        -2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
+    assert np.max(np.array(hole_poses)[:, 1]) < images.shape[
+        -1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
     for (x, y), size in zip(hole_poses, hole_sizes):
         images[:, :, x: x + size, y: y + size] = np.mean(
             images[:, :, x: x + size, y: y + size], axis=(2, 3), keepdims=True

@@ -82,7 +82,7 @@ def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=T
               sampler: Iterable = None, max_load: int = 10000,
               **kwargs):
     """
-    根据数据集类型转化为数据集加载器
+    根据数据集类型转化为数据集加载器。生成预处理前，会将预处理程序清除。
     :param max_load: 懒数据集加载器的最大加载量，当使用DataSet时，该参数无效
     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler，根据shuffle==True or False 提供乱序/顺序下标.
     :param dataset: 转化为加载器的数据集。
@@ -95,6 +95,7 @@ def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=T
         shuffle = None
     if not batch_size:
         batch_size = dataset.feature_shape[0]
+    dataset.pop_preprocesses()
     if type(dataset) == LazyDataSet:
         return LazyDataLoader(
             dataset, batch_size,

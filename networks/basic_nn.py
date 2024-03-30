@@ -108,9 +108,26 @@ class BasicNN(nn.Sequential):
         if len(args) <= len(ls_fn_str_s):
             args = (*args, *[{} for _ in range(len(ls_fn_str_s) - len(args))])
         # 获取损失函数方法
+        # 加入
+        # ls_fn_s = [
+        #     ttools.get_ls_fn(ls_fn_str, **kwargs)
+        #     for ls_fn_str, kwargs in zip(ls_fn_str_s, args)
+        # ]
+        which_to_be_averaged = [
+            kwargs.pop('size_averaged', True) for kwargs in args
+        ]
         ls_fn_s = [
             ttools.get_ls_fn(ls_fn_str, **kwargs)
             for ls_fn_str, kwargs in zip(ls_fn_str_s, args)
+        ]
+
+        def __sample_wise_ls_fn(x, y, ls_fn):
+            ls = ls_fn(x, y)
+            return ls.mean(dim=list(range(len(ls.shape)))[1:])
+
+        ls_fn_s = [
+            ls_fn if averaged else lambda x, y: __sample_wise_ls_fn(x, y, ls_fn)
+            for ls_fn, averaged in zip(ls_fn_s, which_to_be_averaged)
         ]
         return ls_fn_s
 
@@ -162,7 +179,7 @@ class BasicNN(nn.Sequential):
     @torch.no_grad()
     def test_(self, test_iter,
               criterion_a: List[Callable],
-              pbar=None, ls_fn_args: Tuple = ('mse',)
+              pbar=None, ls_fn_args: Tuple = ('mse', {})
               ) -> [float, float]:
         """测试方法。
         取出迭代器中的下一batch数据，进行预测后计算准确度和损失
@@ -186,7 +203,10 @@ class BasicNN(nn.Sequential):
         metric = Accumulator(len(criterion_a) + len(l_names) + 1)
         # 计算准确率和损失值
         for features, labels in test_iter:
-            features, labels = features.to(self.device), labels.to(self.device)
+            features, labels = (
+                features.to(self.device, non_blocking=features.is_cuda and features.pin_memory()),
+                labels.to(self.device, non_blocking=labels.is_cuda and labels.pin_memory())
+            )
             preds, ls_es = self.forward_backward(features, labels, False)
             metric.add(
                 *[criterion(preds, labels) for criterion in criterion_a],
@@ -234,6 +254,9 @@ class BasicNN(nn.Sequential):
         """
         self.eval()
         criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
+        # 预处理损失函数参数
+        for kwargs in ls_fn_args[1:]:
+            kwargs['size_averaged'] = False
         self._ls_fn_s = self._get_ls_fn(*ls_fn_args)
         if unwrap_fn is not None:
             # 将本次预测所产生的全部数据打包并返回。
@@ -251,11 +274,12 @@ class BasicNN(nn.Sequential):
                         for criterion in criterion_a
                     ]
                     metrics.append(torch.vstack(metrics_to_be_appended).T)
-                    losses_to_be_appended = [
-                        ls.mean(dim=list(range(len(ls_es[0].shape)))[1:]) for ls in ls_es
-                    ]
-                    losses.append(torch.vstack(losses_to_be_appended).T)
-                data_iter.set_description('正对结果进行解包……')
+                    # losses_to_be_appended = [
+                    #     ls.mean(dim=list(range(len(ls_es[0].shape)))[1:]) for ls in ls_es
+                    # ]
+                    # losses.append(torch.vstack(losses_to_be_appended).T)
+                    losses.append(torch.vstack(ls_es).T)
+                data_iter.set_description('结果计算完成')
             # 将所有批次的数据堆叠在一起
             inputs = torch.cat(inputs, dim=0)
             predictions = torch.cat(predictions, dim=0)
@@ -286,18 +310,25 @@ class BasicNN(nn.Sequential):
     def device(self):
         return self.__device
 
-    def _get_comment(self, inputs, predictions, labels, metrics, mfn_names, losses):
+    def _get_comment(self, inputs, predictions, labels, metrics, mfn_name_s, losses):
+        size_averaged_msg = ''
+        for i, name in enumerate(mfn_name_s):
+            metric = metrics[:, i].mean()
+            size_averaged_msg += f'{name} = {float(metric): .4f}, '
+        for i, name in enumerate(self.test_ls_names):
+            ls = losses[:, i].mean()
+            size_averaged_msg += f'{name} = {float(ls): .4f}, '
         comments = []
         for input, pred, lb, metric_s, ls_es in zip(inputs, predictions, labels, metrics, losses):
             comments.append(self._comment_impl(
-                input, pred, lb, metric_s, mfn_names, ls_es
-            ))
+                input, pred, lb, metric_s, mfn_name_s, ls_es
+            ) + '\nSIZE_AVERAGED:\n' + size_averaged_msg)
         return comments
 
     def _comment_impl(self, input, pred, lb, metric_s, mfn_name_s, ls_es):
         comment = ''
         for metric, name in zip(metric_s, mfn_name_s):
-            comment += f'{name} = {float(metric) * 100: .3f}%, '
+            comment += f'{name} = {float(metric): .4f}, '
         for ls, name in zip(ls_es, self.test_ls_names):
             comment += f'{name} = {float(ls): .4f}, '
         return comment
@@ -310,7 +341,8 @@ class BasicNN(nn.Sequential):
             try:
                 where = args[0]
                 if where.endswith('.ptsd'):
-                    paras = torch.load(where)
+                    paras = torch.load(where) if torch.cuda.is_available() else\
+                        torch.load(where, map_location=torch.device('cpu'))
                     self.load_state_dict(paras)
                 elif where.endswith('.ptm'):
                     raise NotImplementedError('针对预训练好的网络，请使用如下方法获取`net = torch.load("../xx.ptm")`')
@@ -326,7 +358,6 @@ class BasicNN(nn.Sequential):
         :param backward: 是否进行反向传播
         :return: 预测值，损失值集合
         """
-        # X, y = X.to(self.device), y.to(self.device)
         if backward:
             with torch.enable_grad():
                 for optim in self._optimizer_s:
