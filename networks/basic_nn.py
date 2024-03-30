@@ -186,6 +186,7 @@ class BasicNN(nn.Sequential):
         metric = Accumulator(len(criterion_a) + len(l_names) + 1)
         # 计算准确率和损失值
         for features, labels in test_iter:
+            features, labels = features.to(self.device), labels.to(self.device)
             preds, ls_es = self.forward_backward(features, labels, False)
             metric.add(
                 *[criterion(preds, labels) for criterion in criterion_a],
@@ -325,6 +326,7 @@ class BasicNN(nn.Sequential):
         :param backward: 是否进行反向传播
         :return: 预测值，损失值集合
         """
+        # X, y = X.to(self.device), y.to(self.device)
         if backward:
             with torch.enable_grad():
                 for optim in self._optimizer_s:
