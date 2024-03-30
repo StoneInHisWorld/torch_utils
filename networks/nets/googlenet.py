@@ -494,7 +494,7 @@ class GoogLeNet(BasicNN):
         else:
             raise NotImplementedError(f'暂不支持的GoogLeNet类型{version}，当前支持的类型包括{supported}')
         super().__init__(
-            *get_blocks(in_channels),
+            *get_blocks(in_channels, dropout_rate),
             MultiOutputLayer(multi_in, out_features, init_meth=kwargs['init_meth']) if isinstance(out_features, Iterable)
             else nn.Sequential(*linear_output(multi_in, out_features, softmax=not regression)),
             **kwargs
@@ -549,39 +549,40 @@ class GoogLeNet(BasicNN):
         return b1, b2, b3, b4, b5
 
     @staticmethod
-    def __get_version2(in_channels):
+    def __get_version2(in_channels, dropout_rate=0.):
+        dropout = nn.Dropout(dropout_rate)
         b1 = nn.Sequential(
-            nn.Conv2d(in_channels, 32, kernel_size=3, stride=2), nn.ReLU(),
-            nn.Conv2d(32, 32, kernel_size=3), nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1), nn.ReLU(),
+            nn.Conv2d(in_channels, 32, kernel_size=3, stride=2), nn.ReLU(), dropout,
+            nn.Conv2d(32, 32, kernel_size=3), nn.ReLU(), dropout,
+            nn.Conv2d(32, 64, kernel_size=3, padding=1), nn.ReLU(), dropout,
             nn.MaxPool2d(kernel_size=3, stride=2)
         )
 
         b2 = nn.Sequential(
-            nn.Conv2d(64, 80, kernel_size=3), nn.ReLU(),
-            nn.Conv2d(80, 192, kernel_size=3, stride=2), nn.ReLU(),
-            nn.Conv2d(192, 288, kernel_size=3, padding=1), nn.ReLU(),
+            nn.Conv2d(64, 80, kernel_size=3), nn.ReLU(), dropout,
+            nn.Conv2d(80, 192, kernel_size=3, stride=2), nn.ReLU(), dropout,
+            nn.Conv2d(192, 288, kernel_size=3, padding=1), nn.ReLU(), dropout,
         )
         # 以下参数为自创
         b3 = nn.Sequential(
-            Inception_v2A(288, 128, (128, 192), (16, 32, 96), 64),
-            Inception_v2A(480, 192, (96, 208), (16, 32, 48), 64),
-            Inception_v2A(512, 256, (128, 256), (32, 64, 128), 128),
+            Inception_v2A(288, 128, (128, 192), (16, 32, 96), 64), dropout,
+            Inception_v2A(480, 192, (96, 208), (16, 32, 48), 64), dropout,
+            Inception_v2A(512, 256, (128, 256), (32, 64, 128), 128), dropout,
             nn.MaxPool2d(kernel_size=3, stride=2)  # 形状降维成17x17
         )
 
         b4 = nn.Sequential(
-            Inception_v2B(768, 256, (80, 160, 320), (16, 32, 64, 96, 128), 128),
-            Inception_v2B(832, 256, (80, 160, 320), (16, 32, 64, 96, 128), 128),
-            Inception_v2B(832, 384, (96, 192, 384), (24, 48, 80, 96, 128), 128),
-            Inception_v2B(1024, 384, (96, 192, 384), (24, 48, 80, 96, 128), 128),
-            Inception_v2B(1024, 384, (128, 256, 512), (48, 96, 128, 192, 256), 128),
+            Inception_v2B(768, 256, (80, 160, 320), (16, 32, 64, 96, 128), 128), dropout,
+            Inception_v2B(832, 256, (80, 160, 320), (16, 32, 64, 96, 128), 128), dropout,
+            Inception_v2B(832, 384, (96, 192, 384), (24, 48, 80, 96, 128), 128), dropout,
+            Inception_v2B(1024, 384, (96, 192, 384), (24, 48, 80, 96, 128), 128), dropout,
+            Inception_v2B(1024, 384, (128, 256, 512), (48, 96, 128, 192, 256), 128), dropout,
             nn.MaxPool2d(kernel_size=3, stride=2)  # 形状降维成7x7
         )
 
         b5 = nn.Sequential(
-            Inception_v2C(1280, 512, (128, 256, 256), (48, 96, 128, 128), 256),
-            Inception_v2C(1536, 768, (160, 320, 320), (48, 96, 128, 128), 384),  # 总通道数为2048
+            Inception_v2C(1280, 512, (128, 256, 256), (48, 96, 128, 128), 256), dropout,
+            Inception_v2C(1536, 768, (160, 320, 320), (48, 96, 128, 128), 384), dropout,  # 总通道数为2048
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten()
         )
