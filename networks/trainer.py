@@ -228,9 +228,11 @@ class Trainer:
         self.__optimizer_s = optimizer_s
         self.__lr_scheduler_s = lr_scheduler_s
         self.__criterion_a = acc_fn
-        self.backward = backward
+        # self.backward = backward
         self.__n_epochs = n_epochs
         self.__ls_fn = ls_fn
+        # 设置数据存放参数
+        self.device = module.device
         # 处理hook机制
         self.with_hook = with_hook
         self.hook_mute = hook_mute
@@ -247,12 +249,6 @@ class Trainer:
         data_iter = self.__data_iter
         n_epochs = self.__n_epochs
         criterion_a = self.__criterion_a if isinstance(self.__criterion_a, list) else [self.__criterion_a]
-        # # 损失项
-        # loss_names = ([f'train_{item}' for item in net.loss_names] +
-        #               [f'valid_{item}' for item in net.loss_names])
-        # # 评价项
-        # criteria_names = ([f'train_{criterion.__name__}' for criterion in criterion_a] +
-        #                   [f'valid_{criterion.__name__}' for criterion in criterion_a])
         # 损失项
         loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
@@ -264,8 +260,6 @@ class Trainer:
         if pbar is None:
             pbar = tqdm(total=(len(data_iter) + len(valid_iter)) * n_epochs, unit='批', position=0,
                         desc=f'训练中...', mininterval=1)
-        # with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
-        #           desc=f'训练中...', mininterval=1) as pbar:
         for epoch in range(n_epochs):
             pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
             history.add(
@@ -278,6 +272,8 @@ class Trainer:
             metric = Accumulator(len(loss_names + criteria_names) + 1)
             # 训练主循环
             for X, y in data_iter:
+                X, y = (X.to(self.device, non_blocking=X.is_cuda and X.pin_memory()),
+                        y.to(self.device, non_blocking=y.is_cuda and y.pin_memory()))
                 net.train()
                 pred, ls_es = net.forward_backward(X, y)
                 with torch.no_grad():
@@ -294,14 +290,12 @@ class Trainer:
             for scheduler in self.__lr_scheduler_s:
                 scheduler.step()
             # 记录训练数据
-            # pbar.set_description('验证中...')
             valid_log = net.test_(valid_iter, criterion_a, pbar)
             history.add(
                 criteria_names + loss_names + list(valid_log.keys()),
                 [metric[i] / metric[-1] for i in range(len(metric) - 1)] +
                 list(valid_log.values())
             )
-            # pbar.close()
         return history
         # history = History('train_l', 'train_acc', 'valid_l', 'valid_acc', 'lrs')
         # with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
