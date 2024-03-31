@@ -156,6 +156,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     def _concat_imgs(comment: str = "",
                      *imgs_and_labels: Tuple[Image, str]
                      ) -> Image:
+        """拼接图片和标签，再添加脚注形成单张图片"""
         # 计算绘图窗格大小
         cb_height = max([img.height for img, _ in imgs_and_labels])
         cb_width = max([img.width for img, _ in imgs_and_labels])
@@ -186,59 +187,17 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
                     border_size + text_size + text_indent
                 )
             )
-        # 绘制标签
-        # for i in range(len(imgs_and_labels)):
-        #     draw.text(
-        #         ((i + 1) * border_size + i * cb_width, border_size),
-        #         imgs_and_labels[i][1]
-        #     )
-        # 粘贴图片
-        # for i, (img, _) in enumerate(imgs_and_labels):
-        #     whiteboard.paste(img.convert(mode),
-        #                      ((i + 1) * border_size + sum([img.width for img, _ in imgs_and_labels[: i]]),
-        #                       border_size + text_size))
         # 绘制脚注
         draw.text(
             (border_size, wb_height - cm_height - border_size),
             'COMMENT: \n' + comment
         )
         return whiteboard
-        # # 绘制白板
-        # wb_width = (len(imgs_and_labels) + 1) * border_size + sum(
-        #     [img.width for img, _ in imgs_and_labels]
-        # )
-        # wb_height = 4 * border_size + 2 * text_size + max(
-        #     [img.height for img, _ in imgs_and_labels]
-        # )  # 留出一栏填充comment
-        # # 制作输入、输出、标签对照图
-        # whiteboard = IMAGE.new(
-        #     mode, (wb_width, wb_height), color=255
-        # )
-        # draw = ImageDraw.Draw(whiteboard)
-        # # 绘制标签
-        # for i in range(len(imgs_and_labels)):
-        #     draw.text(
-        #         (
-        #             (i + 1) * border_size + sum([img.width for img, _ in imgs_and_labels[: i]]),
-        #             border_size
-        #         ),
-        #         imgs_and_labels[i][1]
-        #     )
-        # # 粘贴图片
-        # for i, (img, label) in enumerate(imgs_and_labels):
-        #     whiteboard.paste(img.convert(mode),
-        #                      ((i + 1) * border_size + sum([img.width for img, _ in imgs_and_labels[: i]]),
-        #                       border_size + text_size))
-        # # 绘制脚注
-        # draw.text(
-        #     (border_size, wb_height - text_size - border_size), 'COMMENT: ' + comment
-        # )
-        # return whiteboard
 
     rets = []
     with tqdm(
-        total=min(len(groups_of_imgs_labels_list), len(comments)),
-        unit='张', position=0, desc=f"正在拼装图片中……", mininterval=1, leave=True
+            total=min(len(groups_of_imgs_labels_list), len(comments)),
+            unit='张', position=0, desc=f"正在拼装图片中……", mininterval=1, leave=True
     ) as pbar:
         for imgs_and_labels, comment in zip(groups_of_imgs_labels_list, comments):
             ret = _concat_imgs(comment, *imgs_and_labels)
@@ -345,3 +304,48 @@ def mean_LI_of_holes(images: np.ndarray,
             images[:, :, x: x + size, y: y + size], axis=(2, 3), keepdims=True
         )
     return images
+
+
+def get_mean_LI_of_holes(images: np.ndarray,
+                         hole_poses: List[Tuple[int, int]],
+                         hole_sizes: List[int]):
+    # 检查越界问题
+    assert np.max(np.array(hole_poses)[:, 0]) < images.shape[
+        -2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
+    assert np.max(np.array(hole_poses)[:, 1]) < images.shape[
+        -1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
+    mean_LIs_groups = []
+    for image in images:
+        mean_LIs = []
+        for (x, y), size in zip(hole_poses, hole_sizes):
+            mean_LIs.append(np.mean(image[:, x: x + size, y: y + size]))
+        mean_LIs_groups.append(mean_LIs)
+    return mean_LIs_groups
+
+
+def blend(required_shapes: List, group_of_values: List,
+          group_of_n_rows: List, group_of_n_cols: List, mode='L'):
+    supported = ['L', '1', 'RGB']
+    if mode == 'L' or mode == '1':
+        channel = 1
+    elif mode == 'RGB':
+        channel = 3
+    else:
+        raise NotImplementedError(f'暂未支持的图片模式{mode}，支持的模式包括{supported}')
+    blackboards = []
+    for req_sha, values, n_rows, n_cols in zip(required_shapes, group_of_values, group_of_n_rows, group_of_n_cols):
+        assert n_rows * n_cols == len(values), f'提供的颜料值{len(values)}应与绘制区域数目{n_rows * n_cols}一致'
+        blackboard = np.zeros((channel, *req_sha))
+        # 绘制区域大小
+        area_height = req_sha[0] // n_rows
+        area_width = req_sha[1] // n_cols
+        # 绘制区域坐标
+        xv = [area_height * i for i in range(n_rows)]
+        yv = [area_width * i for i in range(n_cols)]
+        yv, xv = np.meshgrid(xv, yv)
+        hole_pos = [(x, y) for x, y in zip(xv.reshape([-1]), yv.reshape([-1]))]
+        # 绘制平均亮度值
+        for value, (x, y) in zip(values, hole_pos):
+            blackboard[:, x: x + area_height, y: y + area_width] = value
+        blackboards.append(blackboard)
+    return blackboards
