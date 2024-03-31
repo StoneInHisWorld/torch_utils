@@ -158,7 +158,7 @@ class BasicNN(nn.Sequential):
             with_hook, hook_mute = True, False
         with Trainer(self,
                      data_iter, self._optimizer_s, self._scheduler_s, criterion_a,
-                     self.for_and_backward, n_epochs, self._ls_fn_s, with_hook, hook_mute
+                     n_epochs, self._ls_fn_s, with_hook, hook_mute
                      ) as trainer:
             if k > 1:
                 # 是否进行k-折训练
