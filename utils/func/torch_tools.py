@@ -10,7 +10,7 @@ loss_es = ["l1", "entro", "mse", "huber", "ssim", "pcc", 'gan']
 init_funcs = ["normal", "xavier", "zero", "state"]
 optimizers = ["sgd", "asgd", "adagrad", "adadelta",
               "rmsprop", "adam", "adamax"]
-lr_schedulers = ["lambda", "step"]
+lr_schedulers = ["lambda", "step", 'constant', 'multistep', 'cosine', 'plateau']
 
 
 def try_gpu(i=0):
@@ -87,8 +87,7 @@ def get_optimizer(net: torch.nn.Module, optim_str='adam', lr=0.1, w_decay=0., **
 
 
 def get_ls_fn(ls_str: str = "mse", **kwargs):
-    """
-    获取损失函数。
+    """获取损失函数。
     :param ls_str: 损失函数对应字符串
     :param kwargs: 输入到损失值计算模块中的关键词参数。请注意，每个损失值计算模块的关键词参数可能不同！建议输入关键词参数时只选用一种损失值计算模块。
     :return: 损失函数模块
@@ -109,7 +108,6 @@ def get_ls_fn(ls_str: str = "mse", **kwargs):
         return GANLoss(**kwargs)
     else:
         raise NotImplementedError(f"不支持损失函数{ls_str}, 支持的损失函数包括{loss_es}")
-
 
 
 def init_wb(func_str: str = "xavier"):
@@ -144,6 +142,12 @@ def init_wb(func_str: str = "xavier"):
 
 
 def get_lr_scheduler(optimizer, which: str = 'step', **kwargs):
+    """获取学习率规划器
+    :param optimizer: 指定规划器的学习率优化器对象。
+    :param which: 使用哪种类型的规划器
+    :param kwargs: 指定规划器的关键词参数
+    :return: 规划器对象。
+    """
     if which == 'step':
         if kwargs == {}:
             kwargs = {'step_size': 100, 'gamma': 1}
@@ -156,5 +160,7 @@ def get_lr_scheduler(optimizer, which: str = 'step', **kwargs):
         return torch.optim.lr_scheduler.MultiStepLR(optimizer, **kwargs)
     elif which == 'cosine':
         return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, **kwargs)
+    elif which == 'plateau':
+        return torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **kwargs)
     else:
         raise NotImplementedError(f"不支持的学习率规划器{which}, 当前支持的初始化方式包括{lr_schedulers}")

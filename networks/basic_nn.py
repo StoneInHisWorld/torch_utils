@@ -85,10 +85,10 @@ class BasicNN(nn.Sequential):
         return optimizer_s
 
     def _get_lr_scheduler(self, scheduler_str_s=None, *args):
-        """为优化器定制规划器
-        :param scheduler_str_s:
-        :param args:
-        :return:
+        """为优化器定制规划器。
+        :param scheduler_str_s: 优化器类型名称，可以使用序列对象指定多个。
+        :param args: 每个规划器对应的关键词参数。
+        :return: 学习率规划期对象。
         """
         if scheduler_str_s is None:
             scheduler_str_s = []
@@ -232,12 +232,6 @@ class BasicNN(nn.Sequential):
         for j, loss_name in enumerate(l_names):
             log[prefix + loss_name] = metric[i + j] / metric[-1]
         return log
-        # self.eval()
-        # metric = Accumulator(3)
-        # for features, labels in test_iter:
-        #     preds = self(features)
-        #     metric.add(acc_fn(preds, labels), ls_fn(preds, labels) * len(features), len(features))
-        # return metric[0] / metric[2], metric[1] / metric[2]
 
     @torch.no_grad()
     def predict_(self, data_iter: DataLoader or LazyDataLoader,

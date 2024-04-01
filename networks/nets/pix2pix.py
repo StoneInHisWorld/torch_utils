@@ -198,64 +198,183 @@ class Pix2Pix(BasicNN):
     def _get_ls_fn(self, ls_fn='cGAN', *args):
         supported = ['cGAN']
         if ls_fn == 'cGAN':
-            # 处理关键词参数
-            try:
-                kwargs = args[0]
-                gan_mode = kwargs.pop('gan_mode', 'lsgan')
-                reduced_form = kwargs.pop('reduced_form', False)
-                size_averaged = kwargs.pop('size_averaged', True)
-                lambda_l1 = kwargs.pop('lambda_l1', 100.)
-            except IndexError:
-                # 如果没有传递参数
-                gan_mode = 'lsgan'
-                reduced_form = False
-                lambda_l1 = 100.
-                kwargs = {}
-                size_averaged = True
-            # 定义损失函数
-            # criterionGAN = GANLoss(gan_mode, **kwargs).to(self.device)
-            criterionGAN = ttools.get_ls_fn('gan', gan_mode=gan_mode, device=self.device, **kwargs)
-            self.criterionGAN = lambda pred, target_is_real: criterionGAN(pred, target_is_real)
-            self.criterionL1 = lambda X, y: torch.nn.L1Loss(**kwargs)(X, y) * lambda_l1
-
-            def G_ls_fn(X, y, pred):
-                # 首先，G(A)需要骗过分辨器
-                fake_AB = torch.cat((X, pred), 1)
-                pred_fake = self.netD(fake_AB)
-                gan_ls = self.criterionGAN(pred_fake, True)
-                l1_ls = self.criterionL1(pred, y)
-                if not size_averaged:
-                    gan_ls = gan_ls.mean(dim=list(range(len(pred_fake.shape)))[1:])
-                    l1_ls = l1_ls.mean(dim=list(range(len(pred.shape)))[1:])
-                if reduced_form:
-                    return gan_ls + l1_ls
-                else:
-                    return gan_ls + l1_ls, gan_ls, l1_ls
-
-            def D_ls_fn(X, y, pred):
-                fake_AB = torch.cat((X, pred), 1)
-                pred_fake = self.netD(fake_AB.detach())
-                fake_ls = self.criterionGAN(pred_fake, False)
-                # 真实值
-                real_AB = torch.cat((X, y), 1)
-                pred_real = self.netD(real_AB)
-                real_ls = self.criterionGAN(pred_real, True)
-                # 组合损失值并计算梯度，0.5是两个预测值的权重
-                ls = (fake_ls + real_ls) * 0.5
-                if reduced_form:
-                    return ls
-                else:
-                    return ls, real_ls, fake_ls
-
-            ls_fn = D_ls_fn, G_ls_fn
-            loss_names = ['G_LS', 'D_LS'] if reduced_form else \
-                ['G_LS', 'G_GAN', 'G_L1', 'D_LS', 'D_real', 'D_fake']
-            test_ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_L1']
+            # # 处理关键词参数
+            # try:
+            #     kwargs = args[0]
+            #     gan_mode = kwargs.pop('gan_mode', 'lsgan')
+            #     reduced_form = kwargs.pop('reduced_form', False)
+            #     size_averaged = kwargs.pop('size_averaged', True)
+            #     lambda_l1 = kwargs.pop('lambda_l1', 100.)
+            # except IndexError:
+            #     # 如果没有传递参数
+            #     gan_mode = 'lsgan'
+            #     reduced_form = False
+            #     lambda_l1 = 100.
+            #     kwargs = {}
+            #     size_averaged = True
+            # # 定义损失函数
+            # # criterionGAN = GANLoss(gan_mode, **kwargs).to(self.device)
+            # criterionGAN = ttools.get_ls_fn('gan', gan_mode=gan_mode, device=self.device, **kwargs)
+            # criterionL1 = ttools.get_ls_fn('l1', **kwargs)
+            # self.criterionGAN = lambda pred, target_is_real: criterionGAN(pred, target_is_real)
+            # # self.criterionL1 = lambda X, y: torch.nn.L1Loss(**kwargs)(X, y) * lambda_l1
+            # self.criterionL1 = lambda X, y: criterionL1(X, y) * lambda_l1
+            #
+            # def G_ls_fn(X, y, pred):
+            #     # 首先，G(A)需要骗过分辨器
+            #     fake_AB = torch.cat((X, pred), 1)
+            #     pred_fake = self.netD(fake_AB)
+            #     gan_ls = self.criterionGAN(pred_fake, True)
+            #     l1_ls = self.criterionL1(pred, y)
+            #     if not size_averaged:
+            #         gan_ls = gan_ls.mean(dim=list(range(len(pred_fake.shape)))[1:])
+            #         l1_ls = l1_ls.mean(dim=list(range(len(pred.shape)))[1:])
+            #     if reduced_form:
+            #         return gan_ls + l1_ls
+            #     else:
+            #         return gan_ls + l1_ls, gan_ls, l1_ls
+            #
+            # def D_ls_fn(X, y, pred):
+            #     fake_AB = torch.cat((X, pred), 1)
+            #     pred_fake = self.netD(fake_AB.detach())
+            #     fake_ls = self.criterionGAN(pred_fake, False)
+            #     # 真实值
+            #     real_AB = torch.cat((X, y), 1)
+            #     pred_real = self.netD(real_AB)
+            #     real_ls = self.criterionGAN(pred_real, True)
+            #     # 组合损失值并计算梯度，0.5是两个预测值的权重
+            #     ls = (fake_ls + real_ls) * 0.5
+            #     if reduced_form:
+            #         return ls
+            #     else:
+            #         return ls, real_ls, fake_ls
+            #
+            # ls_fn = D_ls_fn, G_ls_fn
+            # loss_names = ['G_LS', 'D_LS'] if reduced_form else \
+            #     ['G_LS', 'G_GAN', 'G_L1', 'D_LS', 'D_real', 'D_fake']
+            # test_ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_L1']
+            ls_fn, loss_names, test_ls_names = self.cGAN_ls_fn(*args)
+        elif ls_fn == 'pcc':
+            ls_fn, loss_names, test_ls_names = self.pcc_ls_fn(*args)
         else:
             raise NotImplementedError(f'Pix2Pix暂不支持本损失函数模式{ls_fn}，目前支持{supported}')
         # 指定输出的训练损失类型
         self.loss_names, self.test_ls_names = loss_names, test_ls_names
         return ls_fn
+
+    def cGAN_ls_fn(self, *args):
+        # 处理关键词参数
+        try:
+            kwargs = args[0]
+            gan_mode = kwargs.pop('gan_mode', 'lsgan')
+            reduced_form = kwargs.pop('reduced_form', False)
+            size_averaged = kwargs.pop('size_averaged', True)
+            lambda_l1 = kwargs.pop('lambda_l1', 100.)
+        except IndexError:
+            # 如果没有传递参数
+            gan_mode = 'lsgan'
+            reduced_form = False
+            lambda_l1 = 100.
+            kwargs = {}
+            size_averaged = True
+        # 定义损失函数
+        # criterionGAN = GANLoss(gan_mode, **kwargs).to(self.device)
+        criterionGAN = ttools.get_ls_fn('gan', gan_mode=gan_mode, device=self.device, **kwargs)
+        criterionL1 = ttools.get_ls_fn('l1', **kwargs)
+        self.criterionGAN = lambda pred, target_is_real: criterionGAN(pred, target_is_real)
+        # self.criterionL1 = lambda X, y: torch.nn.L1Loss(**kwargs)(X, y) * lambda_l1
+        self.criterionPCC = lambda X, y: criterionL1(X, y) * lambda_l1
+
+        def G_ls_fn(X, y, pred):
+            # 首先，G(A)需要骗过分辨器
+            fake_AB = torch.cat((X, pred), 1)
+            pred_fake = self.netD(fake_AB)
+            gan_ls = self.criterionGAN(pred_fake, True)
+            l1_ls = self.criterionPCC(pred, y)
+            if not size_averaged:
+                gan_ls = gan_ls.mean(dim=list(range(len(pred_fake.shape)))[1:])
+                l1_ls = l1_ls.mean(dim=list(range(len(pred.shape)))[1:])
+            if reduced_form:
+                return gan_ls + l1_ls
+            else:
+                return gan_ls + l1_ls, gan_ls, l1_ls
+
+        def D_ls_fn(X, y, pred):
+            fake_AB = torch.cat((X, pred), 1)
+            pred_fake = self.netD(fake_AB.detach())
+            fake_ls = self.criterionGAN(pred_fake, False)
+            # 真实值
+            real_AB = torch.cat((X, y), 1)
+            pred_real = self.netD(real_AB)
+            real_ls = self.criterionGAN(pred_real, True)
+            # 组合损失值并计算梯度，0.5是两个预测值的权重
+            ls = (fake_ls + real_ls) * 0.5
+            if reduced_form:
+                return ls
+            else:
+                return ls, real_ls, fake_ls
+
+        ls_fn = D_ls_fn, G_ls_fn
+        loss_names = ['G_LS', 'D_LS'] if reduced_form else \
+            ['G_LS', 'G_GAN', 'G_L1', 'D_LS', 'D_real', 'D_fake']
+        test_ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_L1']
+        return ls_fn, loss_names, test_ls_names
+
+    def pcc_ls_fn(self, *args):
+        # 处理关键词参数
+        try:
+            kwargs = args[0]
+            gan_mode = kwargs.pop('gan_mode', 'lsgan')
+            reduced_form = kwargs.pop('reduced_form', False)
+            size_averaged = kwargs.pop('size_averaged', True)
+            lambda_PCC = kwargs.pop('lambda_PCC', 1.)
+        except IndexError:
+            # 如果没有传递参数
+            gan_mode = 'lsgan'
+            reduced_form = False
+            lambda_PCC = 1.
+            kwargs = {}
+            size_averaged = True
+        # 定义损失函数
+        criterionGAN = ttools.get_ls_fn('gan', gan_mode=gan_mode, device=self.device, **kwargs)
+        criterionPCC = ttools.get_ls_fn('pcc', **kwargs)
+        self.criterionGAN = lambda pred, target_is_real: criterionGAN(pred, target_is_real)
+        self.criterionPCC = lambda X, y: criterionPCC(X, y) * lambda_PCC
+
+        def G_ls_fn(X, y, pred):
+            # 首先，G(A)需要骗过分辨器
+            fake_AB = torch.cat((X, pred), 1)
+            pred_fake = self.netD(fake_AB)
+            gan_ls = self.criterionGAN(pred_fake, True)
+            pcc_ls = self.criterionPCC(pred, y)
+            if not size_averaged:
+                gan_ls = gan_ls.mean(dim=list(range(len(pred_fake.shape)))[1:])
+                pcc_ls = pcc_ls.mean(dim=list(range(len(pred.shape)))[1:])
+            if reduced_form:
+                return gan_ls + pcc_ls
+            else:
+                return gan_ls + pcc_ls, gan_ls, pcc_ls
+
+        def D_ls_fn(X, y, pred):
+            fake_AB = torch.cat((X, pred), 1)
+            pred_fake = self.netD(fake_AB.detach())
+            fake_ls = self.criterionGAN(pred_fake, False)
+            # 真实值
+            real_AB = torch.cat((X, y), 1)
+            pred_real = self.netD(real_AB)
+            real_ls = self.criterionGAN(pred_real, True)
+            # 组合损失值并计算梯度，0.5是两个预测值的权重
+            ls = (fake_ls + real_ls) * 0.5
+            if reduced_form:
+                return ls
+            else:
+                return ls, real_ls, fake_ls
+
+        ls_fn = D_ls_fn, G_ls_fn
+        loss_names = ['G_LS', 'D_LS'] if reduced_form else \
+            ['G_LS', 'G_GAN', 'G_PCC', 'D_LS', 'D_real', 'D_fake']
+        test_ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_PCC']
+        return ls_fn, loss_names, test_ls_names
 
     @property
     def required_shape(self):
