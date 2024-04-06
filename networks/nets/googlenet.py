@@ -1,474 +1,14 @@
-from abc import abstractmethod
-from collections.abc import Iterable
-from typing import Sized, Tuple, List
+from typing import List
 
 import torch
-import torch.nn.functional as F
+import utils.func.torch_tools as ttools
+
 from torch import nn
 
-from networks.layers.multi_output import MultiOutputLayer, linear_output
 from networks.basic_nn import BasicNN
-
-
-# class Inception(nn.Module):
-#     # c1--c4是每条路径的输出通道数
-#     def __init__(self, in_channels, c1, c2, c3, c4):
-#         """构成GoogLeNet的Inception块，版本1
-#
-#         参考：
-#
-#         [1] Christian Szegedy, Wei Liu, Yangqing Jia, Pierre Sermanet, Scott Reed, Dragomir Anguelov, Dumitru Erhan,
-#         Vincent Vanhoucke, Andrew Rabinovich. Going Deeper with Convolutions[J]. https://arxiv.org/abs/1409.4842，2014
-#         :param in_channels: 输入通道
-#         :param c1: path1中层的感受野，len(c1) == 1
-#         :param c2: path2中层的感受野，len(c2) == 2
-#         :param c3: path3中层的感受野，len(c3) == 2
-#         :param c4: path4中层的感受野，len(c4) == 1
-#         """
-#         assert not isinstance(c1, Sized), f'第一条路径的输出通道数c1只能为数字！'
-#         assert len(c2) == 2, f'第二条路径的输出通道数c2只能指定2个，然而收到了{len(c2)}个'
-#         assert len(c3) == 2, f'第三条路径的输出通道数c3只能指定2个，然而收到了{len(c3)}个'
-#         assert not isinstance(c4, Sized), f'第四条路径的输出通道数c4只能为数字！'
-#         super(Inception, self).__init__()
-#         # 线路1，单1x1卷积层
-#         self.p1_1 = nn.Conv2d(in_channels, c1, kernel_size=1)
-#         # 线路2，1x1卷积层后接3x3卷积层
-#         self.p2_1 = nn.Conv2d(in_channels, c2[0], kernel_size=1)
-#         self.p2_2 = nn.Conv2d(c2[0], c2[1], kernel_size=3, padding=1)
-#         # 线路3，1x1卷积层后接5x5卷积层
-#         self.p3_1 = nn.Conv2d(in_channels, c3[0], kernel_size=1)
-#         self.p3_2 = nn.Conv2d(c3[0], c3[1], kernel_size=5, padding=2)
-#         # 线路4，3x3最大汇聚层后接1x1卷积层
-#         self.p4_1 = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
-#         self.p4_2 = nn.Conv2d(in_channels, c4, kernel_size=1)
-#
-#     def forward(self, x):
-#         p1 = F.relu(self.p1_1(x))
-#         p2 = F.relu(self.p2_2(F.relu(self.p2_1(x))))
-#         p3 = F.relu(self.p3_2(F.relu(self.p3_1(x))))
-#         p4 = F.relu(self.p4_2(self.p4_1(x)))
-#         # 在通道维度上连结输出
-#         return torch.cat((p1, p2, p3, p4), dim=1)
-
-class Inception(nn.Module):
-    # c1--c4是每条路径的输出通道数
-    def __init__(self, in_channels, *args):
-        """构成GoogLeNet的Inception块，版本1
-
-        参考：
-
-        [1] Christian Szegedy, Wei Liu, Yangqing Jia, Pierre Sermanet, Scott Reed, Dragomir Anguelov, Dumitru Erhan,
-        Vincent Vanhoucke, Andrew Rabinovich. Going Deeper with Convolutions[J]. https://arxiv.org/abs/1409.4842，2014
-        :param in_channels: 输入通道
-        :param c1: path1中层的感受野，len(c1) == 1
-        :param c2: path2中层的感受野，len(c2) == 2
-        :param c3: path3中层的感受野，len(c3) == 2
-        :param c4: path4中层的感受野，len(c4) == 1
-        """
-        self.check_para(*args)
-        super(Inception, self).__init__()
-        self.paths = self.get_paths(in_channels, *args)
-
-    @abstractmethod
-    def check_para(self, *args):
-        pass
-
-    @abstractmethod
-    def get_paths(self, in_channels, *args) -> Tuple[List[nn.Module]]:
-        pass
-
-    def forward(self, x):
-        results_of_paths = []
-        for p in self.paths:
-            result = x
-            for layer in p:
-                result = F.relu(layer(result))
-            results_of_paths.append(result)
-        return torch.cat(results_of_paths, dim=1)
-
-
-class Inception_v1(Inception):
-    # c1--c4是每条路径的输出通道数
-    def __init__(self, in_channels, c1, c2, c3, c4):
-        """构成GoogLeNet的Inception块，版本1
-
-        参考：
-
-        [1] Christian Szegedy, Wei Liu, Yangqing Jia, Pierre Sermanet, Scott Reed, Dragomir Anguelov, Dumitru Erhan,
-        Vincent Vanhoucke, Andrew Rabinovich. Going Deeper with Convolutions[J].
-        https://arxiv.org/abs/1409.4842，2014
-        :param in_channels: 输入通道
-        :param c1: path1中层的感受野，len(c1) == 1
-        :param c2: path2中层的感受野，len(c2) == 2
-        :param c3: path3中层的感受野，len(c3) == 2
-        :param c4: path4中层的感受野，len(c4) == 1
-        """
-        super(Inception_v1, self).__init__(in_channels, c1, c2, c3, c4)
-
-    def check_para(self, *args):
-        assert len(args) == 4, f'需要为{self.__class__.__name__}提供四个通道参数，但是收到了{len(args)}'
-        c1, c2, c3, c4 = args
-        assert not isinstance(c1, Sized), f'第一条路径的输出通道数c1只能为数字！'
-        assert len(c2) == 2, f'第二条路径的输出通道数c2只能指定2个，然而收到了{len(c2)}个'
-        assert len(c3) == 2, f'第三条路径的输出通道数c3只能指定2个，然而收到了{len(c3)}个'
-        assert not isinstance(c4, Sized), f'第四条路径的输出通道数c4只能为数字！'
-
-    def get_paths(self, in_channels, *args):
-        c1, c2, c3, c4 = args
-        # 线路1，单1x1卷积层
-        p1 = [nn.Conv2d(in_channels, c1, kernel_size=1)]
-        self.p1 = p1[0]
-        # 线路2，1x1卷积层后接3x3卷积层
-        p2 = [
-            nn.Conv2d(in_channels, c2[0], kernel_size=1),
-            nn.Conv2d(c2[0], c2[1], kernel_size=3, padding=1)
-        ]
-        self.p2_1, self.p2_2 = p2
-        # 线路3，1x1卷积层后接5x5卷积层
-        p3 = [
-            nn.Conv2d(in_channels, c3[0], kernel_size=1),
-            nn.Conv2d(c3[0], c3[1], kernel_size=5, padding=2)
-        ]
-        self.p3_1, self.p3_2 = p3
-        # 线路4，3x3最大汇聚层后接1x1卷积层
-        p4 = [
-            nn.MaxPool2d(kernel_size=3, stride=1, padding=1),
-            nn.Conv2d(in_channels, c4, kernel_size=1)
-        ]
-        self.p4_1, self.p4_2 = p4
-        return p1, p2, p3, p4
-
-
-class Inception_v2A(Inception):
-    # c1--c4是每条路径的输出通道数
-    def __init__(self, in_channels, c1, c2, c3, c4):
-        """构成GoogLeNet的Inception块，版本2。结构来自于论文中的图5
-
-        参考：
-
-        [1]https://zhuanlan.zhihu.com/p/194382937. 2020.08.22/2024.03.20
-
-        [2] Christian Szegedy, Vincent Vanhoucke,  Sergey Ioffe, Jonathon Shlens, Zbigniew Wojna.
-        Rethinking the Inception Architecture for Computer Vision[J]
-        https://arxiv.org/abs/1512.00567.
-        :param in_channels: 输入通道
-        :param c1: path1中层的感受野，len(c1) == 1
-        :param c2: path2中层的感受野，len(c2) == 2
-        :param c3: path3中层的感受野，len(c3) == 3
-        :param c4: path4中层的感受野，len(c4) == 1
-        """
-        super(Inception_v2A, self).__init__(in_channels, c1, c2, c3, c4)
-        # # 线路1，单1x1卷积层，不改变形状
-        # self.p1_1 = nn.Conv2d(in_channels, c1, kernel_size=1)
-        # # 线路2，1x1卷积层后接3x3卷积层，不改变形状
-        # self.p2_1 = nn.Conv2d(in_channels, c2[0], kernel_size=1)
-        # self.p2_2 = nn.Conv2d(c2[0], c2[1], kernel_size=3, padding=1)
-        # # 线路3，1x1卷积层后接两个3x3卷积层，不改变形状
-        # self.p3_1 = nn.Conv2d(in_channels, c3[0], kernel_size=1)
-        # self.p3_2 = nn.Conv2d(c3[0], c3[1], kernel_size=3, padding=1)
-        # self.p3_3 = nn.Conv2d(c3[1], c3[2], kernel_size=3, padding=1)
-        # # 线路4，3x3最大汇聚层后接1x1卷积层，不改变形状
-        # self.p4_1 = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
-        # self.p4_2 = nn.Conv2d(in_channels, c4, kernel_size=1)
-
-    def check_para(self, *args):
-        assert len(args) == 4, f'需要为{self.__class__.__name__}提供四个通道参数，但是收到了{len(args)}'
-        c1, c2, c3, c4 = args
-        assert not isinstance(c1, Sized), f'第一条路径的输出通道数c1只能为数字！'
-        assert len(c2) == 2, f'第一条路径的输出通道数c2只能指定2个，然而收到了{len(c2)}个！'
-        assert len(c3) == 3, f'第一条路径的输出通道数c3只能指定3个，然而收到了{len(c3)}个！'
-        assert not isinstance(c4, Sized), f'第四条路径的输出通道数c4只能为数字！'
-
-    def get_paths(self, in_channels, *args) -> Tuple[List[nn.Module]]:
-        c1, c2, c3, c4 = args
-        # 线路1，单1x1卷积层，不改变形状
-        p1 = [nn.Conv2d(in_channels, c1, kernel_size=1)]
-        self.p1 = p1[0]
-        # # 线路2，1x1卷积层后接3x3卷积层，不改变形状
-        p2 = [
-            nn.Conv2d(in_channels, c2[0], kernel_size=1),
-            nn.Conv2d(c2[0], c2[1], kernel_size=3, padding=1)
-        ]
-        self.p2_1, self.p2_2 = p2
-        # 线路3，1x1卷积层后接两个3x3卷积层，不改变形状
-        p3 = [
-            nn.Conv2d(in_channels, c3[0], kernel_size=1),
-            nn.Conv2d(c3[0], c3[1], kernel_size=3, padding=1),
-            nn.Conv2d(c3[1], c3[2], kernel_size=3, padding=1)
-        ]
-        self.p3_1, self.p3_2, self.p3_3 = p3
-        # 线路4，3x3最大汇聚层后接1x1卷积层，不改变形状
-        p4 = [
-            nn.MaxPool2d(kernel_size=3, stride=1, padding=1),
-            nn.Conv2d(in_channels, c4, kernel_size=1)
-        ]
-        self.p4_1, self.p4_2 = p4
-        return p1, p2, p3, p4
-
-    # def __original_layers(self, in_channels, c1, c2, c3, c4):
-    #     """对应论文中的图5
-    #     :param in_channels:
-    #     :param c1:
-    #     :param c2:
-    #     :param c3:
-    #     :param c4:
-    #     :return:
-    #     """
-    #     # # 线路1，单1x1卷积层，不改变形状
-    #     # self.p1_1 = nn.Conv2d(in_channels, c1, kernel_size=1)
-    #     # # 线路2，1x1卷积层后接3x3卷积层，不改变形状
-    #     # self.p2_1 = nn.Conv2d(in_channels, c2[0], kernel_size=1)
-    #     # self.p2_2 = nn.Conv2d(c2[0], c2[1], kernel_size=3, padding=1)
-    #     # # 线路3，1x1卷积层后接两个3x3卷积层，不改变形状
-    #     # self.p3_1 = nn.Conv2d(in_channels, c3[0], kernel_size=1)
-    #     # self.p3_2 = nn.Conv2d(c3[0], c3[1], kernel_size=3, padding=1)
-    #     # self.p3_3 = nn.Conv2d(c3[1], c3[2], kernel_size=3, padding=1)
-    #     # # 线路4，3x3最大汇聚层后接1x1卷积层，不改变形状
-    #     # self.p4_1 = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
-    #     # self.p4_2 = nn.Conv2d(in_channels, c4, kernel_size=1)
-    #     # 线路1，单1x1卷积层，不改变形状
-    #     p1 = [nn.Conv2d(in_channels, c1, kernel_size=1)]
-    #     # # 线路2，1x1卷积层后接3x3卷积层，不改变形状
-    #     p2 = [
-    #         nn.Conv2d(in_channels, c2[0], kernel_size=1),
-    #         nn.Conv2d(c2[0], c2[1], kernel_size=3, padding=1)
-    #     ]
-    #     # 线路3，1x1卷积层后接两个3x3卷积层，不改变形状
-    #     p3 = [
-    #         nn.Conv2d(in_channels, c3[0], kernel_size=1),
-    #         nn.Conv2d(c3[0], c3[1], kernel_size=3, padding=1),
-    #         nn.Conv2d(c3[1], c3[2], kernel_size=3, padding=1)
-    #     ]
-    #     # 线路4，3x3最大汇聚层后接1x1卷积层，不改变形状
-    #     p4 = [
-    #         nn.MaxPool2d(kernel_size=3, stride=1, padding=1),
-    #         nn.Conv2d(in_channels, c4, kernel_size=1)
-    #     ]
-    #     return p1, p2, p3, p4
-
-    # def __efficient_layers(self, in_channels, c1, c2, c3, c4, n=7):
-    #     """对应论文中的图6
-    #     :param in_channels:
-    #     :param c1:
-    #     :param c2:
-    #     :param c3:
-    #     :param c4:
-    #     :param n:
-    #     :return:
-    #     """
-    #     # # 线路1，单1x1卷积层，不改变形状
-    #     # self.p1_1 = nn.Conv2d(in_channels, c1, kernel_size=1)
-    #     # # 线路2，1x1卷积层后接3x3卷积层，不改变形状
-    #     # self.p2_1 = nn.Conv2d(in_channels, c2[0], kernel_size=1)
-    #     # self.p2_2 = nn.Conv2d(c2[0], c2[1], kernel_size=(1, n), padding=1)
-    #     # self.p2_3 = nn.Conv2d(c2[1], c2[2], kernel_size=(n, 1), padding=1)
-    #     # # 线路3，1x1卷积层后接两个3x3卷积层，不改变形状
-    #     # self.p3_1 = nn.Conv2d(in_channels, c3[0], kernel_size=1)
-    #     # self.p3_2 = nn.Conv2d(c3[0], c3[1], kernel_size=(1, n), padding=1)
-    #     # self.p3_3 = nn.Conv2d(c3[1], c3[2], kernel_size=(n, 1), padding=1)
-    #     # self.p3_4 = nn.Conv2d(c3[2], c3[3], kernel_size=(1, n), padding=1)
-    #     # self.p3_5 = nn.Conv2d(c3[3], c3[4], kernel_size=(n, 1), padding=1)
-    #     # # 线路4，3x3最大汇聚层后接1x1卷积层，不改变形状
-    #     # self.p4_1 = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
-    #     # self.p4_2 = nn.Conv2d(in_channels, c4, kernel_size=1)
-    #     # 线路1，单1x1卷积层，不改变形状
-    #     p1 = [nn.Conv2d(in_channels, c1, kernel_size=1)]
-    #     # 线路2，1x1卷积层后接3x3卷积层，不改变形状
-    #     p2 = [
-    #         nn.Conv2d(in_channels, c2[0], kernel_size=1),
-    #         nn.Conv2d(c2[0], c2[1], kernel_size=(1, n), padding=(1, n // 2)),
-    #         nn.Conv2d(c2[1], c2[2], kernel_size=(n, 1), padding=(n // 2, 1))
-    #     ]
-    #     # 线路3，1x1卷积层后接两个3x3卷积层，不改变形状
-    #     p3 = [
-    #         nn.Conv2d(in_channels, c3[0], kernel_size=1),
-    #         nn.Conv2d(c3[0], c3[1], kernel_size=(1, n), padding=(1, n // 2)),
-    #         nn.Conv2d(c3[1], c3[2], kernel_size=(n, 1), padding=(n // 2, 1)),
-    #         nn.Conv2d(c3[2], c3[3], kernel_size=(1, n), padding=(1, n // 2)),
-    #         nn.Conv2d(c3[3], c3[4], kernel_size=(n, 1), padding=(n // 2, 1))
-    #     ]
-    #     # 线路4，3x3最大汇聚层后接1x1卷积层，不改变形状
-    #     p4 = [
-    #         nn.MaxPool2d(kernel_size=3, stride=1, padding=1),
-    #         nn.Conv2d(in_channels, c4, kernel_size=1)
-    #     ]
-    #     return p1, p2, p3, p4
-
-    # def __reduced_layers(self, in_channels, c1, c2, c3, c4):
-    #     """对应论文中的图7
-    #     :param in_channels:
-    #     :param c1:
-    #     :param c2:
-    #     :param c3:
-    #     :param c4:
-    #     :param n:
-    #     :return:
-    #     """
-    #     # 线路1，单1x1卷积层，不改变形状
-    #     self.p1_1 = nn.Conv2d(in_channels, c1, kernel_size=1)
-    #     # 线路2，1x1卷积层后接3x3卷积层，不改变形状
-    #     self.p2_1 = nn.Conv2d(in_channels, c2[0], kernel_size=1)
-    #     self.p2_21 = nn.Conv2d(c2[0], c2[1], kernel_size=(1, 3), padding=(0, 1))
-    #     self.p2_22 = nn.Conv2d(c2[0], c2[2], kernel_size=(3, 1), padding=(1, 0))
-    #     # 线路3，1x1卷积层后接两个3x3卷积层，不改变形状
-    #     self.p3_1 = nn.Conv2d(in_channels, c3[0], kernel_size=1)
-    #     self.p3_2 = nn.Conv2d(c3[0], c3[1], kernel_size=(3, 3), padding=1)
-    #     self.p3_31 = nn.Conv2d(c3[1], c3[2], kernel_size=(1, 3), padding=(0, 1))
-    #     self.p3_32 = nn.Conv2d(c3[1], c3[3], kernel_size=(3, 1), padding=(1, 0))
-    #     # 线路4，3x3最大汇聚层后接1x1卷积层，不改变形状
-    #     self.p4_1 = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
-    #     self.p4_2 = nn.Conv2d(in_channels, c4, kernel_size=1)
-    #
-    #     def forward(x):
-    #         p1 = F.relu(self.p1_1(x))
-    #         p2 = F.relu(self.p2_1(x))
-    #         p21 = F.relu(self.p2_21(p2))
-    #         p22 = F.relu(self.p2_22(p2))
-    #         p3 = F.relu(self.p3_2(F.relu(self.p3_1(x))))
-    #         p31 = F.relu(self.p3_31(p3))
-    #         p32 = F.relu(self.p3_32(p3))
-    #         p4 = F.relu(self.p4_2(F.relu(self.p4_1(x))))
-    #         return torch.cat((p1, p21, p22, p31, p32, p4), dim=1)
-    #
-    #     self.forward = forward
-        # # 线路1，单1x1卷积层，不改变形状
-        # p1 = [nn.Conv2d(in_channels, c1, kernel_size=1)]
-        # # 线路2，1x1卷积层后接3x3卷积层，不改变形状
-        # p2 = [
-        #     nn.Conv2d(in_channels, c2[0], kernel_size=1),
-        #     nn.Conv2d(c2[0], c2[1], kernel_size=(1, 3), padding=(0, 1)),
-        #     nn.Conv2d(c2[0], c2[2], kernel_size=(3, 1), padding=(1, 0))
-        # ]
-        # # 线路3，1x1卷积层后接两个3x3卷积层，不改变形状
-        # p3 = [
-        #     nn.Conv2d(in_channels, c3[0], kernel_size=1),
-        #     nn.Conv2d(c3[0], c3[1], kernel_size=(3, 3), padding=1),
-        #     nn.Conv2d(c3[1], c3[2], kernel_size=(1, 3), padding=(0, 1)),
-        #     nn.Conv2d(c3[1], c3[3], kernel_size=(3, 1), padding=(1, 0))
-        # ]
-        # # 线路4，3x3最大汇聚层后接1x1卷积层，不改变形状
-        # p4 = [
-        #     nn.MaxPool2d(kernel_size=3, stride=1, padding=1),
-        #     nn.Conv2d(in_channels, c4, kernel_size=1)
-        # ]
-        # return p1, p2, p3, p4
-
-
-class Inception_v2B(Inception):
-
-    def __init__(self, in_channels, c1, c2, c3, c4, n=7):
-        """构成GoogLeNet的Inception块，版本2。结构来自于论文中的图6
-
-        参考：
-
-        [1]https://zhuanlan.zhihu.com/p/194382937. 2020.08.22/2024.03.20
-
-        [2] Christian Szegedy, Vincent Vanhoucke,  Sergey Ioffe, Jonathon Shlens, Zbigniew Wojna.
-        Rethinking the Inception Architecture for Computer Vision[J]
-        https://arxiv.org/abs/1512.00567.
-        :param in_channels: 输入通道
-        :param c1: path1中层的感受野，len(c1) == 1
-        :param c2: path2中层的感受野，len(c2) == 3
-        :param c3: path3中层的感受野，len(c3) == 5
-        :param c4: path4中层的感受野，len(c4) == 1
-        :param n: path2、3中分解的层的感受野，n最好为大于0的奇数
-        """
-        super(Inception_v2B, self).__init__(in_channels, c1, c2, c3, c4, n)
-
-    def check_para(self, *args):
-        assert len(args) == 5, f'需要为{self.__class__.__name__}提供五个通道参数，但是收到了{len(args)}'
-        c1, c2, c3, c4, n = args
-        assert not isinstance(c1, Sized), f'第一条路径的输出通道数c1只能为数字！'
-        assert len(c2) == 3, f'第二条路径的输出通道数c2只能指定3个，然而收到了{len(c2)}个！'
-        assert len(c3) == 5, f'第三条路径的输出通道数c3只能指定5个，然而收到了{len(c3)}个！'
-        assert not isinstance(c4, Sized), f'第四条路径的输出通道数c4只能为数字！'
-        assert n > 0, f'n值应该大于0，但是收到了{n}！'
-
-    def get_paths(self, in_channels, *args) -> Tuple[List[nn.Module]]:
-        c1, c2, c3, c4, n = args
-        # 线路1，单1x1卷积层，不改变形状
-        p1 = [nn.Conv2d(in_channels, c1, kernel_size=1)]
-        self.p1 = p1[0]
-        # 线路2，1x1卷积层后接3x3卷积层，不改变形状
-        p2 = [
-            nn.Conv2d(in_channels, c2[0], kernel_size=1),
-            nn.Conv2d(c2[0], c2[1], kernel_size=(1, n), padding=(0, n // 2)),
-            nn.Conv2d(c2[1], c2[2], kernel_size=(n, 1), padding=(n // 2, 0))
-        ]
-        self.p2_1, self.p2_2, self.p2_3 = p2
-        # 线路3，1x1卷积层后接两个3x3卷积层，不改变形状
-        p3 = [
-            nn.Conv2d(in_channels, c3[0], kernel_size=1),
-            nn.Conv2d(c3[0], c3[1], kernel_size=(1, n), padding=(0, n // 2)),
-            nn.Conv2d(c3[1], c3[2], kernel_size=(n, 1), padding=(n // 2, 0)),
-            nn.Conv2d(c3[2], c3[3], kernel_size=(1, n), padding=(0, n // 2)),
-            nn.Conv2d(c3[3], c3[4], kernel_size=(n, 1), padding=(n // 2, 0))
-        ]
-        self.p3_1, self.p3_2, self.p3_3, self.p3_4, self.p3_5 = p3
-        # 线路4，3x3最大汇聚层后接1x1卷积层，不改变形状
-        p4 = [
-            nn.MaxPool2d(kernel_size=3, stride=1, padding=1),
-            nn.Conv2d(in_channels, c4, kernel_size=1)
-        ]
-        self.p4_1, self.p4_2 = p4
-        return p1, p2, p3, p4
-
-
-class Inception_v2C(Inception):
-
-    def __init__(self, in_channels, c1, c2, c3, c4):
-        """构成GoogLeNet的Inception块，版本2，结构来自于论文中的图7
-
-        参考：
-
-        [1]https://zhuanlan.zhihu.com/p/194382937. 2020.08.22/2024.03.20
-
-        [2] Christian Szegedy, Vincent Vanhoucke,  Sergey Ioffe, Jonathon Shlens, Zbigniew Wojna.
-        Rethinking the Inception Architecture for Computer Vision[J]
-        https://arxiv.org/abs/1512.00567.
-        :param in_channels: 输入通道
-        :param c1: path1中层的感受野，len(c1) == 1
-        :param c2: path2中层的感受野，len(c2) == 3
-        :param c3: path3中层的感受野，len(c3) == 4
-        :param c4: path4中层的感受野，len(c4) == 1
-        """
-        super(Inception_v2C, self).__init__(in_channels, c1, c2, c3, c4)
-
-    def check_para(self, *args):
-        assert len(args) == 4, f'需要为{self.__class__.__name__}提供4个通道参数，但是收到了{len(args)}'
-        c1, c2, c3, c4 = args
-        assert not isinstance(c1, Sized), f'第一条路径的输出通道数c1只能为数字！'
-        assert len(c2) == 3, f'第二条路径的输出通道数c2只能指定3个，然而收到了{len(c2)}个！'
-        assert len(c3) == 4, f'第三条路径的输出通道数c3只能指定4个，然而收到了{len(c3)}个！'
-        assert not isinstance(c4, Sized), f'第四条路径的输出通道数c4只能为数字！'
-
-    def get_paths(self, in_channels, *args):
-        c1, c2, c3, c4 = args
-        # 线路1，单1x1卷积层，不改变形状
-        self.p1_1 = nn.Conv2d(in_channels, c1, kernel_size=1)
-        # 线路2，1x1卷积层后接3x3卷积层，不改变形状
-        self.p2_1 = nn.Conv2d(in_channels, c2[0], kernel_size=1)
-        self.p2_21 = nn.Conv2d(c2[0], c2[1], kernel_size=(1, 3), padding=(0, 1))
-        self.p2_22 = nn.Conv2d(c2[0], c2[2], kernel_size=(3, 1), padding=(1, 0))
-        # 线路3，1x1卷积层后接两个3x3卷积层，不改变形状
-        self.p3_1 = nn.Conv2d(in_channels, c3[0], kernel_size=1)
-        self.p3_2 = nn.Conv2d(c3[0], c3[1], kernel_size=(3, 3), padding=1)
-        self.p3_31 = nn.Conv2d(c3[1], c3[2], kernel_size=(1, 3), padding=(0, 1))
-        self.p3_32 = nn.Conv2d(c3[1], c3[3], kernel_size=(3, 1), padding=(1, 0))
-        # 线路4，3x3最大汇聚层后接1x1卷积层，不改变形状
-        self.p4_1 = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
-        self.p4_2 = nn.Conv2d(in_channels, c4, kernel_size=1)
-
-    def forward(self, x):
-        p1 = F.relu(self.p1_1(x))
-        p2 = F.relu(self.p2_1(x))
-        p21 = F.relu(self.p2_21(p2))
-        p22 = F.relu(self.p2_22(p2))
-        p3 = F.relu(self.p3_2(F.relu(self.p3_1(x))))
-        p31 = F.relu(self.p3_31(p3))
-        p32 = F.relu(self.p3_32(p3))
-        p4 = F.relu(self.p4_2(F.relu(self.p4_1(x))))
-        return torch.cat((p1, p21, p22, p31, p32, p4), dim=1)
+from networks.layers.inception import Inception_v1, Inception_v2A, Inception_v2B, Inception_v2C, Inception_v3A, \
+    Inception_v3B, Inception_v3C
+from networks.layers.multi_output import MultiOutputLayer
 
 
 class GoogLeNet(BasicNN):
@@ -476,7 +16,8 @@ class GoogLeNet(BasicNN):
     required_shape = (224, 224)
 
     def __init__(self, in_channels, out_features,
-                 version='1', regression=False, dropout_rate=0.,
+                 version='1', regression=False, dropout_rate=0., bn_momen=0.95,
+                 side_headed=True,
                  **kwargs):
         """经典GoogLeNet模型。
 
@@ -484,19 +25,26 @@ class GoogLeNet(BasicNN):
         :param out_features: 输出特征
         :param device: 设置本网络所处设备
         """
-        supported = {'1', '2'}
+        supported = {'1', '2', '3'}
+        vargs = in_channels, dropout_rate  # 版本参数
         if version == '1':
             get_blocks = self.__get_version1
             multi_in = 1024
         elif version == '2':
             get_blocks = self.__get_version2
             multi_in = 2048
+        elif version == '3':
+            self.side_head = side_headed
+            get_blocks = self.__get_version3
+            multi_in = 2048
+            vargs = in_channels, out_features, regression, dropout_rate, bn_momen
         else:
             raise NotImplementedError(f'暂不支持的GoogLeNet类型{version}，当前支持的类型包括{supported}')
+        self.version = version
         super().__init__(
-            *get_blocks(in_channels, dropout_rate),
-            MultiOutputLayer(multi_in, out_features) if isinstance(out_features, Iterable)
-            else nn.Sequential(*linear_output(multi_in, out_features, softmax=not regression)),
+            *get_blocks(*vargs), MultiOutputLayer(
+                multi_in, out_features, dropout_rate, bn_momen, regression=regression
+            ),
             **kwargs
         )
 
@@ -550,6 +98,15 @@ class GoogLeNet(BasicNN):
 
     @staticmethod
     def __get_version2(in_channels, dropout_rate=0.):
+        """参考：
+        [1] https://pytorch.org/vision/stable/_modules/torchvision/models/inception.html
+
+        [2] Christian Szegedy, Vincent Vanhoucke,  Sergey Ioffe, Jonathon Shlens, Zbigniew Wojna.
+        Rethinking the Inception Architecture for Computer Vision[J] https://arxiv.org/abs/1512.00567.
+        :param in_channels:
+        :param dropout_rate:
+        :return:
+        """
         dropout = nn.Dropout(dropout_rate)
         b1 = nn.Sequential(
             nn.Conv2d(in_channels, 32, kernel_size=3, stride=2), nn.ReLU(), dropout,
@@ -588,13 +145,243 @@ class GoogLeNet(BasicNN):
         )
         return b1, b2, b3, b4, b5
 
+    def __get_version3(self, in_channels, out_features, regression, dropout_rate, bn_momen):
+        """参考：
+        [1] https://pytorch.org/vision/stable/_modules/torchvision/models/inception.html
+
+        [2] Christian Szegedy, Vincent Vanhoucke,  Sergey Ioffe, Jonathon Shlens, Zbigniew Wojna.
+        Rethinking the Inception Architecture for Computer Vision[J] https://arxiv.org/abs/1512.00567.
+        :param in_channels:
+        :param out_features:
+        :param regression:
+        :param dropout_rate:
+        :param bn_momen:
+        :return:
+        """
+        dropout = nn.Dropout(dropout_rate)
+        b1 = nn.Sequential(
+            # 输出维度299x299x输入通道数
+            nn.Conv2d(in_channels, 32, kernel_size=3, stride=2), nn.ReLU(), dropout,
+            # 149x149x32
+            nn.Conv2d(32, 32, kernel_size=3), nn.ReLU(), dropout,
+            # 147x147x32
+            nn.Conv2d(32, 64, kernel_size=3, padding=1), nn.ReLU(), dropout,
+            # 147x147x64
+            nn.MaxPool2d(kernel_size=3, stride=2)
+            # 73x73x64
+        )
+        b2 = nn.Sequential(
+            # 73x73x64
+            nn.Conv2d(64, 80, kernel_size=1), nn.ReLU(), dropout,
+            # 73x73x80
+            nn.Conv2d(80, 192, kernel_size=3), nn.ReLU(), dropout,
+            # 71x71x192
+            nn.MaxPool2d(kernel_size=3, stride=2)
+            # 35x35x192
+        )
+        b3 = nn.Sequential(
+            # 35x35x192
+            Inception_v3A(192, 64, (48, 64), (64, 96, 96), 32), dropout,
+            # 35x35x256
+            Inception_v3A(256, 64, (48, 64), (64, 96, 96), 64), dropout,
+            # 35x35x288
+            Inception_v3A(288, 64, (48, 64), (64, 96, 96), 64), dropout,
+            # 35x35x288
+        )
+        b4 = nn.Sequential(
+            # 35x35x288
+            Inception_v3B(288, 384, (64, 96, 96)), dropout
+            # 17x17x768
+        )
+        b5 = nn.Sequential(
+            # 17x17x768
+            Inception_v2B(768, 192, (128, 128, 192), (128, 128, 128, 128, 192), 192), dropout,
+            # 17x17x768
+            Inception_v2B(768, 192, (160, 160, 192), (160, 160, 160, 160, 192), 192), dropout,
+            # 17x17x768
+            Inception_v2B(768, 192, (160, 160, 192), (160, 160, 160, 160, 192), 192), dropout,
+            # 17x17x768
+            Inception_v2B(768, 192, (192, 192, 192), (192, 192, 192, 192, 192), 192), dropout,
+            # 17x17x768
+        )
+        if self.side_head:
+            # version3使用的辅助Softmax分类器
+            side_head = nn.Sequential(
+                # 17x17x768
+                nn.AvgPool2d(5, stride=3),
+                # 5x5x768
+                nn.Conv2d(768, 128, kernel_size=1),
+                # 5x5x128
+                nn.Conv2d(128, 768, kernel_size=5),
+                # 1x1x768
+                nn.AdaptiveAvgPool2d(1),
+                # 1x1x768
+                MultiOutputLayer(768, out_features, dropout_rate,
+                                 momentum=bn_momen, regression=regression)
+                # out_features x 1
+            )
+            # 为head设置参数
+            side_head[2].stddev = 0.01
+            side_head[4].stddev = 0.001
+        b6 = nn.Sequential(
+            # 17x17x768
+            Inception_v3C(768, (192, 320), (192, 192, 192, 192)), dropout
+            # 8x8x1280
+        )
+        b7 = nn.Sequential(
+            # 8x8x1280
+            Inception_v2C(1280, 320, (384, 384, 384), (448, 384, 384, 384), 192), dropout,
+            # 8x8x2048
+            Inception_v2C(2048, 320, (384, 384, 384), (448, 384, 384, 384), 192), dropout,
+            # 8x8x2048
+        )
+        b8 = nn.Sequential(
+            # 8x8x2048
+            nn.AvgPool2d(8), nn.Dropout(0.2), nn.Flatten()
+            # 1x2048
+        )
+        if self.side_head:
+            return b1, b2, b3, b4, b5, b6, b7, b8, side_head
+        else:
+            return b1, b2, b3, b4, b5, b6, b7, b8
+
     @staticmethod
     def get_required_shape(version='1'):
-        supported = ['1', '2']
+        supported = ['1', '2', '3']
         if version == '1':
             return 224, 224
-        elif version == '2':
+        elif version == '2' or version == '3':
             return 299, 299
         else:
             raise NotImplementedError(f'不支持的版本{version}，目前支持{supported}')
+
+    def forward_backward(self, X, y, backward=True):
+        """前向及反向传播
+        通过改变训练状态来指示模型是否使用辅助分类器，以及进行损失值的计算。
+        :param X: 特征集
+        :param y: 标签集
+        :param backward: 是否进行反向传播
+        :return: 预测值，损失值集合
+        """
+        pre_state = self.is_train
+        self.is_train = backward and self.is_train
+        ret = super().forward_backward(X, y, backward)
+        self.is_train = pre_state
+        return ret
+
+    def _forward_impl(self, X, y):
+        """前向传播实现。
+        针对版本3实现的前向传播，主要针对辅助分类器。
+        如果开启了辅助分类器，即self.side_head==True，则会将本分类器和辅助分类器的预测损失值相加，同时反向传播。
+        :param X: 特征集批。
+        :param y: 标签集批。
+        :return: 总预测值，[总预测损失值+辅助预测损失值，位于各种要求损失函数下]
+        """
+        if self.side_head is not None:
+            # 如果选择了使用辅助分类器
+            for i, m in enumerate(self):
+                if i == 4:
+                    X = m(X)
+                    side_head_input = X
+                elif i == 8:
+                    pass
+                else:
+                    X = m(X)
+            if self.is_train:
+                aux = self[8](side_head_input)
+                gross_ls_fn, aux_ls_fn, ls_fn = self._ls_fn_s
+                ls_es = [gross_ls_fn(X, aux, y), aux_ls_fn(aux, y), ls_fn(X, y)]
+            else:
+                ls_es = [self._ls_fn_s[2](X, y)]
+            return X, ls_es
+        else:
+            return super()._forward_impl(X, y)
+
+    def __init_submodules(self, init_str, **kwargs):
+        """使用torchvision模块中对网络的初始化方法覆盖用户自定义的方法。
+        :param init_str: 初始化方法
+        :param kwargs: 初始化方法关键词参数
+        :return: None
+        """
+        super().__init_submodules(init_str, **kwargs)
+        if init_str != 'state':
+            # 如果不使用预先保存的参数
+            for m in self.modules():
+                if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                    stddev = float(m.stddev) if hasattr(m, "stddev") else 0.1
+                    torch.nn.init.trunc_normal_(m.weight, mean=0.0, std=stddev, a=-2, b=2)
+                elif isinstance(m, nn.BatchNorm2d):
+                    nn.init.constant_(m.weight, 1)
+                    nn.init.constant_(m.bias, 0)
+
+    def _get_ls_fn(self, *args):
+        """若指定损失函数类型为`original`，则使用论文中的标签平滑损失计算方式，辅助分类器的损失值权重为0.4
+        :param args: 多个二元组，元组格式为（损失函数类型字符串，本损失函数关键词参数）
+        :return: 损失函数序列
+        """
+        ls_fn_s, loss_names, test_ls_names = [], [], []
+        for (type_s, kwargs) in args:
+            size_averaged = kwargs.pop('size_averaged', True)
+            if type_s == 'original' and self.side_head is not None:
+                ls_fn = ttools.get_ls_fn('entro', label_smoothing=0.1)
+                unwrapped_fns = [
+                    lambda pred, aux, y: ls_fn(aux, y) * 0.4 + ls_fn(pred, y) * 0.6,
+                    lambda aux, y: ls_fn(aux, y),
+                    lambda pred, y: ls_fn(pred, y)
+                ]
+                ls_fn_s += unwrapped_fns if size_averaged else [
+                    lambda x, y: ttools.sample_wise_ls_fn(x, y, fn)
+                    for fn in unwrapped_fns
+                ]
+                loss_names += ['GROSS_ENTRO', 'AUX_ENTRO', 'MAIN_ENTRO']
+                test_ls_names += ['ENTRO']
+            else:
+                ls_fn, ls_names, tls_names = super()._get_ls_fn((type_s, kwargs))
+                loss_names += ls_names
+                test_ls_names += tls_names
+        return ls_fn_s, loss_names, test_ls_names
+
+    def _get_optimizer(self, *args) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
+        """若指定类型参数为`original`，则使用论文中的优化器RMSPROP，指定的关键字参数会被覆盖
+        :param args: 多个二元组，元组格式为（优化器类型字符串，本优化器关键词参数）
+        :return: 优化器序列
+        """
+        lr_names, optimizers = [], []
+        for i, (type_s, kwargs) in enumerate(args):
+            if type_s == 'original' and self.version == '3':
+                type_s = 'rmsprop'
+                kwargs = {'lr': 0.045, 'w_decay': 0.9, 'alpha': 0.1}
+            optims, lns = super()._get_optimizer((type_s, kwargs), )
+            optimizers += optims
+            lr_names += lns
+            # optimizers.append(ttools.get_optimizer(self, type_s, **kwargs))
+            # lr_names.append(f'LR_{i}')
+        return optimizers, lr_names
+
+    def _gradient_clipping(self):
+        if self.version == '2' or self.version == '3':
+            nn.utils.clip_grad_norm_(self.parameters(), 2.)
+
+    def _get_lr_scheduler(self, *args):
+        """若指定学习率规划器类型为`original`，则会使用论文中的学习率规划器。
+        :param args: 多个二元组，元组格式为（规划器类型字符串，本规划器关键词参数）
+        :return: 规划器序列
+        """
+        schedulers = []
+        # if len(args) == 0 and (self.version == '2' or self.version == '3'):
+        #     for optimizer in self._optimizer_s:
+        #         basic_lr = optimizer.param_groups[0]['lr']
+        #         schedulers.append(ttools.get_lr_scheduler(
+        #             optimizer, 'lambda',
+        #             lr_lambda=lambda epoch: basic_lr ** (0.94 * (epoch // 2))
+        #         ))
+        for (type_s, kwargs), optimizer in zip(args, self._optimizer_s):
+            if type_s == 'original' and (self.version == '2' or self.version == '3'):
+                type_s = 'lambda'
+                basic_lr = optimizer.param_groups[0]['lr']
+                kwargs['lr_lambda'] = lambda epoch: basic_lr ** (0.94 * (epoch // 2))
+            schedulers.append(ttools.get_lr_scheduler(
+                optimizer, type_s, **kwargs
+            ))
+        return schedulers
 
