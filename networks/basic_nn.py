@@ -11,6 +11,7 @@ import utils.func.torch_tools as ttools
 from data_related.dataloader import LazyDataLoader
 from networks.trainer import Trainer
 from utils.accumulator import Accumulator
+from utils.func.torch_tools import sample_wise_ls_fn
 
 
 class BasicNN(nn.Sequential):
@@ -23,22 +24,23 @@ class BasicNN(nn.Sequential):
         :param kwargs: 可选提供的参数。
         -- device: 网络所处设备。
         -- init_meth: 网络初始化方法。
-        -- init_args: 网络初始化方法所用参数。
+        -- init_kwargs: 网络初始化方法所用参数。
         -- with_checkpoint: 是否使用检查点机制。
         """
         # 设置默认值
         init_meth = 'zero' if 'init_meth' not in kwargs.keys() else kwargs['init_meth']
         device = torch.device('cpu') if 'device' not in kwargs.keys() else kwargs['device']
         with_checkpoint = False if 'with_checkpoint' not in kwargs.keys() else kwargs['with_checkpoint']
-        init_args = [] if 'init_args' not in kwargs.keys() else kwargs['init_args']
+        init_kwargs = {} if 'init_kwargs' not in kwargs.keys() else kwargs['init_kwargs']
+        is_train = True if 'is_train' not in kwargs.keys() else kwargs['is_train']
         # 初始化各模块
         super(BasicNN, self).__init__(*args)
-        self.__init_submodules(init_meth, *init_args)
+        self.__init_submodules(init_meth, **init_kwargs)
         self._optimizer_s = None
         self._scheduler_s = None
         self._ls_fn_s = None
-        self.for_and_backward = None
-        self.is_train = False
+        # self._gradient_clipping = None
+        self.is_train = is_train
         self.apply(lambda m: m.to(device))
 
         self.__device = device
@@ -46,90 +48,90 @@ class BasicNN(nn.Sequential):
             warnings.warn('使用“检查点机制”虽然会减少前向传播的内存使用，但是会大大增加反向传播的计算量！')
         self.__checkpoint = with_checkpoint
 
-    def prepare_training(self,
-                         o_args: tuple = ('adam', ()), l_args: tuple = ([], ()),
-                         ls_args: tuple = ('mse', ())
-                         ):
+    def prepare_training(
+            self,  # o_args: tuple = ('adam', ()), l_args: tuple = ([], ()),
+            # ls_args: tuple = ('mse', ())
+            o_args: tuple = (), l_args: tuple = (), ls_args: tuple = (),
+    ):
         """进行训练准备
         :param o_args: 优化器参数。请注意第一项需为优化器类型字符串，其后为每一个优化器的kwargs。
         :param l_args: 学习率规划器器参数。请注意第一项需为学习率规划器类型字符串，其后为每一个学习率规划器的kwargs。
         :param ls_args:
         :return:
         """
-        o_args = o_args if isinstance(o_args[0], list) else ([o_args[0]], *o_args[1:])
-        self._optimizer_s = self._get_optimizer(*o_args)
-        l_args = l_args if isinstance(l_args[0], list) else ([l_args[0]], *l_args[1:])
+        # o_args = o_args if isinstance(o_args[0], list) else ([o_args[0]], *o_args[1:])
+        # 如果不指定，则需要设定默认值
+        if len(o_args) == 0:
+            o_args = ('adam', {})
+        self._optimizer_s, self.lr_names = self._get_optimizer(*o_args)
+        # l_args = l_args if isinstance(l_args[0], list) else ([l_args[0]], *l_args[1:])
         self._scheduler_s = self._get_lr_scheduler(*l_args)
-        self._ls_fn_s = self._get_ls_fn(*ls_args)
-
+        # 如果不指定，则需要设定默认值
+        if len(ls_args) == 0:
+            ls_args = ('mse', {})
+        self._ls_fn_s, self.loss_names, self.test_ls_names = self._get_ls_fn(*ls_args)
+        try:
+            # 设置梯度裁剪方法
+            self._gradient_clipping = self._gradient_clipping
+        except AttributeError:
+            self._gradient_clipping = None
         self.is_train = True
 
-    def _get_optimizer(self, optim_str_s: str or List[str],
-                       *args,
-                       ) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
+    def _get_optimizer(self, *args) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
         """获取网络优化器。
         此方法会在prepare_training()中被调用。
         :param optim_str_s: 优化器类型字符串序列
         :param args: 每个优化器对应关键词参数
         :return: 优化器序列
         """
-        optimizer_s, self.lr_names = [], []
-        i = 0
-        # 如果参数太少，则用空字典补齐
-        if len(args) <= len(optim_str_s):
-            args = (*args, *[{} for _ in range(len(optim_str_s) - len(args))])
-        # 获取优化器
-        for s, kwargs in zip(optim_str_s, args):
-            optimizer_s.append(ttools.get_optimizer(self, s, **kwargs))
-            self.lr_names.append(f'LR_{i}')
-        return optimizer_s
+        optimizer_s, lr_names = [], []
+        # i = 0
+        # # 如果参数太少，则用空字典补齐
+        # if len(args) <= len(optim_str_s):
+        #     args = (*args, *[{} for _ in range(len(optim_str_s) - len(args))])
+        # # 获取优化器
+        # for s, kwargs in zip(optim_str_s, args):
+        #     optimizer_s.append(ttools.get_optimizer(self, s, **kwargs))
+        #     self.lr_names.append(f'LR_{i}')
+        for i, (type_s, kwargs) in enumerate(args):
+            optimizer_s.append(ttools.get_optimizer(self, type_s, **kwargs))
+            lr_names.append(f'LR_{i}')
+        return optimizer_s, lr_names
 
-    def _get_lr_scheduler(self, scheduler_str_s=None, *args):
+    def _get_lr_scheduler(self, *args):
         """为优化器定制规划器。
-        :param scheduler_str_s: 优化器类型名称，可以使用序列对象指定多个。
-        :param args: 每个规划器对应的关键词参数。
-        :return: 学习率规划期对象。
+        :param args: 多个二元组，元组格式为（规划器类型字符串，本规划器关键词参数）
+        :return: 规划器序列。
         """
-        if scheduler_str_s is None:
-            scheduler_str_s = []
-        # 如果参数太少，则用空字典补齐
-        if len(args) <= len(self._optimizer_s):
-            args = (*args, *[{} for _ in range(len(scheduler_str_s) - len(args))])
+        # # 如果参数太少，则用空字典补齐
+        # if len(args) <= len(self._optimizer_s):
+        #     args = (*args, *[{} for _ in range(len(scheduler_str_s) - len(args))])
+        # return [
+        #     ttools.get_lr_scheduler(optim, ss, **kwargs)
+        #     for ss, optim, kwargs in zip(scheduler_str_s, self._optimizer_s, args)
+        # ]
         return [
             ttools.get_lr_scheduler(optim, ss, **kwargs)
-            for ss, optim, kwargs in zip(scheduler_str_s, self._optimizer_s, args)
+            for optim, (ss, kwargs) in zip(self._optimizer_s, args)
         ]
 
-    def _get_ls_fn(self, ls_fn_str_s, *args):
-        ls_fn_str_s = ls_fn_str_s if isinstance(ls_fn_str_s, list) else [ls_fn_str_s]
-        self.loss_names = [ls_fn_str.upper() for ls_fn_str in ls_fn_str_s]
-        self.test_ls_names = self.loss_names
-        # 如果参数太少，则用空字典补齐
-        if len(args) <= len(ls_fn_str_s):
-            args = (*args, *[{} for _ in range(len(ls_fn_str_s) - len(args))])
-        # 获取损失函数方法
-        # 加入
-        # ls_fn_s = [
-        #     ttools.get_ls_fn(ls_fn_str, **kwargs)
-        #     for ls_fn_str, kwargs in zip(ls_fn_str_s, args)
-        # ]
-        which_to_be_averaged = [
-            kwargs.pop('size_averaged', True) for kwargs in args
-        ]
-        ls_fn_s = [
-            ttools.get_ls_fn(ls_fn_str, **kwargs)
-            for ls_fn_str, kwargs in zip(ls_fn_str_s, args)
-        ]
-
-        def __sample_wise_ls_fn(x, y, ls_fn):
-            ls = ls_fn(x, y)
-            return ls.mean(dim=list(range(len(ls.shape)))[1:])
-
-        ls_fn_s = [
-            ls_fn if averaged else lambda x, y: __sample_wise_ls_fn(x, y, ls_fn)
-            for ls_fn, averaged in zip(ls_fn_s, which_to_be_averaged)
-        ]
-        return ls_fn_s
+    def _get_ls_fn(self, *args):
+        """获取网络的损失函数序列，并设置网络的损失名称、测试损失名称
+        :param args: 多个二元组，元组格式为（损失函数类型字符串，本损失函数关键词参数），若不指定关键词参数，请用空字典。
+        :return: 损失函数序列
+        """
+        ls_fn_s, loss_names = [], []
+        for (type_s, kwargs) in args:
+            # 根据参数获取损失函数
+            loss_names.append(type_s.upper())
+            size_averaged = kwargs.pop('size_averaged', True)
+            unwrapped_fn = ttools.get_ls_fn(type_s, **kwargs)
+            ls_fn_s.append(
+                unwrapped_fn if size_averaged else
+                lambda x, y: sample_wise_ls_fn(x, y, unwrapped_fn)
+            )
+        test_ls_names = loss_names
+        return ls_fn_s, loss_names, test_ls_names
 
     def train_(self,
                data_iter, criterion_a,
@@ -172,14 +174,15 @@ class BasicNN(nn.Sequential):
             else:
                 history = trainer.train_with_threads(valid_iter)
         # 清楚训练痕迹
-        del self._optimizer_s, self._scheduler_s, self._ls_fn_s
+        del self._optimizer_s, self.lr_names, self._scheduler_s, \
+            self._ls_fn_s, self.loss_names, self.test_ls_names
         self.is_train = False
         return history
 
     @torch.no_grad()
     def test_(self, test_iter,
               criterion_a: List[Callable],
-              pbar=None, ls_fn_args: Tuple = ('mse', {})
+              pbar=None, ls_fn_args=None
               ) -> [float, float]:
         """测试方法。
         取出迭代器中的下一batch数据，进行预测后计算准确度和损失
@@ -195,12 +198,15 @@ class BasicNN(nn.Sequential):
         is_test = pbar is None
         if is_test:
             # 如果不指定进度条，则是进行测试，需要先初始化损失函数。
-            self._ls_fn_s = self._get_ls_fn(*ls_fn_args)
+            if ls_fn_args is None:
+                ls_fn_args = [('mse', {})]
+            self._ls_fn_s, _, self.test_ls_names = self._get_ls_fn(*ls_fn_args)
             pbar = tqdm(test_iter, unit='批', position=0, desc=f'测试中……', mininterval=1)
         else:
             pbar.set_description('验证中...')
         # 要统计的数据种类数目
-        l_names = self.test_ls_names if isinstance(self.test_ls_names, list) else [self.test_ls_names]
+        # l_names = self.test_ls_names if isinstance(self.test_ls_names, list) else [self.test_ls_names]
+        l_names = self.test_ls_names
         metric = Accumulator(len(criterion_a) + len(l_names) + 1)
         # 计算准确率和损失值
         for features, labels in test_iter:
@@ -237,7 +243,7 @@ class BasicNN(nn.Sequential):
     def predict_(self, data_iter: DataLoader or LazyDataLoader,
                  criterion_a: Callable or List[Callable],
                  unwrap_fn: Callable = None,
-                 ls_fn_args: Tuple = ('mse', ())
+                 ls_fn_args: Tuple = ()
                  ) -> torch.Tensor:
         """预测方法。
         对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
@@ -250,9 +256,9 @@ class BasicNN(nn.Sequential):
         self.eval()
         criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
         # 预处理损失函数参数
-        for kwargs in ls_fn_args[1:]:
+        for (_, kwargs) in ls_fn_args:
             kwargs['size_averaged'] = False
-        self._ls_fn_s = self._get_ls_fn(*ls_fn_args)
+        self._ls_fn_s, _, self.test_ls_names = self._get_ls_fn(*ls_fn_args)
         if unwrap_fn is not None:
             # 将本次预测所产生的全部数据打包并返回。
             inputs, predictions, labels, metrics, losses = [], [], [], [], []
@@ -269,10 +275,6 @@ class BasicNN(nn.Sequential):
                         for criterion in criterion_a
                     ]
                     metrics.append(torch.vstack(metrics_to_be_appended).T)
-                    # losses_to_be_appended = [
-                    #     ls.mean(dim=list(range(len(ls_es[0].shape)))[1:]) for ls in ls_es
-                    # ]
-                    # losses.append(torch.vstack(losses_to_be_appended).T)
                     losses.append(torch.vstack(ls_es).T)
                 data_iter.set_description('结果计算完成')
             # 将所有批次的数据堆叠在一起
@@ -328,21 +330,27 @@ class BasicNN(nn.Sequential):
             comment += f'{name} = {float(ls): .4f}, '
         return comment
 
-    def __init_submodules(self, init_meth, *args):
-        init_meth = ttools.init_wb(init_meth)
-        if init_meth is not None:
-            self.apply(init_meth)
+    def __init_submodules(self, init_str, **kwargs):
+        """初始化各模块参数。
+        该方法会使用init_str所指初始化方法初始化所用层，若要定制化初始模块，请重载本函数。
+        :param init_str: 初始化方法类型
+        :param kwargs: 初始化方法参数
+        :return:
+        """
+        init_str = ttools.init_wb(init_str)
+        if init_str is not None:
+            self.apply(init_str)
         else:
             try:
-                where = args[0]
+                where = kwargs['where']
                 if where.endswith('.ptsd'):
-                    paras = torch.load(where) if torch.cuda.is_available() else\
+                    paras = torch.load(where) if torch.cuda.is_available() else \
                         torch.load(where, map_location=torch.device('cpu'))
                     self.load_state_dict(paras)
                 elif where.endswith('.ptm'):
                     raise NotImplementedError('针对预训练好的网络，请使用如下方法获取`net = torch.load("../xx.ptm")`')
             except IndexError:
-                raise ValueError('选择预训练好的参数初始化网络，需要在初始化方法的第一参数提供参数或者模型的路径！')
+                raise ValueError('选择预训练好的参数初始化网络，需要使用where关键词提供参数或者模型的路径！')
 
     def forward_backward(self, X, y, backward=True):
         """前向和反向传播。
@@ -359,14 +367,19 @@ class BasicNN(nn.Sequential):
                     optim.zero_grad()
                 result = self._forward_impl(X, y)
                 self._backward_impl(*result[1])
+                if self._gradient_clipping is not None:
+                    self._gradient_clipping()
                 for optim in self._optimizer_s:
                     optim.step()
+            assert len(result) == 2, f'前反向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
+            assert len(result[1]) == len(
+                self.loss_names), f'前向传播返回的损失值数量{result[1]}与指定的损失名称数量{len(self.loss_names)}不匹配。'
         else:
             with torch.no_grad():
                 result = self._forward_impl(X, y)
-        assert len(result) == 2, f'前反向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
-        assert len(result[1]) == len(
-            self.loss_names), f'前向传播返回的损失值数量{result[1]}与指定的损失名称数量{len(self.loss_names)}不匹配。'
+            assert len(result) == 2, f'前反向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
+            assert len(result[1]) == len(
+                self.test_ls_names), f'前向传播返回的损失值数量{result[1]}与指定的损失名称数量{len(self.loss_names)}不匹配。'
         return result
 
     def _forward_impl(self, X, y) -> Tuple[torch.Tensor, List]:
