@@ -35,7 +35,7 @@ class BasicNN(nn.Sequential):
         is_train = True if 'is_train' not in kwargs.keys() else kwargs['is_train']
         # 初始化各模块
         super(BasicNN, self).__init__(*args)
-        self.__init_submodules(init_meth, **init_kwargs)
+        self._init_submodules(init_meth, **init_kwargs)
         self._optimizer_s = None
         self._scheduler_s = None
         self._ls_fn_s = None
@@ -330,7 +330,7 @@ class BasicNN(nn.Sequential):
             comment += f'{name} = {float(ls): .4f}, '
         return comment
 
-    def __init_submodules(self, init_str, **kwargs):
+    def _init_submodules(self, init_str, **kwargs):
         """初始化各模块参数。
         该方法会使用init_str所指初始化方法初始化所用层，若要定制化初始模块，请重载本函数。
         :param init_str: 初始化方法类型

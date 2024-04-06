@@ -297,14 +297,13 @@ class GoogLeNet(BasicNN):
         else:
             return super()._forward_impl(X, y)
 
-    def __init_submodules(self, init_str, **kwargs):
-        """使用torchvision模块中对网络的初始化方法覆盖用户自定义的方法。
+    def _init_submodules(self, init_str, **kwargs):
+        """若指定初始化类型为`original`，则会使用论文中的方法初始化网络各模块。
         :param init_str: 初始化方法
         :param kwargs: 初始化方法关键词参数
         :return: None
         """
-        super().__init_submodules(init_str, **kwargs)
-        if init_str != 'state':
+        if init_str == 'original':
             # 如果不使用预先保存的参数
             for m in self.modules():
                 if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
@@ -313,6 +312,8 @@ class GoogLeNet(BasicNN):
                 elif isinstance(m, nn.BatchNorm2d):
                     nn.init.constant_(m.weight, 1)
                     nn.init.constant_(m.bias, 0)
+        else:
+            super().__init_submodules(init_str, **kwargs)
 
     def _get_ls_fn(self, *args):
         """若指定损失函数类型为`original`，则使用论文中的标签平滑损失计算方式，辅助分类器的损失值权重为0.4
