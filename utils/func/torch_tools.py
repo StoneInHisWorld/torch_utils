@@ -7,7 +7,7 @@ from networks.layers.pcc import PCCLoss
 from networks.layers.ssim import SSIMLoss
 
 loss_es = ["l1", "entro", "mse", "huber", "ssim", "pcc", 'gan']
-init_funcs = ["normal", "xavier", "zero", "state"]
+init_funcs = ["normal", "xavier", "zero", "state", 'constant', 'trunc_norm']
 optimizers = ["sgd", "asgd", "adagrad", "adadelta",
               "rmsprop", "adam", "adamax"]
 lr_schedulers = ["lambda", "step", 'constant', 'multistep', 'cosine', 'plateau']
@@ -110,7 +110,7 @@ def get_ls_fn(ls_str: str = "mse", **kwargs):
         raise NotImplementedError(f"不支持损失函数{ls_str}, 支持的损失函数包括{loss_es}")
 
 
-def init_wb(func_str: str = "xavier"):
+def init_wb(func_str: str = "xavier", **kwargs):
     """
     返回初始化权重、偏移参数的函数。
     :param func_str: 指定初始化方法的字符串
@@ -120,17 +120,27 @@ def init_wb(func_str: str = "xavier"):
         # 加载预先加载的网络
         return None
     elif func_str == "normal":
-        w_init = lambda m: init.normal_(m, 0, 1)
-        b_init = lambda m: init.normal_(m, 0, 1)
+        mean, std = kwargs.pop('mean', 0), kwargs.pop('std', 1)
+        w_init = lambda m: init.normal_(m, mean, std)
+        b_init = lambda m: init.normal_(m, mean, std)
     elif func_str == "xavier":
         w_init, b_init = init.xavier_uniform_, init.zeros_
     elif func_str == "zero":
         w_init, b_init = init.zeros_, init.zeros_
+    elif func_str == 'constant':
+        w_value, b_value = kwargs.pop('w_value', 1), kwargs.pop('b_value', 0)
+        w_init = lambda m: init.constant_(m, w_value)
+        b_init = lambda m: init.constant_(m, b_value)
+    elif func_str == 'trunc_norm':
+        mean, std = kwargs.pop('mean', 0), kwargs.pop('std', 1)
+        a, b = kwargs.pop('a', 0), kwargs.pop('b', 1)
+        w_init = lambda m: init.trunc_normal_(m, mean, std, a, b)
+        b_init = init.zeros_
     else:
         raise NotImplementedError(f"不支持的初始化方式{func_str}, 当前支持的初始化方式包括{init_funcs}")
 
     def _init(m: nn.Module) -> None:
-        if type(m) == nn.Linear or type(m) == nn.Conv2d:
+        if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d):
             if m.weight is not None:
                 w_init(m.weight)
             if m.bias is not None:
@@ -162,5 +172,18 @@ def get_lr_scheduler(optimizer, which: str = 'step', **kwargs):
         return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, **kwargs)
     elif which == 'plateau':
         return torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **kwargs)
+    elif which == 'exp':
+        return torch.optim.lr_scheduler.ExponentialLR(optimizer, **kwargs)
     else:
         raise NotImplementedError(f"不支持的学习率规划器{which}, 当前支持的初始化方式包括{lr_schedulers}")
+
+
+def sample_wise_ls_fn(x, y, ls_fn):
+    """计算每个样本的损失值的损失函数
+    :param x: 特征集
+    :param y: 标签集
+    :param ls_fn: 基础损失函数
+    :return: 包装好的平均损失函数
+    """
+    ls = ls_fn(x, y)
+    return ls.mean(dim=list(range(len(ls.shape)))[1:])
