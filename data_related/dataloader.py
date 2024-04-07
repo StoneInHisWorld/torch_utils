@@ -1,3 +1,7 @@
+import torch
+from prefetch_generator import BackgroundGenerator
+from torch.utils.data import DataLoader as DLoader
+
 from data_related.datasets import DataSet, LazyDataSet
 
 
@@ -65,3 +69,25 @@ class LazyDataLoader:
             labels_calls = []
         self.__fea_preprocesses += features_calls
         self.__lb_preprocesses += labels_calls
+
+
+class DataLoader(DLoader):
+
+    def __init__(self, dataset, batch_size=1, device=torch.device('cpu'), pin_memory=False, transit_fn=None, *args, **kwargs):
+        self.device = device
+        self.non_blocking = self.device.type == 'cuda' and pin_memory
+        self.transit_fn = transit_fn
+        kwargs['pin_memory'] = pin_memory
+        super().__init__(
+            dataset, batch_size,
+            *args, **kwargs
+        )
+
+    def __iter__(self):
+        if self.transit_fn is None:
+            self.transit_fn = lambda batch: batch.to(self.device, self.non_blocking)
+        unwrapped_generator = (
+            self.transit_fn(batch)
+            for batch in super().__iter__()
+        )
+        return BackgroundGenerator(unwrapped_generator)

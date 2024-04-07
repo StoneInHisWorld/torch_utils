@@ -7,6 +7,7 @@ import torch
 import torchvision.transforms.functional as F
 from torch.utils.data import DataLoader
 
+import data_related.dataloader
 from data_related.dataloader import LazyDataLoader
 from data_related.datasets import DataSet, LazyDataSet
 
@@ -78,7 +79,41 @@ def split_data(dataset: DataSet or LazyDataSet, train=0.8, test=0.2, valid=.0, s
     ]
 
 
-def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=True,
+# def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=True,
+#               sampler: Iterable = None, max_load: int = 10000,
+#               **kwargs):
+#     """
+#     根据数据集类型转化为数据集加载器。生成预处理前，会将预处理程序清除。
+#     :param max_load: 懒数据集加载器的最大加载量，当使用DataSet时，该参数无效
+#     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler，根据shuffle==True or False 提供乱序/顺序下标.
+#     :param dataset: 转化为加载器的数据集。
+#     :param batch_size: 每次供给的数据量。默认为整个数据集
+#     :param shuffle: 是否打乱
+#     :param kwargs: Dataloader额外参数
+#     :return: 加载器对象
+#     """
+#     if sampler is not None:
+#         shuffle = None
+#     if not batch_size:
+#         batch_size = dataset.feature_shape[0]
+#     dataset.pop_preprocesses()
+#     if type(dataset) == LazyDataSet:
+#         return LazyDataLoader(
+#             dataset, batch_size,
+#             max_load=max_load, shuffle=shuffle, collate_fn=dataset.collate_fn,
+#             sampler=sampler,
+#             **kwargs
+#         )
+#     elif type(dataset) == DataSet:
+#         return DataLoader(
+#             dataset, batch_size,
+#             shuffle=shuffle, collate_fn=dataset.collate_fn, sampler=sampler,
+#             **kwargs
+#         )
+
+# TODO: 尝试BackgroundGenerator
+def to_loader(dataset: DataSet or LazyDataSet, device=torch.device('cpu'),
+              batch_size: int = 1, shuffle=True,
               sampler: Iterable = None, max_load: int = 10000,
               **kwargs):
     """
@@ -93,9 +128,8 @@ def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=T
     """
     if sampler is not None:
         shuffle = None
-    if not batch_size:
-        batch_size = dataset.feature_shape[0]
     dataset.pop_preprocesses()
+    pin_memory = kwargs['pin_memory']
     if type(dataset) == LazyDataSet:
         return LazyDataLoader(
             dataset, batch_size,
@@ -104,8 +138,13 @@ def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=T
             **kwargs
         )
     elif type(dataset) == DataSet:
-        return DataLoader(
+        # TODO：transit_fn应该在Dataset中被定义
+        non_blocking = device.type == 'cuda' and pin_memory
+        transit_fn = lambda batch: (batch[0].to(device, non_blocking=non_blocking),
+                                    batch[1].to(device, non_blocking=non_blocking))
+        return data_related.dataloader.DataLoader(
             dataset, batch_size,
+            device=device, transit_fn=transit_fn,
             shuffle=shuffle, collate_fn=dataset.collate_fn, sampler=sampler,
             **kwargs
         )
