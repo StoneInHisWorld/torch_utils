@@ -24,30 +24,38 @@ def calculate_pcc(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 
 class PCCLoss(nn.Module):
 
-    def __init__(self, size_averaged=True):
+    def __init__(self, reduction='mean'):
         """PCC损失层。计算每对y_hat与y的皮尔逊相关系数，并求其平均逆作为损失值。"""
-        self.size_averaged = size_averaged
         super().__init__()
+        self.computer = PCC(reduction)
 
     def forward(self, y_hat, y):
-        return 1 - PCC(self.size_averaged)(y_hat, y)
+        return 1 - self.computer(y_hat, y)
 
 
 class PCC(nn.Module):
 
-    def __init__(self, size_averaged=True):
+    def __init__(self, reduction='mean'):
         r"""PCC计算层。计算批次中每对y_hat与y的皮尔逊相关系数，通过张量的形式返回。
 
         计算PCC值，公式为：
         .. math::
             \mathrm{pcc}(\hat{y}, y) = cov(\hat{y}, y) / ( \mathrm{\sigma_{\hat{y}}} \mathrm{\sigma_{y}})
         """
-        self.size_averaged = size_averaged
+        self.reduction = reduction
+        supported = ['mean', 'sum', 'none']
+        assert reduction in supported, f'不支持的reduction方式{reduction}，支持的包括{supported}'
         super().__init__()
 
     def forward(self, y_hat: torch.Tensor, y: torch.Tensor):
-        result = calculate_pcc(y_hat, y)
-        if self.size_averaged:
+        result = calculate_pcc(y_hat, y).squeeze()
+        if self.reduction == 'mean':
             return result.mean()
+        elif self.reduction == 'sum':
+            return result.sum()
         else:
-            return result.squeeze()
+            return result
+        # if self.size_averaged:
+        #     return result.mean()
+        # else:
+        #     return result.squeeze()
