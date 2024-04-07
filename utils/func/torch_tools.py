@@ -88,6 +88,7 @@ def get_optimizer(net: torch.nn.Module, optim_str='adam', lr=0.1, w_decay=0., **
 
 def get_ls_fn(ls_str: str = "mse", **kwargs):
     """获取损失函数。
+    此处返回的损失函数不接收size_average参数，若需要非批量平均化的损失值，请指定reduction='none'
     :param ls_str: 损失函数对应字符串
     :param kwargs: 输入到损失值计算模块中的关键词参数。请注意，每个损失值计算模块的关键词参数可能不同！建议输入关键词参数时只选用一种损失值计算模块。
     :return: 损失函数模块
@@ -140,10 +141,14 @@ def init_wb(func_str: str = "xavier", **kwargs):
         raise NotImplementedError(f"不支持的初始化方式{func_str}, 当前支持的初始化方式包括{init_funcs}")
 
     def _init(m: nn.Module) -> None:
-        if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d):
+        if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
             if m.weight is not None:
                 w_init(m.weight)
             if m.bias is not None:
+                b_init(m.bias)
+        elif isinstance(m, nn.BatchNorm2d):
+            if func_str != 'xavier':
+                w_init(m.weight)
                 b_init(m.bias)
         else:
             return

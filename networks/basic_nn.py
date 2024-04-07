@@ -51,7 +51,7 @@ class BasicNN(nn.Sequential):
     def prepare_training(
             self,  # o_args: tuple = ('adam', ()), l_args: tuple = ([], ()),
             # ls_args: tuple = ('mse', ())
-            o_args: tuple = (), l_args: tuple = (), ls_args: tuple = (),
+            o_args=None, l_args=None, ls_args=None,
     ):
         """进行训练准备
         :param o_args: 优化器参数。请注意第一项需为优化器类型字符串，其后为每一个优化器的kwargs。
@@ -61,6 +61,12 @@ class BasicNN(nn.Sequential):
         """
         # o_args = o_args if isinstance(o_args[0], list) else ([o_args[0]], *o_args[1:])
         # 如果不指定，则需要设定默认值
+        if o_args is None:
+            o_args = []
+        if l_args is None:
+            l_args = []
+        if ls_args is None:
+            ls_args = []
         if len(o_args) == 0:
             o_args = ('adam', {})
         self._optimizer_s, self.lr_names = self._get_optimizer(*o_args)
@@ -69,6 +75,7 @@ class BasicNN(nn.Sequential):
         # 如果不指定，则需要设定默认值
         if len(ls_args) == 0:
             ls_args = ('mse', {})
+        # TODO:测试到这里
         self._ls_fn_s, self.loss_names, self.test_ls_names = self._get_ls_fn(*ls_args)
         try:
             # 设置梯度裁剪方法
