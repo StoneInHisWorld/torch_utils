@@ -313,7 +313,7 @@ class GoogLeNet(BasicNN):
                     nn.init.constant_(m.weight, 1)
                     nn.init.constant_(m.bias, 0)
         else:
-            super().__init_submodules(init_str, **kwargs)
+            super()._init_submodules(init_str, **kwargs)
 
     def _get_ls_fn(self, *args):
         """若指定损失函数类型为`original`，则使用论文中的标签平滑损失计算方式，辅助分类器的损失值权重为0.4
@@ -338,6 +338,7 @@ class GoogLeNet(BasicNN):
                 test_ls_names += ['ENTRO']
             else:
                 ls_fn, ls_names, tls_names = super()._get_ls_fn((type_s, kwargs))
+                ls_fn_s += ls_fn
                 loss_names += ls_names
                 test_ls_names += tls_names
         return ls_fn_s, loss_names, test_ls_names
