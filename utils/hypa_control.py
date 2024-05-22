@@ -179,8 +179,11 @@ class ControlPanel:
             history, **plot_kwargs
         )
         self.__cur_trainer.add_logMsg(
-            True, **log_msg, data_portion=self['data_portion']
+            True, **log_msg, data_portion=self['data_portion'],
+            max_GPUmemory_allocated=torch.cuda.max_memory_allocated(self.device) / (1024 ** 3),
+            max_GPUmemory_reserved=torch.cuda.max_memory_reserved(self.device) / (1024 ** 3),
         )
+        torch.cuda.reset_peak_memory_stats(self.device)
 
     @property
     def device(self):
