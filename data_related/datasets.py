@@ -201,6 +201,11 @@ class LazyDataSet(DataSet):
         super().pop_preprocesses()
 
     def preprocess(self, desc='对懒加载数据集进行操作……'):
+        """
+        这里只对索引进行预处理。
+        :param desc: 预处理进度条描述
+        :return: None
+        """
         self.apply(self.feaIndex_preprocess, self.lbIndex_preprocess, desc=desc)
 
     def to(self, device: torch.device) -> None:
