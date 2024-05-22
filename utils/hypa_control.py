@@ -31,6 +31,7 @@ class ControlPanel:
         :param log_path: 日志文件存储路径
         :param net_path: 网络文件存储路径
         """
+        # 路径检查以及路径提取
         pytools.check_path(hp_cfg_path)
         pytools.check_path(runtime_cfg_path)
         if log_path is not None:
