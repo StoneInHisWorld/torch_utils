@@ -200,8 +200,10 @@ class Trainer:
             metric = Accumulator(len(loss_names + criteria_names) + 1)
             # 训练主循环
             for X, y in data_iter:
-                X, y = (X.to(self.device, non_blocking=non_blocking),
-                        y.to(self.device, non_blocking=non_blocking))
+                X, y = (
+                    X.to(self.device, non_blocking=non_blocking),
+                    y.to(self.device, non_blocking=non_blocking)
+                )
                 net.train()
                 pred, ls_es = net.forward_backward(X, y)
                 with torch.no_grad():
