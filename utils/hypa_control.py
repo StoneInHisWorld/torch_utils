@@ -56,6 +56,11 @@ class ControlPanel:
         self.__read_expno()
 
     def __read_expno(self):
+        """读取实验编号
+        从日志中读取最后一组实验数据的实验编号，从而推算出即将进行的所有实验组对应的编号。
+        本函数将会创建self.exp_no以及self.last_expno属性。
+        :return: None
+        """
         # 读取实验编号
         if self.__lp is not None:
             try:
@@ -67,11 +72,13 @@ class ControlPanel:
             exp_no = 1
         assert exp_no > 0, f'训练序号需为正整数，但读取到的序号为{exp_no}'
         self.exp_no = int(exp_no)
+        # 计算总共需要进行的实验组数
         with open(self.__hcp, 'r', encoding='utf-8') as cfg:
             hyper_params = json.load(cfg)
             n_exp = 1
             for v in hyper_params.values():
                 n_exp *= len(v)
+        # 最后一组实验的实验编号
         self.last_expno = self.exp_no + n_exp - 1
 
     def __iter__(self):
