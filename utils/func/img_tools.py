@@ -52,8 +52,8 @@ def crop_img(img: Image, required_shape, loc: str or Tuple[int, int]) -> Image:
     :return: 裁剪完成的图片
     """
     img_size = img.size
-    ih, iw = img_size
-    rh, rw = required_shape
+    iw, ih = img_size
+    rw, rh = required_shape
     assert rh <= ih and rw <= iw, (
         f'裁剪尺寸{required_shape}需要小于图片尺寸{img_size}！'
     )
@@ -103,10 +103,10 @@ def read_img(path: str, mode: str = 'L', requires_id: bool = False,
     else:
         img_channels = -1
     img = img.reshape((img_channels, *img.shape[:2]))
-    if requires_id:
-        # 添加上读取文件名
-        file_name = os.path.split(path)[-1]
-        img = np.hstack((file_name, img))
+    # if requires_id:
+    #     # 添加上读取文件名
+    #     file_name = os.path.split(path)[-1]
+    #     img = np.hstack((file_name, img))
     return img
 
 
