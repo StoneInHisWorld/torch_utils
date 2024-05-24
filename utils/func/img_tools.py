@@ -309,11 +309,19 @@ def mean_LI_of_holes(images: np.ndarray,
 def get_mean_LI_of_holes(images: np.ndarray,
                          hole_poses: List[Tuple[int, int]],
                          hole_sizes: List[int]):
+    """计算图片序列中挖孔的平均光强
+    :param images: 三维图片序列，维度信息（通道数，长度，宽度）
+    :param hole_poses: 每张图片的挖孔位置序列，该位置序列会应用到所有图片的计算中。
+    :param hole_sizes: 每个挖孔位置的挖孔大小，要求len(hole_sizes) == len(hole_poses)。
+    :return: 光强序列，序列中的每个元素为挖孔所得光强序列。
+    """
     # 检查越界问题
     assert np.max(np.array(hole_poses)[:, 0]) < images.shape[
         -2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
     assert np.max(np.array(hole_poses)[:, 1]) < images.shape[
         -1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
+    assert len(hole_poses) == len(hole_sizes), \
+        f'挖孔位置需要和挖孔大小一一对应，提供了{len(hole_poses)}个位置但只收到了{len(hole_sizes)}个大小要求。'
     mean_LIs_groups = []
     for image in images:
         mean_LIs = []
@@ -324,7 +332,15 @@ def get_mean_LI_of_holes(images: np.ndarray,
 
 
 def blend(required_shapes: List, group_of_values: List,
-          group_of_n_rows: List, group_of_n_cols: List, mode='L'):
+          group_of_n_rows: List, group_of_n_cols: List, mode='L') -> list:
+    """按照给定大小以及给定颜料值生成一组晕染图
+    :param required_shapes: 晕染图组中，每一张晕染图的大小
+    :param group_of_values: 每一张晕染图中填充的颜料值，要求颜料块的数量和颜料值一致，即n_rows * n_cols == len(values)
+    :param group_of_n_rows: 每一张晕染图中颜料的行数
+    :param group_of_n_cols: 每一张晕染图中，颜料的列数
+    :param mode: 晕染图的图片模式
+    :return: 晕染图组列表
+    """
     supported = ['L', '1', 'RGB']
     if mode == 'L' or mode == '1':
         channel = 1
