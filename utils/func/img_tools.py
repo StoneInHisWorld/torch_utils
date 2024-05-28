@@ -332,7 +332,8 @@ def get_mean_LI_of_holes(images: np.ndarray,
 
 
 def blend(required_shapes: List, group_of_values: List,
-          group_of_n_rows: List, group_of_n_cols: List, mode='L') -> list:
+          group_of_n_rows: List, group_of_n_cols: List, mode='L',
+          dtype=np.float32) -> list:
     """按照给定大小以及给定颜料值生成一组晕染图
     :param required_shapes: 晕染图组中，每一张晕染图的大小
     :param group_of_values: 每一张晕染图中填充的颜料值，要求颜料块的数量和颜料值一致，即n_rows * n_cols == len(values)
@@ -351,7 +352,7 @@ def blend(required_shapes: List, group_of_values: List,
     blackboards = []
     for req_sha, values, n_rows, n_cols in zip(required_shapes, group_of_values, group_of_n_rows, group_of_n_cols):
         assert n_rows * n_cols == len(values), f'提供的颜料值{len(values)}应与绘制区域数目{n_rows * n_cols}一致'
-        blackboard = np.zeros((channel, *req_sha))
+        blackboard = np.zeros((channel, *req_sha), dtype=dtype)
         # 绘制区域大小
         area_height = req_sha[0] // n_rows
         area_width = req_sha[1] // n_cols
