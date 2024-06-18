@@ -346,7 +346,7 @@ class Pix2Pix(BasicNN):
             gan_mode = kwargs.pop('gan_mode', 'lsgan')
             reduced_form = kwargs.pop('reduced_form', False)
             size_averaged = kwargs.pop('size_averaged', True)
-            lambda_PCC = kwargs.pop('lambda_PCC', 1.)
+            lambda_PCC = kwargs.pop('lambda_pcc', 1.)
         except IndexError:
             # 如果没有传递参数
             gan_mode = 'lsgan'
