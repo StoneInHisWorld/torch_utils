@@ -128,7 +128,7 @@ def to_loader(dataset: DataSet or LazyDataSet, device=torch.device('cpu'),
     """
     if sampler is not None:
         shuffle = None
-    pin_memory = kwargs['pin_memory']
+    pin_memory = kwargs['pin_memory'] if 'pin_memory' in kwargs.keys() else False
     if type(dataset) == LazyDataSet:
         # dataset.pop_preprocesses()
         return LazyDataLoader(
@@ -205,9 +205,10 @@ def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
     """
     mean, std = [func(data, dim=list(range(2, len(data.shape))), keepdim=True)
                  for func in [torch.mean, torch.std]]
+    std += epsilon
     if len(data.shape) == 4:
         return F.normalize(data, mean, std)
     elif len(data.shape) == 1:
-        return (data - mean) / (std + epsilon)
+        return (data - mean) / std
     else:
         raise Exception(f'不支持的数据形状{data.shape}！')
