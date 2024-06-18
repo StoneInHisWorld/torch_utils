@@ -187,9 +187,9 @@ class Trainer:
         # 设置进度条
         if pbar is None:
             pbar = tqdm(total=(len(data_iter) + len(valid_iter)) * n_epochs, unit='批', position=0,
-                        desc=f'训练中...', mininterval=1)
+                        desc=f'训练中……', mininterval=1)
         for epoch in range(n_epochs):
-            pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
+            pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中……')
             history.add(
                 lr_names, [
                     [param['lr'] for param in optimizer.param_groups]
@@ -246,9 +246,9 @@ class Trainer:
         lr_names = net.lr_names
         history = History(*(criteria_names + loss_names + lr_names))
         with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
-                  desc=f'训练中...', mininterval=1) as pbar:
+                  desc=f'训练中……', mininterval=1) as pbar:
             for epoch in range(n_epochs):
-                pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中...')
+                pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中……')
                 history.add(
                     lr_names, [
                         [param['lr'] for param in optimizer.param_groups]
