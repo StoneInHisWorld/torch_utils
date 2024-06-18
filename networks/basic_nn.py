@@ -43,7 +43,7 @@ class BasicNN(nn.Sequential):
         self.is_train = is_train
         self.apply(lambda m: m.to(device))
 
-        self.__device = device
+        self._device = device
         if with_checkpoint:
             warnings.warn('使用“检查点机制”虽然会减少前向传播的内存使用，但是会大大增加反向传播的计算量！')
         self.__checkpoint = with_checkpoint
@@ -210,7 +210,7 @@ class BasicNN(nn.Sequential):
             self._ls_fn_s, _, self.test_ls_names = self._get_ls_fn(*ls_fn_args)
             pbar = tqdm(test_iter, unit='批', position=0, desc=f'测试中……', mininterval=1)
         else:
-            pbar.set_description('验证中...')
+            pbar.set_description('验证中……')
         # 要统计的数据种类数目
         # l_names = self.test_ls_names if isinstance(self.test_ls_names, list) else [self.test_ls_names]
         l_names = self.test_ls_names
@@ -312,7 +312,7 @@ class BasicNN(nn.Sequential):
 
     @property
     def device(self):
-        return self.__device
+        return self._device
 
     def _get_comment(self, inputs, predictions, labels, metrics, mfn_name_s, losses):
         size_averaged_msg = ''
@@ -404,7 +404,7 @@ class BasicNN(nn.Sequential):
         ls[0].backward()
 
     def __str__(self):
-        return '网络结构：\n' + super().__str__() + '\n所处设备：' + str(self.__device)
+        return '网络结构：\n' + super().__str__() + '\n所处设备：' + str(self._device)
 
     def __call__(self, x):
         if self.__checkpoint:
