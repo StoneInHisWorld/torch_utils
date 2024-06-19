@@ -14,47 +14,53 @@ from utils.history import History
 
 @torch.no_grad()
 def train_log_impl(
-        net, history, acc_fn,
-        finish: Event, Q: Queue, timeout=1  # 信号量相关
-) -> History:
-    metric = Accumulator(3)
+        criterion_a,  # 计算相关
+        history, lr_names, cri_los_names,  # 记录对象
+        Q: Queue,  # 信号量相关
+):
+    metric = None
     while True:
-        # 从队列中获取训练结果
-        try:
-            item = Q.get(timeout=timeout)
-        except Exception:
-            # 侦测训练是否已结束
-            if finish.is_set():
-                break
-            else:
-                continue
-        # 若是获取到了训练结果
-        if item == epoch_ending:
-            metric = Accumulator(3)  # 批次训练损失总和，准确率，样本数
-        else:
-            ls, state_dict, X, y = item
-            net.load_state_dict(state_dict)
-            # 开始计算准确率数据
-            correct = acc_fn(net(X), y)
-            num_examples = X.shape[0]
-            metric.add(ls * num_examples, correct, num_examples)
-            # 记录训练数据
+        # 从队列中获取信号
+        item = Q.get(True)
+        # 如果收到了训练完成信号，则记录最后一个世代的数据后退出
+        if type(item) == Event:
+            # 记录最后一世代训练数据
             history.add(
-                ['train_l', 'train_acc'],
-                [metric[0] / metric[2], metric[1] / metric[2]]
+                cri_los_names,
+                [metric[i] / metric[-1] for i in range(len(metric) - 1)]
             )
+            return
+        # 若是获取到了学习率组，则认为完成了一个世代的迭代，刷新累加器并记录学习率
+        elif type(item) == list:
+            # 记录学习率
+            history.add(lr_names, item)
+            # 如果是首次记录，则创建累加器
+            if metric is None:
+                metric = Accumulator(len(cri_los_names) + 1)
+            else:
+                # 记录训练、数据
+                history.add(
+                    cri_los_names,
+                    [metric[i] / metric[-1] for i in range(len(metric) - 1)]
+                )
+                metric.reset()
+        # 若是获取到了网络参数、预测值、损失值、标签值
+        # 则进行评价指标的计算以及损失值的累加
+        elif type(item) == tuple:
+            state_dict, pred, ls_es, y = item
+            # 计算训练准确率数据
+            correct_s = []
+            for criterion in criterion_a:
+                correct = criterion(pred, y)
+                correct_s.append(correct)
+            num_examples = y.shape[0]
+            metric.add(
+                *correct_s, *[ls * num_examples for ls in ls_es],
+                num_examples
+            )
+        else:
+            raise NotImplementedError(f'无法识别的信号{item}！')
         Q.task_done()
-    return history
-
-
-# @torch.no_grad()
-# def valid_impl(net, test_iter, acc_fn, ls_fn) -> tuple:
-#     net.eval()
-#     metric = Accumulator(3)
-#     for features, lbs in test_iter:
-#         preds = net(features)
-#         metric.add(acc_fn(preds, lbs), ls_fn(preds, lbs) * len(features), len(features))
-#     return metric[0] / metric[2], metric[1] / metric[2]
 
 
 @torch.no_grad()
@@ -65,18 +71,20 @@ def train_and_valid_log_impl(
         pbar,  # 进度条相关
         Q: Queue,  # 信号量相关
 ):
-    """
-    多线程处理中，训练以及验证数据的记录实现。
+    """在多线程处理中，训练以及验证数据的记录实现。
+    该方法会持续请求Q队列中的数据，直到获取到Event对象后退出，退出之前会进行最后一次历史记录。
+    在记录时对History对象进行了原地更改，因此本方法只会返回None
     :param net: 网络结构
     :param valid_iter: 验证数据迭代器
-    :param acc_fn: 准确率计算函数
+    :param criterion_a: 准确率计算函数
     :param history: 历史记录
+    :param lr_names: 学习率名称，用于记录每个世代的学习率
+    :param cri_los_names: 评价指标和损失值名称，用于记录每个世代的评价指标和损失值组合
     :param pbar: 进度条
     :param Q: 数据交换队列，train_impl通过该队列传输需要记录的信息
     :return: history历史记录
     """
     metric = None
-    # TODO：修复死锁问题
     while True:
         # 从队列中获取信号
         item = Q.get(True)
@@ -84,7 +92,7 @@ def train_and_valid_log_impl(
         if type(item) == Event:
             # 进行验证
             valid_log = net.test_(valid_iter, criterion_a, pbar)
-            # 记录训练和验证数据
+            # 记录最后一世代的训练和验证数据
             history.add(
                 cri_los_names + list(valid_log.keys()),
                 [metric[i] / metric[-1] for i in range(len(metric) - 1)] +
@@ -92,8 +100,8 @@ def train_and_valid_log_impl(
             )
             return
         # 若是获取到了学习率组，则认为完成了一个世代的迭代，刷新累加器并记录学习率
-        if type(item) == list:
-            # 如果训练完一个世代，则更新metric以及记录学习率
+        elif type(item) == list:
+            # 记录学习率
             history.add(lr_names, item)
             # 首次运行则创建累加器
             if metric is None:
@@ -108,7 +116,8 @@ def train_and_valid_log_impl(
                     list(valid_log.values())
                 )
                 metric.reset()
-        # 若是获取到了网络参数、预测值、损失值、标签值，则进行记录
+        # 若是获取到了网络参数、预测值、损失值、标签值
+        # 则进行评价指标的计算以及损失值的累加
         elif type(item) == tuple:
             state_dict, pred, ls_es, y = item
             # 计算训练准确率数据
@@ -121,6 +130,8 @@ def train_and_valid_log_impl(
                 *correct_s, *[ls * num_examples for ls in ls_es],
                 num_examples
             )
+        else:
+            raise NotImplementedError(f'无法识别的信号{item}！')
         Q.task_done()
 
 
@@ -189,9 +200,8 @@ class Trainer:
         pass
 
     def train_with_threads(self, valid_iter=None, n_workers=2) -> History:
-        """
-        多线程神经网络训练函数。
-        :param n_workers:
+        """多线程神经网络训练函数。
+        :param n_workers: 能够启用的最大处理机数
         :param valid_iter: 验证数据供给迭代器
         :return: 训练数据记录`History`对象
         """
@@ -241,7 +251,12 @@ class Trainer:
                 Q
             )
         else:
-            raise NotImplementedError('暂未编写该段！')
+            log_future = executor.submit(
+                train_log_impl,
+                criterion_a,
+                history, lr_names, criteria_names + loss_names,
+                Q
+            )
         # 实时监控各项任务的执行情况
         for future in as_completed([train_future, log_future]):
             try:
@@ -257,6 +272,7 @@ class Trainer:
     def train_and_valid(self, valid_iter, pbar=None) -> History:
         """
         神经网络训练函数。
+        :param pbar: 提供外来进度条。此参数是为了适配k折训练
         :param valid_iter: 验证数据供给迭代器
         :return: 训练数据记录`History`对象
         """
@@ -321,7 +337,6 @@ class Trainer:
         """神经网络训练函数。
         :return: 训练数据记录`History`对象
         """
-        # TODO: Untested
         net = self.module
         data_iter = self.__data_iter
         n_epochs = self.__n_epochs
@@ -375,7 +390,7 @@ class Trainer:
 
     def train_with_k_fold(self, train_loaders_iter,
                           k: int = 10,
-                          n_workers=1, timeout=1) -> History:
+                          n_workers=1) -> History:
         """
         使用k折验证法进行模型训练
         :param n_workers: 使用的处理机数量
@@ -393,7 +408,6 @@ class Trainer:
                 if n_workers <= 1:
                     history = self.train_and_valid(valid_iter, pbar)
                 else:
-                    # TODO: Untested!
                     history = self.train_with_threads(valid_iter)
                 if k_fold_history is None:
                     k_fold_history = history
