@@ -11,10 +11,19 @@ class Thread(BuiltinThread):
         self.args = args
         self.kwargs = kwargs
         self.result = None
+        self.exc = None
         super().__init__()
 
     def run(self):
-        self.result = self.func(*self.args, **self.kwargs)
+        try:
+            self.result = self.func(*self.args, **self.kwargs)
+        except Exception as e:
+            self.exc = e
+
+    def join(self, *args, **kwargs):
+        super().join(*args, **kwargs)
+        if self.exc is not None:
+            raise self.exc
 
     def get_result(self):
         return self.result
