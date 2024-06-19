@@ -11,9 +11,6 @@ from tqdm import tqdm
 from utils.accumulator import Accumulator
 from utils.history import History
 
-epoch_ending = 'end_of_an_epoch'
-train_finished = 'train_finished'
-
 
 @torch.no_grad()
 def train_log_impl(
