@@ -179,7 +179,7 @@ class BasicNN(nn.Sequential):
                 else:
                     history = trainer.train()
             else:
-                history = trainer.train_with_threads(valid_iter)
+                history = trainer.train_with_threads(valid_iter, n_workers)
         # 清楚训练痕迹
         del self._optimizer_s, self.lr_names, self._scheduler_s, \
             self._ls_fn_s, self.loss_names, self.test_ls_names
