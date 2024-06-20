@@ -1,6 +1,7 @@
+import queue
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
-from queue import Queue
+from queue import Queue, LifoQueue
 from threading import Event
 from typing import Iterable, List
 
@@ -10,6 +11,7 @@ from tqdm import tqdm
 
 from utils.accumulator import Accumulator
 from utils.history import History
+from multiprocessing import process
 
 
 @torch.no_grad()
@@ -157,23 +159,32 @@ def train_impl(
             net.train()
             # 得到预测值以及损失组，即对应每个损失函数的损失值
             pred, ls_es = net.forward_backward(X, y)
-            # 将网络参数、预测值、损失值、标签值作为信号放入队列中
-            Q.put((pred, ls_es, y))
+            try:
+                # 将网络参数、预测值、损失值、标签值作为信号放入队列中
+                Q.put((pred, ls_es, y))
+            except queue.Full:
+                Q.join()
             # 完成了一批数据的计算，更新进度条
             pbar.update(1)
         # 队列中放入每个优化器的学习率参数组
-        Q.put([
-            [
-                [param['lr'] for param in optimizer.param_groups]
-                for optimizer in optimizer_s
-            ],
-            net.state_dict()
-        ])
+        try:
+            Q.put([
+                [
+                    [param['lr'] for param in optimizer.param_groups]
+                    for optimizer in optimizer_s
+                ],
+                net.state_dict()
+            ])
+        except queue.Full:
+            Q.join()
         # 更新学习率变化器组
         for scheduler in lr_scheduler_s:
             scheduler.step()
     finish.set()
-    Q.put(finish)
+    try:
+        Q.put(finish)
+    except queue.Full:
+        Q.join()
 
 
 class Trainer:
@@ -205,7 +216,8 @@ class Trainer:
         :param valid_iter: 验证数据供给迭代器
         :return: 训练数据记录`History`对象
         """
-        Q = Queue()
+        # 修复内存越占越多的问题
+        Q = Queue(50)
         finish = Event()
         # 提取基本训练对象
         net = self.module
