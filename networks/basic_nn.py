@@ -140,6 +140,52 @@ class BasicNN(nn.Sequential):
         test_ls_names = loss_names
         return ls_fn_s, loss_names, test_ls_names
 
+    # def train_(self,
+    #            data_iter, criterion_a,
+    #            n_epochs=10, valid_iter=None, k=1, n_workers=1, hook=None
+    #            ):
+    #     """神经网络训练函数
+    #     调用Trainer进行训练。
+    #     :param data_iter: 训练数据供给迭代器。
+    #     :param optimizers: 网络参数优化器。可以通过list传入多个优化器。
+    #     :param criterion_a: 准确率计算函数。签名需为：acc_fn(predict: tensor, labels: tensor, size_averaged: bool = True) -> ls: tensor or float
+    #     :param n_epochs: 迭代世代数。
+    #     :param ls_fn: 训练损失函数。签名需为：ls_fn(predict: tensor, labels: tensor) -> ls: tensor，其中不允许有销毁梯度的操作。
+    #     :param lr_schedulers: 学习率规划器，用于动态改变学习率。若不指定，则会使用固定学习率规划器。
+    #     :param valid_iter: 验证数据供给迭代器。
+    #     :param hook: 是否使用hook机制跟踪梯度变化。可选填入[None, 'mute', 'full']
+    #     :param n_workers: 进行训练的处理机数量。
+    #     :param k: 进行训练的k折数，指定为1则不进行k-折训练，否则进行k-折训练，并且data_iter为k-折训练数据供给器，valid_iter会被忽略.
+    #     :return: 训练数据记录`History`对象
+    #     """
+    #     assert self.is_train, '在训练之前，请先调用prepare_training()！'
+    #     if hook is None:
+    #         with_hook, hook_mute = False, False
+    #     elif hook == 'mute':
+    #         with_hook, hook_mute = True, True
+    #     else:
+    #         with_hook, hook_mute = True, False
+    #     with Trainer(self,
+    #                  data_iter, self._optimizer_s, self._scheduler_s, criterion_a,
+    #                  n_epochs, self._ls_fn_s, with_hook, hook_mute
+    #                  ) as trainer:
+    #         if k > 1:
+    #             # 是否进行k-折训练
+    #             history = trainer.train_with_k_fold(data_iter, k, n_workers)
+    #         elif n_workers <= 1:
+    #             # 判断是否要多线程
+    #             if valid_iter:
+    #                 history = trainer.train_and_valid(valid_iter)
+    #             else:
+    #                 history = trainer.train()
+    #         else:
+    #             history = trainer.train_with_threads(valid_iter, n_workers)
+    #     # 清楚训练痕迹
+    #     del self._optimizer_s, self.lr_names, self._scheduler_s, \
+    #         self._ls_fn_s, self.loss_names, self.test_ls_names
+    #     self.is_train = False
+    #     return history
+
     def train_(self,
                data_iter, criterion_a,
                n_epochs=10, valid_iter=None, k=1, n_workers=1, hook=None
@@ -172,14 +218,25 @@ class BasicNN(nn.Sequential):
             if k > 1:
                 # 是否进行k-折训练
                 history = trainer.train_with_k_fold(data_iter, k, n_workers)
-            elif n_workers <= 1:
-                # 判断是否要多线程
-                if valid_iter:
-                    history = trainer.train_and_valid(valid_iter)
-                else:
-                    history = trainer.train()
             else:
-                history = trainer.train_with_threads(valid_iter, n_workers)
+                # 提取训练迭代器和验证迭代器
+                data_iter = list(data_iter)
+                if len(data_iter) == 2:
+                    train_iter, valid_iter = [it[0] for it in data_iter]
+                elif len(data_iter) == 1:
+                    train_iter, valid_iter = data_iter[0][0], None
+                else:
+                    raise ValueError(f"无法识别的数据迭代器，其提供的长度为{len(data_iter)}")
+                # 判断是否要进行多线程训练
+                if n_workers <= 1:
+                    # 不启用多线程训练
+                    if valid_iter is not None:
+                        history = trainer.train_and_valid(train_iter, valid_iter)
+                    else:
+                        history = trainer.train(train_iter)
+                else:
+                    # 启用多线程训练
+                    history = trainer.train_with_threads(train_iter, valid_iter, n_workers)
         # 清楚训练痕迹
         del self._optimizer_s, self.lr_names, self._scheduler_s, \
             self._ls_fn_s, self.loss_names, self.test_ls_names
