@@ -52,31 +52,45 @@ def split_real_data(features: torch.Tensor, labels: torch.Tensor, train, test, v
         (test_fea, test_labels)
 
 
-def split_data(dataset: DataSet or LazyDataSet, train=0.8, test=0.2, valid=.0, shuffle=True):
-    """
-    分割数据集为训练集、测试集、验证集
+def k1_split_data(dataset: DataSet or LazyDataSet,
+                  train=0.8, shuffle=True):
+    """分割数据集为训练集、测试集、验证集
+    test参数已删去，测试集应该与训练集独立
+    返回各集合涉及下标DataLoader，只有比例>0的集合才会返回。
     :param shuffle: 每次提供的索引是否随机
     :param dataset: 分割数据集
     :param train: 训练集比例
-    :param test: 测试集比例
-    :param valid: 验证集比例
-    :return: 各集合涉及下标DataLoader、只有比例>0的集合才会返回。
+    :return: （训练集下标DataLoader）或（训练集下标DataLoader，验证集下标DataLoader）
     """
-    assert train + test + valid == 1.0, '训练集、测试集、验证集比例之和须为1'
+    # assert train + valid == 1.0, '训练集、测试集、验证集比例之和须为1'
+    assert 0 < train <= 1.0, '训练集、验证集比例之和须为1'
     # 数据集分割
     print('\r正在进行数据集分割……', flush=True)
     data_len = len(dataset)
     train_len = int(data_len * train)
-    valid_len = int(data_len * valid)
-    train_range, valid_range, test_range = np.split(np.arange(data_len), (train_len, train_len + valid_len))
-    ret = (r for r in (train_range, valid_range, test_range) if len(r) > 0)
-    return [
-        DataLoader(
-            r, shuffle=shuffle,
-            collate_fn=lambda d: d[0]  # 避免让数据升维。每次只抽取一个数字
-        )
-        for r in ret
-    ]
+    # valid_len = int(data_len * valid)
+    # train_range, valid_range, test_range = np.split(np.arange(data_len), (train_len, train_len + valid_len))
+    # ranger = (r for r in (train_range, valid_range, test_range) if len(r) > 0)
+    ranger = (r for r in np.split(np.arange(data_len), (train_len,)) if len(r) > 0)
+    return (
+        [
+            DataLoader(
+                r, shuffle=shuffle,
+                collate_fn=lambda d: d[0]  # 避免让数据升维。每次只抽取一个数字
+            )
+        ]
+        for r in ranger
+    )
+
+
+def split_data(dataset: DataSet or LazyDataSet,
+               train=0.8, k=1, shuffle=True):
+    if k == 1:
+        return k1_split_data(dataset, train, shuffle)
+    elif k > 1:
+        return k_fold_split(dataset, k, shuffle)
+    else:
+        raise ValueError(f'不正确的k值={k}，k值应该大于0，且为整数！')
 
 
 # def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=True,
@@ -111,7 +125,7 @@ def split_data(dataset: DataSet or LazyDataSet, train=0.8, test=0.2, valid=.0, s
 #             **kwargs
 #         )
 
-# TODO: 尝试BackgroundGenerator
+
 def to_loader(dataset: DataSet or LazyDataSet, device=torch.device('cpu'),
               batch_size: int = 1, shuffle=True,
               sampler: Iterable = None, max_load: int = 10000,
