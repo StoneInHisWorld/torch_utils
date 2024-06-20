@@ -170,7 +170,7 @@ class BasicNN(nn.Sequential):
 
     def train_(self,
                data_iter, criterion_a,
-               n_epochs=10, valid_iter=None, k=1, n_workers=1, hook=None
+               n_epochs=10, k=1, n_workers=1, hook=None
                ):
         """神经网络训练函数
         调用Trainer进行训练。
@@ -180,7 +180,6 @@ class BasicNN(nn.Sequential):
         :param n_epochs: 迭代世代数。
         :param ls_fn: 训练损失函数。签名需为：ls_fn(predict: tensor, labels: tensor) -> ls: tensor，其中不允许有销毁梯度的操作。
         :param lr_schedulers: 学习率规划器，用于动态改变学习率。若不指定，则会使用固定学习率规划器。
-        :param valid_iter: 验证数据供给迭代器。
         :param hook: 是否使用hook机制跟踪梯度变化。可选填入[None, 'mute', 'full']
         :param n_workers: 进行训练的处理机数量。
         :param k: 进行训练的k折数，指定为1则不进行k-折训练，否则进行k-折训练，并且data_iter为k-折训练数据供给器，valid_iter会被忽略.
@@ -218,7 +217,7 @@ class BasicNN(nn.Sequential):
                         history = trainer.train(train_iter)
                 else:
                     # 启用多线程训练
-                    history = trainer.train_with_threads(train_iter, valid_iter, n_workers)
+                    history = trainer.train_with_threads(train_iter, valid_iter, None, n_workers)
         # 清楚训练痕迹
         del self._optimizer_s, self.lr_names, self._scheduler_s, \
             self._ls_fn_s, self.loss_names, self.test_ls_names
