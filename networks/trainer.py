@@ -84,6 +84,7 @@ def train_and_valid_log_impl(
     :param Q: 数据交换队列，train_impl通过该队列传输需要记录的信息
     :return: history历史记录
     """
+    state_dict = None
     metric = None
     while True:
         # 从队列中获取信号
@@ -108,6 +109,8 @@ def train_and_valid_log_impl(
                 metric = Accumulator(len(cri_los_names) + 1)
             else:
                 # 进行验证
+                assert state_dict is not None, '没有得到每个世代训练完成的参数！'
+                net.load_state_dict(state_dict)
                 valid_log = net.test_(valid_iter, criterion_a, pbar)
                 # 记录训练和验证数据
                 history.add(
@@ -185,7 +188,7 @@ class Trainer:
                  with_hook=False, hook_mute=True):
         self.module = module
         # 存储必要训练对象
-        self.__data_iter = data_iter
+        # self.__data_iter = data_iter
         self.__optimizer_s = optimizer_s
         self.__lr_scheduler_s = lr_scheduler_s
         self.__criterion_a = acc_fn
@@ -199,7 +202,9 @@ class Trainer:
         self.hook_mute = hook_mute
         pass
 
-    def train_with_threads(self, valid_iter=None, n_workers=2) -> History:
+    def train_with_threads(self,
+                           train_iter, valid_iter=None,
+                           pbar=None, n_workers=2) -> History:
         """多线程神经网络训练函数。
         :param n_workers: 能够启用的最大处理机数
         :param valid_iter: 验证数据供给迭代器
@@ -209,7 +214,6 @@ class Trainer:
         finish = Event()
         # 提取基本训练对象
         net = self.module
-        data_iter = self.__data_iter
         n_epochs = self.__n_epochs
         criterion_a = self.__criterion_a if isinstance(self.__criterion_a, list) else [self.__criterion_a]
         # 损失项
@@ -224,19 +228,21 @@ class Trainer:
 
         # warnings.warn("多线程训练会造成死锁，目前无法修复，将于将来版本后删除", DeprecationWarning)
         # 设置进度条
-        if valid_iter is not None:
-            pbar = tqdm(total=(len(data_iter) + len(valid_iter)) * n_epochs, unit='批', position=0,
-                        desc=f'训练中……', mininterval=1)
-        else:
-            pbar = tqdm(total=(len(data_iter)) * n_epochs, unit='批', position=0,
-                        desc=f'训练中……', mininterval=1)
+        if pbar is None:
+            # 如果调用函数不提供进度条，则创建一个新的进度条
+            if valid_iter is not None:
+                pbar = tqdm(total=(len(train_iter) + len(valid_iter)) * n_epochs, unit='批', position=0,
+                            desc=f'训练中……', mininterval=1)
+            else:
+                pbar = tqdm(total=(len(train_iter)) * n_epochs, unit='批', position=0,
+                            desc=f'训练中……', mininterval=1)
         # 设置历史记录对象和累加对象
         history = History(*(criteria_names + loss_names + lr_names))
         # 使用线程池处理训练线程和记录线程
         executor = ThreadPoolExecutor(n_workers)
         train_future = executor.submit(
             train_impl,
-            net, data_iter, n_epochs, optimizer_s, lr_scheduler_s,
+            net, train_iter, n_epochs, optimizer_s, lr_scheduler_s,
             pbar, net.device,
             Q, finish
         )
@@ -269,7 +275,7 @@ class Trainer:
         pbar.close()
         return history
 
-    def train_and_valid(self, valid_iter, pbar=None) -> History:
+    def train_and_valid(self, train_iter, valid_iter, pbar=None) -> History:
         """
         神经网络训练函数。
         :param pbar: 提供外来进度条。此参数是为了适配k折训练
@@ -278,10 +284,9 @@ class Trainer:
         """
         # 读取属性以便训练，并将优化器、规划器、评价计算器序列化
         net = self.module
-        data_iter = self.__data_iter
         n_epochs = self.__n_epochs
         criterion_a = self.__criterion_a if isinstance(self.__criterion_a, list) else [self.__criterion_a]
-        non_blocking = self.device.type == 'cuda' and data_iter.pin_memory
+        non_blocking = self.device.type == 'cuda' and train_iter.pin_memory
         # 损失项
         loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
@@ -291,7 +296,7 @@ class Trainer:
         history = History(*(criteria_names + loss_names + lr_names))
         # 设置进度条
         if pbar is None:
-            pbar = tqdm(total=(len(data_iter) + len(valid_iter)) * n_epochs, unit='批', position=0,
+            pbar = tqdm(total=(len(train_iter) + len(valid_iter)) * n_epochs, unit='批', position=0,
                         desc=f'训练中……', mininterval=1)
         for epoch in range(n_epochs):
             pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中……')
@@ -304,7 +309,7 @@ class Trainer:
             # 记录批次训练损失总和，评价指标，样本数
             metric = Accumulator(len(loss_names + criteria_names) + 1)
             # 训练主循环
-            for X, y in data_iter:
+            for X, y in train_iter:
                 X, y = (
                     X.to(self.device, non_blocking=non_blocking),
                     y.to(self.device, non_blocking=non_blocking)
@@ -333,15 +338,14 @@ class Trainer:
             )
         return history
 
-    def train(self) -> History:
+    def train(self, train_iter) -> History:
         """神经网络训练函数。
         :return: 训练数据记录`History`对象
         """
         net = self.module
-        data_iter = self.__data_iter
         n_epochs = self.__n_epochs
         criterion_a = self.__criterion_a if isinstance(self.__criterion_a, list) else [self.__criterion_a]
-        non_blocking = self.device.type == 'cuda' and data_iter.pin_memory
+        non_blocking = self.device.type == 'cuda' and train_iter.pin_memory
         # 损失项
         loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
@@ -349,7 +353,7 @@ class Trainer:
         # 学习率项
         lr_names = net.lr_names
         history = History(*(criteria_names + loss_names + lr_names))
-        with tqdm(total=len(data_iter) * n_epochs, unit='批', position=0,
+        with tqdm(total=len(train_iter) * n_epochs, unit='批', position=0,
                   desc=f'训练中……', mininterval=1) as pbar:
             for epoch in range(n_epochs):
                 pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中……')
@@ -362,7 +366,7 @@ class Trainer:
                 # 记录批次训练损失总和，评价指标，样本数
                 metric = Accumulator(len(loss_names + criteria_names) + 1)
                 # 训练主循环
-                for X, y in data_iter:
+                for X, y in train_iter:
                     X, y = (X.to(self.device, non_blocking=non_blocking),
                             y.to(self.device, non_blocking=non_blocking))
                     net.train()
@@ -389,8 +393,7 @@ class Trainer:
         return history
 
     def train_with_k_fold(self, train_loaders_iter,
-                          k: int = 10,
-                          n_workers=1) -> History:
+                          k: int = 10, n_workers=1) -> History:
         """
         使用k折验证法进行模型训练
         :param n_workers: 使用的处理机数量
@@ -402,13 +405,13 @@ class Trainer:
         with tqdm(total=k * self.__n_epochs, position=0, leave=True, unit='批', mininterval=1) as pbar:
             for i, (train_iter, valid_iter) in enumerate(train_loaders_iter):
                 pbar.set_description(f'\r训练折{pbar.n}……')
-                self.__data_iter = train_iter
+                # self.__data_iter = train_iter
                 # 计算训练批次数
                 pbar.total = k * self.__n_epochs * (len(train_iter) + len(valid_iter))
                 if n_workers <= 1:
-                    history = self.train_and_valid(valid_iter, pbar)
+                    history = self.train_and_valid(train_iter, valid_iter, pbar)
                 else:
-                    history = self.train_with_threads(valid_iter)
+                    history = self.train_with_threads(train_iter, valid_iter, pbar)
                 if k_fold_history is None:
                     k_fold_history = history
                 else:
