@@ -49,8 +49,7 @@ class BasicNN(nn.Sequential):
         self.__checkpoint = with_checkpoint
 
     def prepare_training(
-            self,  # o_args: tuple = ('adam', ()), l_args: tuple = ([], ()),
-            # ls_args: tuple = ('mse', ())
+            self,
             o_args=None, l_args=None, ls_args=None,
     ):
         """进行训练准备
@@ -59,7 +58,6 @@ class BasicNN(nn.Sequential):
         :param ls_args:
         :return:
         """
-        # o_args = o_args if isinstance(o_args[0], list) else ([o_args[0]], *o_args[1:])
         # 如果不指定，则需要设定默认值
         if o_args is None:
             o_args = []
@@ -70,7 +68,6 @@ class BasicNN(nn.Sequential):
         if len(o_args) == 0:
             o_args = ('adam', {})
         self._optimizer_s, self.lr_names = self._get_optimizer(*o_args)
-        # l_args = l_args if isinstance(l_args[0], list) else ([l_args[0]], *l_args[1:])
         self._scheduler_s = self._get_lr_scheduler(*l_args)
         # 如果不指定，则需要设定默认值
         if len(ls_args) == 0:
@@ -92,14 +89,6 @@ class BasicNN(nn.Sequential):
         :return: 优化器序列
         """
         optimizer_s, lr_names = [], []
-        # i = 0
-        # # 如果参数太少，则用空字典补齐
-        # if len(args) <= len(optim_str_s):
-        #     args = (*args, *[{} for _ in range(len(optim_str_s) - len(args))])
-        # # 获取优化器
-        # for s, kwargs in zip(optim_str_s, args):
-        #     optimizer_s.append(ttools.get_optimizer(self, s, **kwargs))
-        #     self.lr_names.append(f'LR_{i}')
         for i, (type_s, kwargs) in enumerate(args):
             optimizer_s.append(ttools.get_optimizer(self, type_s, **kwargs))
             lr_names.append(f'LR_{i}')
@@ -110,13 +99,6 @@ class BasicNN(nn.Sequential):
         :param args: 多个二元组，元组格式为（规划器类型字符串，本规划器关键词参数）
         :return: 规划器序列。
         """
-        # # 如果参数太少，则用空字典补齐
-        # if len(args) <= len(self._optimizer_s):
-        #     args = (*args, *[{} for _ in range(len(scheduler_str_s) - len(args))])
-        # return [
-        #     ttools.get_lr_scheduler(optim, ss, **kwargs)
-        #     for ss, optim, kwargs in zip(scheduler_str_s, self._optimizer_s, args)
-        # ]
         return [
             ttools.get_lr_scheduler(optim, ss, **kwargs)
             for optim, (ss, kwargs) in zip(self._optimizer_s, args)
@@ -212,7 +194,7 @@ class BasicNN(nn.Sequential):
         else:
             with_hook, hook_mute = True, False
         with Trainer(self,
-                     data_iter, self._optimizer_s, self._scheduler_s, criterion_a,
+                     self._optimizer_s, self._scheduler_s, criterion_a,
                      n_epochs, self._ls_fn_s, with_hook, hook_mute
                      ) as trainer:
             if k > 1:
