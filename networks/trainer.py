@@ -117,6 +117,7 @@ def train_and_valid_log_impl(
                 list(valid_log.values())
             )
             metric.reset()
+            del lr_group, state_dict
         # 若是获取到了网络参数、预测值、损失值、标签值
         # 则进行评价指标的计算以及损失值的累加
         elif type(item) == tuple:
@@ -131,6 +132,7 @@ def train_and_valid_log_impl(
                 *correct_s, *[ls * num_examples for ls in ls_es],
                 num_examples
             )
+            del pred, ls_es, y
         else:
             raise NotImplementedError(f'无法识别的信号{item}！')
         del item
