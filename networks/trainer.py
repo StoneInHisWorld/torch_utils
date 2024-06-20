@@ -84,45 +84,41 @@ def train_and_valid_log_impl(
     :param Q: 数据交换队列，train_impl通过该队列传输需要记录的信息
     :return: history历史记录
     """
-    state_dict = None
-    metric = None
+    # state_dict = None
+    metric = Accumulator(len(cri_los_names) + 1)
     while True:
         # 从队列中获取信号
         item = Q.get(True)
         # 如果收到了训练完成信号，则记录最后一个世代的数据后退出
         if type(item) == Event:
+            # # 进行验证
+            # valid_log = net.test_(valid_iter, criterion_a, pbar)
+            # # 记录最后一世代的训练和验证数据
+            # history.add(
+            #     cri_los_names + list(valid_log.keys()),
+            #     [metric[i] / metric[-1] for i in range(len(metric) - 1)] +
+            #     list(valid_log.values())
+            # )
+            return
+        # 若是获取到了学习率组，则认为完成了一个世代的迭代，刷新累加器并记录学习率
+        elif type(item) == list:
+            lr_group, state_dict = item
+            # 记录学习率
+            history.add(lr_names, lr_group)
             # 进行验证
+            net.load_state_dict(state_dict)
             valid_log = net.test_(valid_iter, criterion_a, pbar)
-            # 记录最后一世代的训练和验证数据
+            # 记录训练和验证数据
             history.add(
                 cri_los_names + list(valid_log.keys()),
                 [metric[i] / metric[-1] for i in range(len(metric) - 1)] +
                 list(valid_log.values())
             )
-            return
-        # 若是获取到了学习率组，则认为完成了一个世代的迭代，刷新累加器并记录学习率
-        elif type(item) == list:
-            # 记录学习率
-            history.add(lr_names, item)
-            # 首次运行则创建累加器
-            if metric is None:
-                metric = Accumulator(len(cri_los_names) + 1)
-            else:
-                # 进行验证
-                assert state_dict is not None, '没有得到每个世代训练完成的参数！'
-                net.load_state_dict(state_dict)
-                valid_log = net.test_(valid_iter, criterion_a, pbar)
-                # 记录训练和验证数据
-                history.add(
-                    cri_los_names + list(valid_log.keys()),
-                    [metric[i] / metric[-1] for i in range(len(metric) - 1)] +
-                    list(valid_log.values())
-                )
-                metric.reset()
+            metric.reset()
         # 若是获取到了网络参数、预测值、损失值、标签值
         # 则进行评价指标的计算以及损失值的累加
         elif type(item) == tuple:
-            state_dict, pred, ls_es, y = item
+            pred, ls_es, y = item
             # 计算训练准确率数据
             correct_s = []
             for criterion in criterion_a:
@@ -135,6 +131,7 @@ def train_and_valid_log_impl(
             )
         else:
             raise NotImplementedError(f'无法识别的信号{item}！')
+        del item
         Q.task_done()
 
 
@@ -151,13 +148,6 @@ def train_impl(
         if finish.is_set():
             break
         pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中……')
-        # 队列中放入每个优化器的学习率参数组
-        Q.put(
-            [
-                [param['lr'] for param in optimizer.param_groups]
-                for optimizer in optimizer_s
-            ]
-        )
         # 世代主循环
         for X, y in data_iter:
             X, y = (
@@ -168,9 +158,17 @@ def train_impl(
             # 得到预测值以及损失组，即对应每个损失函数的损失值
             pred, ls_es = net.forward_backward(X, y)
             # 将网络参数、预测值、损失值、标签值作为信号放入队列中
-            Q.put((net.state_dict(), pred, ls_es, y))
+            Q.put((pred, ls_es, y))
             # 完成了一批数据的计算，更新进度条
             pbar.update(1)
+        # 队列中放入每个优化器的学习率参数组
+        Q.put([
+            [
+                [param['lr'] for param in optimizer.param_groups]
+                for optimizer in optimizer_s
+            ],
+            net.state_dict()
+        ])
         # 更新学习率变化器组
         for scheduler in lr_scheduler_s:
             scheduler.step()
@@ -181,18 +179,15 @@ def train_impl(
 class Trainer:
 
     def __init__(self,
-                 module, data_iter,
-                 optimizer_s: torch.optim.Optimizer or List[torch.optim.Optimizer],
+                 module, optimizer_s: torch.optim.Optimizer or List[torch.optim.Optimizer],
                  lr_scheduler_s, acc_fn,
                  n_epochs=10, ls_fn: nn.Module = nn.L1Loss(),
                  with_hook=False, hook_mute=True):
         self.module = module
         # 存储必要训练对象
-        # self.__data_iter = data_iter
         self.__optimizer_s = optimizer_s
         self.__lr_scheduler_s = lr_scheduler_s
         self.__criterion_a = acc_fn
-        # self.backward = backward
         self.__n_epochs = n_epochs
         self.__ls_fn = ls_fn
         # 设置数据存放参数
