@@ -73,21 +73,23 @@ class LazyDataLoader:
 
 class DataLoader(DLoader):
 
-    def __init__(self, dataset, batch_size=1, device=torch.device('cpu'), pin_memory=False, transit_fn=None, *args, **kwargs):
-        self.device = device
-        self.non_blocking = self.device.type == 'cuda' and pin_memory
+    def __init__(self, dataset, transit_fn, batch_size=1, max_prefetch=3,
+                 *args, **kwargs):
+        # self.device = device
+        # self.non_blocking = self.device.type == 'cuda' and pin_memory
         self.transit_fn = transit_fn
-        kwargs['pin_memory'] = pin_memory
+        self.max_prefetch = max_prefetch
+        # kwargs['pin_memory'] = pin_memory
         super().__init__(
             dataset, batch_size,
             *args, **kwargs
         )
 
     def __iter__(self):
-        if self.transit_fn is None:
-            self.transit_fn = lambda batch: batch.to(self.device, self.non_blocking)
+        # if self.transit_fn is None:
+        #     self.transit_fn = lambda batch: batch.to(self.device, self.non_blocking)
         unwrapped_generator = (
             self.transit_fn(batch)
             for batch in super().__iter__()
         )
-        return BackgroundGenerator(unwrapped_generator)
+        return BackgroundGenerator(unwrapped_generator, self.max_prefetch)
