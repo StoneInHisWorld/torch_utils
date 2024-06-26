@@ -154,10 +154,10 @@ def train_impl(
         pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中……')
         # 世代主循环
         for X, y in data_iter:
-            X, y = (
-                X.to(device, non_blocking=non_blocking),
-                y.to(device, non_blocking=non_blocking)
-            )
+            # X, y = (
+            #     X.to(device, non_blocking=non_blocking),
+            #     y.to(device, non_blocking=non_blocking)
+            # )
             net.train()
             # 得到预测值以及损失组，即对应每个损失函数的损失值
             pred, ls_es = net.forward_backward(X, y)
@@ -319,10 +319,10 @@ class Trainer:
             metric = Accumulator(len(loss_names + criteria_names) + 1)
             # 训练主循环
             for X, y in train_iter:
-                X, y = (
-                    X.to(self.device, non_blocking=non_blocking),
-                    y.to(self.device, non_blocking=non_blocking)
-                )
+                # X, y = (
+                #     X.to(self.device, non_blocking=non_blocking),
+                #     y.to(self.device, non_blocking=non_blocking)
+                # )
                 net.train()
                 pred, ls_es = net.forward_backward(X, y)
                 with torch.no_grad():
@@ -376,8 +376,8 @@ class Trainer:
                 metric = Accumulator(len(loss_names + criteria_names) + 1)
                 # 训练主循环
                 for X, y in train_iter:
-                    X, y = (X.to(self.device, non_blocking=non_blocking),
-                            y.to(self.device, non_blocking=non_blocking))
+                    # X, y = (X.to(self.device, non_blocking=non_blocking),
+                    #         y.to(self.device, non_blocking=non_blocking))
                     net.train()
                     pred, ls_es = net.forward_backward(X, y)
                     with torch.no_grad():
