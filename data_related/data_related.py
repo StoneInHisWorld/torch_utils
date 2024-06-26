@@ -126,10 +126,10 @@ def split_data(dataset: DataSet or LazyDataSet,
 #         )
 
 
-def to_loader(dataset: DataSet or LazyDataSet, device=torch.device('cpu'),
+def to_loader(dataset: DataSet or LazyDataSet, transit_fn, device=torch.device('cpu'),
               batch_size: int = 1, shuffle=True,
               sampler: Iterable = None, max_load: int = 10000,
-              **kwargs):
+              max_prefetch=3, **kwargs):
     """根据数据集类型转化为数据集加载器。生成预处理前，会将预处理程序清除。
     :param device: DataLoader存放数据的位置。
     :param max_load: 懒数据集加载器的最大加载量，当使用DataSet时，该参数无效
@@ -142,24 +142,24 @@ def to_loader(dataset: DataSet or LazyDataSet, device=torch.device('cpu'),
     """
     if sampler is not None:
         shuffle = None
-    pin_memory = kwargs['pin_memory'] if 'pin_memory' in kwargs.keys() else False
+    # pin_memory = kwargs['pin_memory'] if 'pin_memory' in kwargs.keys() else False
     if type(dataset) == LazyDataSet:
+        raise NotImplementedError('懒加载尚未完成编写！')
         # dataset.pop_preprocesses()
-        return LazyDataLoader(
-            dataset, batch_size,
-            max_load=max_load, shuffle=shuffle, collate_fn=dataset.collate_fn,
-            sampler=sampler,
-            **kwargs
-        )
+        # return LazyDataLoader(
+        #     dataset, batch_size,
+        #     max_load=max_load, shuffle=shuffle, collate_fn=dataset.collate_fn,
+        #     sampler=sampler,
+        #     **kwargs
+        # )
     elif type(dataset) == DataSet:
         dataset.pop_preprocesses()
         # TODO：transit_fn应该在Dataset中被定义
-        non_blocking = device.type == 'cuda' and pin_memory
-        transit_fn = lambda batch: (batch[0].to(device, non_blocking=non_blocking),
-                                    batch[1].to(device, non_blocking=non_blocking))
+        # non_blocking = device.type == 'cuda' and pin_memory
+        # transit_fn = lambda batch: (batch[0].to(device, non_blocking=non_blocking),
+        #                             batch[1].to(device, non_blocking=non_blocking))
         return data_related.dataloader.DataLoader(
-            dataset, batch_size,
-            device=device, transit_fn=transit_fn,
+            dataset, transit_fn, batch_size, max_prefetch=max_prefetch,
             shuffle=shuffle, collate_fn=dataset.collate_fn, sampler=sampler,
             **kwargs
         )
