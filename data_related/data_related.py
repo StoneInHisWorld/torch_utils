@@ -7,6 +7,7 @@ import torch
 import torchvision.transforms.functional as F
 from torch.utils.data import DataLoader
 
+import data_related.dataloader
 from data_related.dataloader import LazyDataLoader
 from data_related.datasets import DataSet, LazyDataSet
 
@@ -51,38 +52,86 @@ def split_real_data(features: torch.Tensor, labels: torch.Tensor, train, test, v
         (test_fea, test_labels)
 
 
-def split_data(dataset: DataSet or LazyDataSet, train=0.8, test=0.2, valid=.0, shuffle=True):
-    """
-    分割数据集为训练集、测试集、验证集
+def k1_split_data(dataset: DataSet or LazyDataSet,
+                  train=0.8, shuffle=True):
+    """分割数据集为训练集、测试集、验证集
+    test参数已删去，测试集应该与训练集独立
+    返回各集合涉及下标DataLoader，只有比例>0的集合才会返回。
     :param shuffle: 每次提供的索引是否随机
     :param dataset: 分割数据集
     :param train: 训练集比例
-    :param test: 测试集比例
-    :param valid: 验证集比例
-    :return: 各集合涉及下标DataLoader、只有比例>0的集合才会返回。
+    :return: （训练集下标DataLoader）或（训练集下标DataLoader，验证集下标DataLoader）
     """
-    assert train + test + valid == 1.0, '训练集、测试集、验证集比例之和须为1'
+    # assert train + valid == 1.0, '训练集、测试集、验证集比例之和须为1'
+    assert 0 < train <= 1.0, '训练集、验证集比例之和须为1'
     # 数据集分割
     print('\r正在进行数据集分割……', flush=True)
     data_len = len(dataset)
     train_len = int(data_len * train)
-    valid_len = int(data_len * valid)
-    train_range, valid_range, test_range = np.split(np.arange(data_len), (train_len, train_len + valid_len))
-    ret = (r for r in (train_range, valid_range, test_range) if len(r) > 0)
-    return [
-        DataLoader(
-            r, shuffle=shuffle,
-            collate_fn=lambda d: d[0]  # 避免让数据升维。每次只抽取一个数字
-        )
-        for r in ret
-    ]
+    # valid_len = int(data_len * valid)
+    # train_range, valid_range, test_range = np.split(np.arange(data_len), (train_len, train_len + valid_len))
+    # ranger = (r for r in (train_range, valid_range, test_range) if len(r) > 0)
+    ranger = (r for r in np.split(np.arange(data_len), (train_len,)) if len(r) > 0)
+    return (
+        [
+            DataLoader(
+                r, shuffle=shuffle,
+                collate_fn=lambda d: d[0]  # 避免让数据升维。每次只抽取一个数字
+            )
+        ]
+        for r in ranger
+    )
 
 
-def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=True,
+def split_data(dataset: DataSet or LazyDataSet,
+               train=0.8, k=1, shuffle=True):
+    if k == 1:
+        return k1_split_data(dataset, train, shuffle)
+    elif k > 1:
+        return k_fold_split(dataset, k, shuffle)
+    else:
+        raise ValueError(f'不正确的k值={k}，k值应该大于0，且为整数！')
+
+
+# def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=True,
+#               sampler: Iterable = None, max_load: int = 10000,
+#               **kwargs):
+#     """
+#     根据数据集类型转化为数据集加载器。生成预处理前，会将预处理程序清除。
+#     :param max_load: 懒数据集加载器的最大加载量，当使用DataSet时，该参数无效
+#     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler，根据shuffle==True or False 提供乱序/顺序下标.
+#     :param dataset: 转化为加载器的数据集。
+#     :param batch_size: 每次供给的数据量。默认为整个数据集
+#     :param shuffle: 是否打乱
+#     :param kwargs: Dataloader额外参数
+#     :return: 加载器对象
+#     """
+#     if sampler is not None:
+#         shuffle = None
+#     if not batch_size:
+#         batch_size = dataset.feature_shape[0]
+#     dataset.pop_preprocesses()
+#     if type(dataset) == LazyDataSet:
+#         return LazyDataLoader(
+#             dataset, batch_size,
+#             max_load=max_load, shuffle=shuffle, collate_fn=dataset.collate_fn,
+#             sampler=sampler,
+#             **kwargs
+#         )
+#     elif type(dataset) == DataSet:
+#         return DataLoader(
+#             dataset, batch_size,
+#             shuffle=shuffle, collate_fn=dataset.collate_fn, sampler=sampler,
+#             **kwargs
+#         )
+
+
+def to_loader(dataset: DataSet or LazyDataSet, transit_fn, device=torch.device('cpu'),
+              batch_size: int = 1, shuffle=True,
               sampler: Iterable = None, max_load: int = 10000,
-              **kwargs):
-    """
-    根据数据集类型转化为数据集加载器
+              max_prefetch=3, **kwargs):
+    """根据数据集类型转化为数据集加载器。生成预处理前，会将预处理程序清除。
+    :param device: DataLoader存放数据的位置。
     :param max_load: 懒数据集加载器的最大加载量，当使用DataSet时，该参数无效
     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler，根据shuffle==True or False 提供乱序/顺序下标.
     :param dataset: 转化为加载器的数据集。
@@ -93,18 +142,24 @@ def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=T
     """
     if sampler is not None:
         shuffle = None
-    if not batch_size:
-        batch_size = dataset.feature_shape[0]
+    # pin_memory = kwargs['pin_memory'] if 'pin_memory' in kwargs.keys() else False
     if type(dataset) == LazyDataSet:
-        return LazyDataLoader(
-            dataset, batch_size,
-            max_load=max_load, shuffle=shuffle, collate_fn=dataset.collate_fn,
-            sampler=sampler,
-            **kwargs
-        )
+        raise NotImplementedError('懒加载尚未完成编写！')
+        # dataset.pop_preprocesses()
+        # return LazyDataLoader(
+        #     dataset, batch_size,
+        #     max_load=max_load, shuffle=shuffle, collate_fn=dataset.collate_fn,
+        #     sampler=sampler,
+        #     **kwargs
+        # )
     elif type(dataset) == DataSet:
-        return DataLoader(
-            dataset, batch_size,
+        dataset.pop_preprocesses()
+        # TODO：transit_fn应该在Dataset中被定义
+        # non_blocking = device.type == 'cuda' and pin_memory
+        # transit_fn = lambda batch: (batch[0].to(device, non_blocking=non_blocking),
+        #                             batch[1].to(device, non_blocking=non_blocking))
+        return data_related.dataloader.DataLoader(
+            dataset, transit_fn, batch_size, max_prefetch=max_prefetch,
             shuffle=shuffle, collate_fn=dataset.collate_fn, sampler=sampler,
             **kwargs
         )
@@ -164,9 +219,10 @@ def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
     """
     mean, std = [func(data, dim=list(range(2, len(data.shape))), keepdim=True)
                  for func in [torch.mean, torch.std]]
+    std += epsilon
     if len(data.shape) == 4:
         return F.normalize(data, mean, std)
     elif len(data.shape) == 1:
-        return (data - mean) / (std + epsilon)
+        return (data - mean) / std
     else:
         raise Exception(f'不支持的数据形状{data.shape}！')

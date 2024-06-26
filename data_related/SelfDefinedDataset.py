@@ -21,7 +21,7 @@ class SelfDefinedDataSet:
 
     def __init__(self,
                  where: str, which: str, module: type,
-                 data_portion=1., shuffle=True,
+                 data_portion=1., shuffle=True, n_worker=1,
                  f_lazy: bool = True, l_lazy: bool = False, lazy: bool = True,
                  f_req_sha: Tuple[int, int] = (256, 256),
                  l_req_sha: Tuple[int, int] = (256, 256),
@@ -70,9 +70,9 @@ class SelfDefinedDataSet:
         # 按照数据比例切分数据集索引
         self._train_f, self._train_l = data_slicer(data_portion, shuffle, self._train_f, self._train_l)
         print('按照懒加载程度加载训练数据集……')
-        self._train_f = self.read_fea_fn(self._train_f, 16) \
+        self._train_f = self.read_fea_fn(self._train_f, n_worker) \
             if not self._f_lazy else self._train_f
-        self._train_l = self.read_lb_fn(self._train_l, 16) \
+        self._train_l = self.read_lb_fn(self._train_l, n_worker) \
             if not self._l_lazy else self._train_l
         print("进行测试索引获取……")
         self._test_f, self._test_l = [], []

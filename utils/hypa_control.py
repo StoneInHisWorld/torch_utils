@@ -31,6 +31,7 @@ class ControlPanel:
         :param log_path: 日志文件存储路径
         :param net_path: 网络文件存储路径
         """
+        # 路径检查以及路径提取
         pytools.check_path(hp_cfg_path)
         pytools.check_path(runtime_cfg_path)
         if log_path is not None:
@@ -55,6 +56,11 @@ class ControlPanel:
         self.__read_expno()
 
     def __read_expno(self):
+        """读取实验编号
+        从日志中读取最后一组实验数据的实验编号，从而推算出即将进行的所有实验组对应的编号。
+        本函数将会创建self.exp_no以及self.last_expno属性。
+        :return: None
+        """
         # 读取实验编号
         if self.__lp is not None:
             try:
@@ -66,14 +72,21 @@ class ControlPanel:
             exp_no = 1
         assert exp_no > 0, f'训练序号需为正整数，但读取到的序号为{exp_no}'
         self.exp_no = int(exp_no)
+        # 计算总共需要进行的实验组数
         with open(self.__hcp, 'r', encoding='utf-8') as cfg:
             hyper_params = json.load(cfg)
             n_exp = 1
             for v in hyper_params.values():
                 n_exp *= len(v)
+        # 最后一组实验的实验编号
         self.last_expno = self.exp_no + n_exp - 1
 
     def __iter__(self):
+        """迭代，每次提供一个训练器，包含有单次训练的超参数。
+        训练器推荐搭配用上下文管理机制来使用。
+        每次迭代会更新运行配置参数。
+        :return: None
+        """
         with open(self.__hcp, 'r', encoding='utf-8') as cfg:
             hyper_params = json.load(cfg)
             for hps in pytools.permutation([], *hyper_params.values()):
@@ -86,12 +99,16 @@ class ControlPanel:
                     f'\r---------------------------实验{self.exp_no}号/{self.last_expno}号'
                     f'---------------------------'
                 )
+                # 开启显存监控
+                if self['device'] != 'cpu':
+                    torch.cuda.memory._record_memory_history(self['cuda_memrecord'])
+                elif self['device'] == 'cpu' and self['cuda_memrecord']:
+                    warnings.warn(f'运行设备为{self["device"]}，不支持显存监控！请使用支持CUDA的处理机，或者设置cuda_memrecord为false')
                 yield self.__cur_trainer
                 self.__read_runtime_cfg()
 
     def __getitem__(self, item):
-        """
-        获取控制面板中的运行配置参数。
+        """获取控制面板中的运行配置参数。
         :param item: 运行配置参数名称
         :return: 运行配置参数值
         """
@@ -125,7 +142,6 @@ class ControlPanel:
             except RuntimeError as _:
                 print(net)
 
-    # def __plot_history(self, history, cfg, mute, ls_fn, acc_fn) -> None:
     def __plot_history(self, history, **plot_kwargs) -> None:
         # 检查参数设置
         cfg_range = ['plot', 'save', 'no']
@@ -146,8 +162,6 @@ class ControlPanel:
         )
         print('已绘制历史趋势图')
 
-    # def register_result(self, history, test_acc=None, test_ls=None,
-    #                     ls_fn=None, acc_fn=None) -> None:
     def register_result(self, history, test_log=None, **plot_kwargs) -> None:
         """根据训练历史记录进行输出，并进行日志参数的记录。
         在神经网络训练完成后，需要调用本函数将结果注册到超参数控制台。
@@ -181,6 +195,13 @@ class ControlPanel:
         self.__cur_trainer.add_logMsg(
             True, **log_msg, data_portion=self['data_portion']
         )
+        if self.device != torch.device('cpu') and self["cuda_memrecord"]:
+            self.__cur_trainer.add_logMsg(
+                True,
+                max_GPUmemory_allocated=torch.cuda.max_memory_allocated(self.device) / (1024 ** 3),
+                max_GPUmemory_reserved=torch.cuda.max_memory_reserved(self.device) / (1024 ** 3),
+            )
+            torch.cuda.reset_peak_memory_stats(self.device)
 
     @property
     def device(self):

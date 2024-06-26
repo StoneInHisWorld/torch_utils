@@ -11,9 +11,11 @@ class Trainer:
 
     sn_range = ['no', 'entire', 'state']
 
-    def __init__(self, datasource, hyper_parameters: dict, exp_no: int,
+    def __init__(self,
+                 datasource, hyper_parameters: dict, exp_no: int,
                  log_path: str = None, net_path: str = None,
-                 print_net: bool = True, save_net: str = 'no'):
+                 print_net: bool = True, save_net: str = 'no'
+                 ):
         """
         训练器。
         使用with上下文管理器以充分利用其全部功能。
@@ -34,10 +36,6 @@ class Trainer:
 
     def __enter__(self):
         self.start = time.time()
-        # print(
-        #     f'\r---------------------------实验{self.__exp_no}号'
-        #     f'---------------------------'
-        # )
         for k, v in self.__hp.items():
             print(k + ': ' + str(v))
         print(

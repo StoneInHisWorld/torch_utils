@@ -8,7 +8,9 @@ class GANLoss(nn.Module):
     GANLoss类将构造目标标签张量的行为进行了抽象，目标标签张量与输入张量同形。
     """
 
-    def __init__(self, gan_mode='lsgan', target_real_label=1.0, target_fake_label=0.0, **kwargs):
+    def __init__(self, gan_mode='lsgan',
+                 target_real_label=1.0, target_fake_label=0.0,
+                 device=torch.device('cpu'), **kwargs):
         """ 初始化GANLoss类
 
         :param gan_mode: GAN目标函数的类型，目前支持vanilla、lsgan、wgangp.
@@ -22,6 +24,7 @@ class GANLoss(nn.Module):
         self.register_buffer('real_label', torch.tensor(target_real_label))
         self.register_buffer('fake_label', torch.tensor(target_fake_label))
         self.gan_mode = gan_mode
+        # TODO:适配size_averaged
         if gan_mode == 'lsgan':
             self.loss = nn.MSELoss(**kwargs)
         elif gan_mode == 'vanilla':
@@ -31,6 +34,7 @@ class GANLoss(nn.Module):
             self.size_averaged = kwargs['size_averaged'] if 'size_averaged' in kwargs.keys() else True
         else:
             raise NotImplementedError(f'不支持的GAN模式{gan_mode}！' % gan_mode)
+        self.to(device)
 
     def get_target_tensor(self, prediction, target_is_real):
         """构造与输入同形的标签张量。
@@ -56,10 +60,6 @@ class GANLoss(nn.Module):
             target_tensor = self.get_target_tensor(prediction, target_is_real)
             loss = self.loss(prediction, target_tensor)
         elif self.gan_mode == 'wgangp':
-            # if target_is_real:
-            #     loss = -prediction.mean()
-            # else:
-            #     loss = prediction.mean()
             if target_is_real:
                 loss = -prediction
             else:

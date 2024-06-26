@@ -6,9 +6,6 @@ import numpy as np
 import torch
 from torch import nn
 
-import utils.func.torch_tools
-from utils.func import pytools as tools
-
 
 def mlp(in_features, out_features, base=2, bn_momen=0., dropout=0.) -> List[nn.Module]:
     layers = []
@@ -61,32 +58,31 @@ def linear_output(in_features: int, out_features: int,
     return layers
 
 
-class MultiOutputLayer(nn.Module):
+class MultiOutputLayer(nn.Sequential):
 
-    def __init__(self, in_features, out_or_strategy: Iterable, self_defined=False,
-                 init_meth='normal', dropout_rate=0., momentum=0.
+    def __init__(self, in_channels, out_n_channel_s,
+                 dropout_rate=0., momentum=0., get_mlp=True, regression=False
                  ) -> None:
         """
         多通道输出层。将单通道输入扩展为多通道输出。
-        :param in_features: 输入特征列数。
-        :param init_meth: 线性层或卷积层初始化方法。
-        :param self_defined: 是否使用自定义通道。若为True，则需要用户通过out_or_strategy自定义路径结构
+        :param in_channels: 输入特征列数。
         :param dropout_rate: Dropout层比例
         :param momentum: BatchNorm层动量超参数
-        :param out_or_strategy: 若self_defined为False，则该项为输出特征列数，列数的数量对应输出路径数
+        :param get_mlp: 若为True，则会构造MLP来将通道数缓慢降低为out_features.
+        :param out_n_channel_s: 输出的通道数，若为列表，则构造多个对应输出通道。
         """
-        super().__init__()
-        self.in_features = in_features
-        self._paths = [
-            nn.Sequential(*linear_output(in_features, o, dropout=dropout_rate, bn_momen=momentum))
-            for o in out_or_strategy
-        ] if not self_defined else [
-            nn.Sequential(*s)
-            for s in out_or_strategy
+        self.in_features = in_channels
+        if not isinstance(out_n_channel_s, Iterable):
+            out_n_channel_s = [out_n_channel_s]
+        paths = [
+            nn.Sequential(*linear_output(
+                in_channels, out,
+                bn_momen=momentum, get_mlp=get_mlp, dropout=dropout_rate,
+                softmax=not regression
+            ))
+            for out in out_n_channel_s
         ]
-        for i, p in enumerate(self._paths):
-            p.apply(utils.func.torch_tools.init_wb(init_meth))
-            self.add_module(f'path{i}', p)
+        super().__init__(*paths)
 
     def forward(self, features):
         outs = [m(features) for _, m in self]
@@ -94,9 +90,3 @@ class MultiOutputLayer(nn.Module):
 
     def __iter__(self):
         return self.named_children()
-
-    def __getitem__(self, item: int):
-        children = self.named_children()
-        for _ in range(item):
-            next(children)
-        return next(children)[1]  # next()得到的是（名字，模块）

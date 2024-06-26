@@ -41,7 +41,7 @@ class VGG(BasicNN):
             nn.Dropout(0.5),
             nn.Linear(4096, 4096), nn.ReLU(),
             nn.Dropout(0.5),
-            MultiOutputLayer(1024, out_features, init_meth=kwargs['init_meth']) if isinstance(out_features, Iterable)
+            MultiOutputLayer(1024, out_features) if isinstance(out_features, Iterable)
             else nn.Sequential(*linear_output(1024, out_features, softmax=not regression))
         ]
         super().__init__(*conv_blks, **kwargs)
