@@ -126,13 +126,10 @@ def split_data(dataset: DataSet or LazyDataSet,
 #         )
 
 
-def to_loader(dataset: DataSet or LazyDataSet, transit_fn, device=torch.device('cpu'),
-              batch_size: int = 1, shuffle=True,
-              sampler: Iterable = None, max_load: int = 10000,
-              max_prefetch=3, **kwargs):
+def to_loader(dataset: DataSet or LazyDataSet, transit_fn, batch_size: int = 1, shuffle=True,
+              sampler: Iterable = None, max_prefetch=3, **kwargs):
     """根据数据集类型转化为数据集加载器。生成预处理前，会将预处理程序清除。
-    :param device: DataLoader存放数据的位置。
-    :param max_load: 懒数据集加载器的最大加载量，当使用DataSet时，该参数无效
+    尚未完成懒加载数据集的代码编辑。
     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler，根据shuffle==True or False 提供乱序/顺序下标.
     :param dataset: 转化为加载器的数据集。
     :param batch_size: 每次供给的数据量。默认为整个数据集
@@ -154,10 +151,6 @@ def to_loader(dataset: DataSet or LazyDataSet, transit_fn, device=torch.device('
         # )
     elif type(dataset) == DataSet:
         dataset.pop_preprocesses()
-        # TODO：transit_fn应该在Dataset中被定义
-        # non_blocking = device.type == 'cuda' and pin_memory
-        # transit_fn = lambda batch: (batch[0].to(device, non_blocking=non_blocking),
-        #                             batch[1].to(device, non_blocking=non_blocking))
         return data_related.dataloader.DataLoader(
             dataset, transit_fn, batch_size, max_prefetch=max_prefetch,
             shuffle=shuffle, collate_fn=dataset.collate_fn, sampler=sampler,
