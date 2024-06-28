@@ -170,6 +170,8 @@ class ControlPanel:
         :return: None
         """
         log_msg = {}
+        if len(history) <= 0:
+            raise ValueError('历史记录对象为空！')
         # 输出训练部分的数据
         for name, log in history:
             if name != name.replace('train_', '训练'):
