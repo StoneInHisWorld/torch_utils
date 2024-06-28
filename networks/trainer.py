@@ -185,13 +185,39 @@ from utils.history import History
 #         Q.put(finish)
 #     except queue.Full:
 #         Q.join()
+def data_iter_subpro_impl(
+        n_epochs, data_iter, data_Q: PQueue, end_env: PEvent
+):
+    """
+    进行data_Q.put()
+    :param n_epochs:
+    :param data_iter:
+    :param data_Q: 数据供给队列，需要给定长度以节省内存
+    :return:
+    """
+    try:
+        data_iter = dill.loads(data_iter)
+        # 训练主循环
+        for epoch in range(n_epochs):
+            data_Q.put(f'{epoch + 1}/{n_epochs}')
+            for batch in data_iter:
+                data_Q.put(batch)
+            # 放置None作为世代结束标志
+        # print('data_fetching ends')
+        data_Q.put(None)
+        end_env.wait()
+        # print('data_iter_subpro_impl ends')
+    except Exception as e:
+        _, _, exc_traceback = sys.exc_info()
+        e.__traceback__ = exc_traceback
+        data_Q.put(e)
 
 
 def train_subprocess_impl(
         net,  # 数据和网络设置
         optimizer_s, lr_scheduler_s,  # 训练设置
         pbar_Q: PQueue, log_Q: PQueue, data_Q: PQueue,  # 队列
-        end_env: PEvent
+        data_end_env: PEvent, log_end_env: PEvent
 ):
     """
     进行data_Q.get()、pbar_Q.put()以及log_Q.put()
@@ -201,7 +227,7 @@ def train_subprocess_impl(
     :param pbar_Q:
     :param log_Q:
     :param data_Q:
-    :param end_env:
+    :param data_end_env:
     :return:
     """
     try:
@@ -211,8 +237,10 @@ def train_subprocess_impl(
             # 收到了None，认为是数据供给结束标志
             if item is None:
                 # 通知data_iter进程结束，通知log_process结束
-                end_env.set()
+                data_end_env.set()
                 log_Q.put(None, True)
+                # 等待记录进程结束
+                log_end_env.wait()
                 return
             # 收到了异常，则抛出
             elif isinstance(item, Exception):
@@ -259,40 +287,12 @@ def train_subprocess_impl(
         log_Q.put(e)
 
 
-def data_iter_subpro_impl(
-        n_epochs, data_iter, data_Q: PQueue, end_env: PEvent
-):
-    """
-    进行data_Q.put()
-    :param n_epochs: 
-    :param data_iter: 
-    :param data_Q: 数据供给队列，需要给定长度以节省内存
-    :return: 
-    """
-    try:
-        data_iter = dill.loads(data_iter)
-        # 训练主循环
-        for epoch in range(n_epochs):
-            data_Q.put(f'{epoch + 1}/{n_epochs}')
-            for batch in data_iter:
-                data_Q.put(batch)
-            # 放置None作为世代结束标志
-        # print('data_fetching ends')
-        data_Q.put(None)
-        end_env.wait()
-        # print('data_iter_subpro_impl ends')
-    except Exception as e:
-        _, _, exc_traceback = sys.exc_info()
-        e.__traceback__ = exc_traceback
-        data_Q.put(e)
-
-
 @torch.no_grad()
 def tv_log_subprocess_impl(
         net, valid_iter,  # 数据相关
         criterion_a,  # 计算相关
         history, lr_names, cri_los_names,  # 记录对象
-        log_Q: PQueue, pbar_Q: PQueue  # 信号量相关
+        log_Q: PQueue, pbar_Q: PQueue, end_env: PEvent  # 信号量相关
 ):
     """在多线程处理中，训练以及验证数据的记录实现。
     进行log_Q.get()
@@ -316,6 +316,7 @@ def tv_log_subprocess_impl(
             if item is None:
                 # 将结果放在进度条队列中
                 pbar_Q.put(history)
+                end_env.set()
                 # print('tv_log_subprocess_impl ends')
                 return
             # 将异常抛出
@@ -547,7 +548,8 @@ class Trainer:
         pbar_Q = PQueue()
         log_Q = PQueue(50)
         data_Q = PQueue(10)
-        end_env = PEvent()
+        data_end_env = PEvent()
+        log_end_env = PEvent()
         # with PPool(processes=3) as pool:
         # def termiante_all_subprocess(e):
         #     pbar_Q.put(None)
@@ -558,19 +560,19 @@ class Trainer:
         # pool = PPool(processes=3)
         # d_result = pool.apply_async(
         #     func=data_iter_subpro_impl,
-        #     args=(n_epochs, dill.dumps(train_iter), data_Q, end_env),
+        #     args=(n_epochs, dill.dumps(train_iter), data_Q, data_end_env),
         #     # error_callback=termiante_all_subprocess
         # )
         data_subprocess = Process(
             target=data_iter_subpro_impl,
-            args=(n_epochs, dill.dumps(train_iter), data_Q, end_env)
+            args=(n_epochs, dill.dumps(train_iter), data_Q, data_end_env)
         )
         data_subprocess.start()
         # t_result = pool.apply_async(
         #     func=train_subprocess_impl,
         #     args=(
         #         dill.dumps(net), optimizer_s, lr_scheduler_s,
-        #         pbar_Q, log_Q, data_Q, end_env
+        #         pbar_Q, log_Q, data_Q, data_end_env
         #     ),
         #     # error_callback=termiante_all_subprocess
         # )
@@ -579,7 +581,7 @@ class Trainer:
             args=(
                 dill.dumps(net),
                 optimizer_s, lr_scheduler_s,
-                pbar_Q, log_Q, data_Q, end_env
+                pbar_Q, log_Q, data_Q, data_end_env, log_end_env
             )
         )
         if valid_iter:
@@ -599,7 +601,7 @@ class Trainer:
                     dill.dumps(deepcopy(net)), dill.dumps(valid_iter),
                     criterion_a,
                     history, lr_names, criteria_names + loss_names,
-                    log_Q, pbar_Q
+                    log_Q, pbar_Q, log_end_env
                 )
             )
         else:
