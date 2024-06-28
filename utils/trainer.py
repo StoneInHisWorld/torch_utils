@@ -41,7 +41,8 @@ class Trainer:
         print(
             '\r----------------------------------------------------------------'
         )
-        return self.__hp.values()
+        # return self.__hp.values()
+        return self.__hp
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """训练器对象的退出动作。
