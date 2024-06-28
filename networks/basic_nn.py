@@ -72,7 +72,6 @@ class BasicNN(nn.Sequential):
         # 如果不指定，则需要设定默认值
         if len(ls_args) == 0:
             ls_args = ('mse', {})
-        # TODO:测试到这里
         self._ls_fn_s, self.loss_names, self.test_ls_names = self._get_ls_fn(*ls_args)
         try:
             # 设置梯度裁剪方法
@@ -209,7 +208,7 @@ class BasicNN(nn.Sequential):
                 else:
                     raise ValueError(f"无法识别的数据迭代器，其提供的长度为{len(data_iter)}")
                 # 判断是否要进行多线程训练
-                if n_workers <= 1:
+                if n_workers <= 3:
                     # 不启用多线程训练
                     if valid_iter is not None:
                         history = trainer.train_and_valid(train_iter, valid_iter)
@@ -217,7 +216,8 @@ class BasicNN(nn.Sequential):
                         history = trainer.train(train_iter)
                 else:
                     # 启用多线程训练
-                    history = trainer.train_with_threads(train_iter, valid_iter, None, n_workers)
+                    # history = trainer.train_with_threads(train_iter, valid_iter, None, n_workers)
+                    history = trainer.train_with_subprocesses(train_iter, valid_iter, None)
         # 清楚训练痕迹
         del self._optimizer_s, self.lr_names, self._scheduler_s, \
             self._ls_fn_s, self.loss_names, self.test_ls_names
@@ -255,10 +255,6 @@ class BasicNN(nn.Sequential):
         metric = Accumulator(len(criterion_a) + len(l_names) + 1)
         # 计算准确率和损失值
         for features, labels in test_iter:
-            features, labels = (
-                features.to(self.device, non_blocking=non_blocking),
-                labels.to(self.device, non_blocking=non_blocking)
-            )
             preds, ls_es = self.forward_backward(features, labels, False)
             metric.add(
                 *[criterion(preds, labels) for criterion in criterion_a],
