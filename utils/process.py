@@ -1,8 +1,8 @@
-from multiprocessing import Process as BuiltinProcess
-from multiprocessing import Pipe
+from torch.multiprocessing import Process as TORCHProcess
+from torch.multiprocessing import Pipe
 
 
-class Process(BuiltinProcess):
+class Process(TORCHProcess):
 
     def __init__(self, target, *args, **kwargs):
         self.rec_conn, self.send_conn = Pipe(duplex=False)
