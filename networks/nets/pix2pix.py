@@ -1,12 +1,9 @@
 from collections import OrderedDict
-from typing import Iterable
 
 import torch
-from torch.optim import lr_scheduler
 
 import utils.func.torch_tools as ttools
 from networks.basic_nn import BasicNN
-from networks.layers.ganloss import GANLoss
 from networks.nets.pix2pix_d import Pix2Pix_D
 from networks.nets.pix2pix_g import Pix2Pix_G
 
@@ -90,21 +87,6 @@ class Pix2Pix(BasicNN):
         G_lsfn, D_lsfn = self._ls_fn_s
         if backward:
             # 需要进行反向传播
-            # loss_es = []
-            # for requires_grad, ls_fn, optim in zip(
-            #         [True, False], self._ls_fn_s, self._optimizer_s
-            #         # [self.optimizer_D, self.optimizer_G]
-            # ):
-            #     # torch.autograd.set_detect_anomaly(True)
-            #     # 依次进行分辨器和生成器的梯度计算、损失值计算以及参数更新
-            #     self.netD.requires_grad_(requires_grad)
-            #     optim.zero_grad()
-            #     ls_es = ls_fn(X, y, pred)
-            #     # TODO：出现错误！
-            #     self._backward_impl(*ls_es)
-            #     optim.step()
-            #     loss_es.append(ls_es)
-            # loss_D, loss_G = loss_es
             # 取出优化器和损失函数
             optimizer_G, optimizer_D = self._optimizer_s
             self.netD.requires_grad_(True)
@@ -176,31 +158,20 @@ class Pix2Pix(BasicNN):
 
                 ss = 'lambda'
                 kwargs['lr_lambda'] = lambda_rule
-                # scheduler_s.append(ttools.get_lr_scheduler(
-                #     optimizer, 'lambda', lr_lambda=lambda_rule
-                # ))
             elif ss == 'step':
                 step_size = 50 if 'step_size' not in kwargs.keys() else kwargs['step_size']
                 gamma = 0.1 if 'gamma' not in kwargs.keys() else kwargs['gamma']
                 kwargs.update({'step_size': step_size, 'gamma': gamma})
-                # scheduler_s.append(ttools.get_lr_scheduler(
-                #     optimizer, 'step', **kwargs
-                # ))
             elif ss == 'plateau':
                 mode = 'min' if 'mode' not in kwargs.keys() else kwargs['mode']
                 factor = 0.2 if 'factor' not in kwargs.keys() else kwargs['factor']
                 threshold = 0.01 if 'threshold' not in kwargs.keys() else kwargs['threshold']
                 patience = 5 if 'patience' not in kwargs.keys() else kwargs['patience']
                 kwargs.update({'mode': mode, 'factor': factor, 'threshold': threshold, 'patience': patience})
-                # scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, **kwargs)
-                # scheduler_s.append(ttools.get_lr_scheduler(
-                #     optimizer, 'plateau', **kwargs
-                # ))
             elif ss == 'cosine':
                 T_max = 100 if 'T_max' not in kwargs.keys() else kwargs['T_max']
                 eta_min = 0 if 'eta_min' not in kwargs.keys() else kwargs['eta_min']
                 kwargs.update({'T_max': T_max, 'eta_min': eta_min})
-                # scheduler = lr_scheduler.CosineAnnealingLR(optimizer, **kwargs)
             scheduler_s.append(ttools.get_lr_scheduler(optimizer, ss, **kwargs))
         return scheduler_s
 
@@ -282,7 +253,6 @@ class Pix2Pix(BasicNN):
     def cGAN_ls_fn(self, **kwargs):
         # 处理关键词参数
         try:
-            # kwargs = args[0]
             gan_mode = kwargs.pop('gan_mode', 'lsgan')
             reduced_form = kwargs.pop('reduced_form', False)
             size_averaged = kwargs.pop('size_averaged', True)
@@ -301,7 +271,6 @@ class Pix2Pix(BasicNN):
         criterionGAN = ttools.get_ls_fn('gan', gan_mode=gan_mode, device=self.device, **kwargs)
         criterionL1 = ttools.get_ls_fn('l1', **kwargs)
         self.criterionGAN = lambda pred, target_is_real: criterionGAN(pred, target_is_real)
-        # self.criterionL1 = lambda X, y: torch.nn.L1Loss(**kwargs)(X, y) * lambda_l1
         self.criterionL1 = lambda X, y: criterionL1(X, y) * lambda_l1
 
         def G_ls_fn(X, y, pred):
