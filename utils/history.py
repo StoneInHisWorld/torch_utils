@@ -8,9 +8,6 @@ class History:
         for k in args:
             self.__setattr__(k, [])
 
-    # def __getitem__(self, key):
-    #     return getattr(self, key)
-
     def __getitem__(self, key):
         try:
             return getattr(self, key)
@@ -40,3 +37,10 @@ class History:
             assert hasattr(self, k), f'另一项历史记录有本项不记录的项{k}'
             self[k].extend(h)
         return self
+
+    def __len__(self):
+        """返回历史记录数据的最大长度
+        :return: 最大长度值
+        """
+        max_log = max(self, key=lambda e: len(e[1]))
+        return len(max_log[1])
