@@ -1,5 +1,6 @@
 import sys
 import traceback
+import warnings
 from copy import deepcopy
 from typing import Iterable, List
 
@@ -8,7 +9,7 @@ import torch
 from torch import nn
 from torch.multiprocessing import Event as PEvent
 from torch.multiprocessing import Process
-from torch.multiprocessing import Queue as PQueue
+from torch.multiprocessing import SimpleQueue as PQueue
 from tqdm import tqdm
 
 from utils.accumulator import Accumulator
@@ -202,22 +203,24 @@ def data_iter_subpro_impl(
             data_Q.put(f'{epoch + 1}/{n_epochs}')
             for batch in data_iter:
                 data_Q.put(batch)
+                if end_env.is_set():
+                    raise InterruptedError('获取数据时被中断！')
             # 放置None作为世代结束标志
         # print('data_fetching ends')
         data_Q.put(None)
+        print('data_iter_subpro_impl ends')
         end_env.wait()
-        # print('data_iter_subpro_impl ends')
     except Exception as e:
-        _, _, exc_traceback = sys.exc_info()
-        e.__traceback__ = exc_traceback
+        traceback.print_exc()
         data_Q.put(e)
+        print('data_iter_subpro_impl ends')
 
 
 def train_subprocess_impl(
         net,  # 数据和网络设置
         optimizer_s, lr_scheduler_s,  # 训练设置
         pbar_Q: PQueue, log_Q: PQueue, data_Q: PQueue,  # 队列
-        data_end_env: PEvent, log_end_env: PEvent
+        data_end_env: PEvent
 ):
     """
     进行data_Q.get()、pbar_Q.put()以及log_Q.put()
@@ -236,12 +239,7 @@ def train_subprocess_impl(
             item = data_Q.get()
             # 收到了None，认为是数据供给结束标志
             if item is None:
-                # 通知data_iter进程结束，通知log_process结束
-                data_end_env.set()
-                log_Q.put(None, True)
-                # 等待记录进程结束
-                log_end_env.wait()
-                return
+                break
             # 收到了异常，则抛出
             elif isinstance(item, Exception):
                 raise item
@@ -255,7 +253,8 @@ def train_subprocess_impl(
                             [param['lr'] for param in optimizer.param_groups]
                             for optimizer in optimizer_s
                         ],
-                    ], True)
+                    # ], True)
+                    ])
                 else:
                     # log队列中放入每个优化器的学习率组以及网络参数
                     log_Q.put([
@@ -264,10 +263,13 @@ def train_subprocess_impl(
                             for optimizer in optimizer_s
                         ],
                         net.state_dict()
-                    ], True)
+                    # ], True)
+                    ])
                     # 更新学习率变化器组
-                    for scheduler in lr_scheduler_s:
-                        scheduler.step()
+                    with warnings.catch_warnings():
+                        warnings.simplefilter('ignore', category=UserWarning)
+                        for scheduler in lr_scheduler_s:
+                            scheduler.step()
             # 收到了元组，则认为是数据批次
             elif isinstance(item, tuple):
                 X, y = item
@@ -276,15 +278,25 @@ def train_subprocess_impl(
                 pred, ls_es = net.forward_backward(X, y)
                 ls_es = [ls.detach() for ls in ls_es]
                 # 将网络参数、预测值、损失值、标签值作为信号放入队列中
-                log_Q.put((pred.detach(), ls_es, y.detach()), True)
+                # log_Q.put((pred.detach(), ls_es, y.detach().clone()), True)
+                log_Q.put((pred.detach(), ls_es, y.detach().clone()))
                 # 完成了一批数据的计算，更新进度条
                 pbar_Q.put(1)
             else:
                 raise ValueError(f'不识别的信号{item}！')
+        # 通知data_iter进程结束，通知log_process结束
+        # data_end_env.set()
+        # log_Q.put(None, True)
+        log_Q.put(None)
+        # 等待记录进程结束
+        # log_end_env.wait()
+        print('train_subpro_impl ends')
+        data_end_env.wait()
+        return
     except Exception as e:
-        _, _, exc_traceback = sys.exc_info()
-        e.__traceback__ = exc_traceback
+        traceback.print_exc()
         log_Q.put(e)
+        print('train_subpro_impl ends')
 
 
 @torch.no_grad()
@@ -306,19 +318,16 @@ def tv_log_subprocess_impl(
     :return: history历史记录
     """
     try:
-        net = dill.loads(net)
+        # net = dill.loads(net)
         valid_iter = dill.loads(valid_iter)
         metric = Accumulator(len(cri_los_names) + 1)
         while True:
             # 从队列中获取信号
-            item = log_Q.get(True)
+            # item = log_Q.get(True)
+            item = log_Q.get()
             # 收到了None，则认为是训练完成信号
             if item is None:
-                # 将结果放在进度条队列中
-                pbar_Q.put(history)
-                end_env.set()
-                # print('tv_log_subprocess_impl ends')
-                return
+                break
             # 将异常抛出
             elif isinstance(item, Exception):
                 raise item
@@ -361,9 +370,15 @@ def tv_log_subprocess_impl(
             else:
                 raise NotImplementedError(f'无法识别的信号{item}！')
             del item
+        # 将结果放在进度条队列中
+        pbar_Q.put(history)
+        print('tv_log_subprocess_impl ends')
+        end_env.set()
+        return
     except Exception as e:
         traceback.print_exc()
         pbar_Q.put(e)
+        print('tv_log_subprocess_impl ends')
 
 
 
@@ -518,6 +533,7 @@ class Trainer:
         net = self.module
         n_epochs = self.__n_epochs
         criterion_a = self.__criterion_a if isinstance(self.__criterion_a, list) else [self.__criterion_a]
+        progress_len = (len(train_iter) + len(valid_iter)) * n_epochs if valid_iter else len(train_iter) * n_epochs
         # 损失项
         loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
@@ -527,115 +543,82 @@ class Trainer:
         optimizer_s = self.__optimizer_s
         lr_scheduler_s = self.__lr_scheduler_s
         criterion_a = self.__criterion_a
+        # 设置历史记录对象
+        history = History(*(criteria_names + loss_names + lr_names))
+
+        print('\r正在创建队列和事件对象……', end='', flush=True)
+        # 使用进程池处理训练进程和记录进程
+        pbar_Q = PQueue()
+        log_Q = PQueue()
+        data_Q = PQueue()
+        data_end_env = PEvent()
+        # log_end_env = PEvent()
+        # 将无法pickle的对象进行特殊序列化
+        print('\r正在进行特殊序列化……', end='', flush=True)
+        train_iter = dill.dumps(train_iter)
+        valid_iter = dill.dumps(valid_iter) if valid_iter else None
+        # net_copy = dill.dumps(deepcopy(net))
+        net_copy = deepcopy(net)
+        net = dill.dumps(net)
+        print('\r子进程创建准备完毕')
 
         # 设置进度条
         if pbar is None:
             # 如果调用函数不提供进度条，则创建一个新的进度条
-            if valid_iter is not None:
-                pbar = tqdm(total=(len(train_iter) + len(valid_iter)) * n_epochs, unit='批', position=0,
-                            desc=f'训练中……', mininterval=1)
-            else:
-                pbar = tqdm(total=(len(train_iter)) * n_epochs, unit='批', position=0,
-                            desc=f'训练中……', mininterval=1)
-
-        # with multiprocessing.Manager() as manager:
-        # 设置历史记录对象和累加对象
-        history = History(*(criteria_names + loss_names + lr_names))
-        # 使用进程池处理训练进程和记录进程
-        # pbar_Q = manager.Queue()
-        # log_Q = manager.Queue(50)
-        # data_Q = manager.Queue(10)
-        pbar_Q = PQueue()
-        log_Q = PQueue(50)
-        data_Q = PQueue(10)
-        data_end_env = PEvent()
-        log_end_env = PEvent()
-        # with PPool(processes=3) as pool:
-        # def termiante_all_subprocess(e):
-        #     pbar_Q.put(None)
-        #     log_Q.put(None)
-        #     data_Q.put(None)
-        #     print(e)
-        #
-        # pool = PPool(processes=3)
-        # d_result = pool.apply_async(
-        #     func=data_iter_subpro_impl,
-        #     args=(n_epochs, dill.dumps(train_iter), data_Q, data_end_env),
-        #     # error_callback=termiante_all_subprocess
-        # )
+            pbar = tqdm(total=progress_len, unit='批', desc='训练中……', mininterval=1)
+        # 生成子进程
         data_subprocess = Process(
             target=data_iter_subpro_impl,
-            args=(n_epochs, dill.dumps(train_iter), data_Q, data_end_env)
+            args=(n_epochs, train_iter, data_Q, data_end_env)
         )
-        data_subprocess.start()
-        # t_result = pool.apply_async(
-        #     func=train_subprocess_impl,
-        #     args=(
-        #         dill.dumps(net), optimizer_s, lr_scheduler_s,
-        #         pbar_Q, log_Q, data_Q, data_end_env
-        #     ),
-        #     # error_callback=termiante_all_subprocess
-        # )
         train_subprocess = Process(
             target=train_subprocess_impl,
             args=(
-                dill.dumps(net),
+                net,
                 optimizer_s, lr_scheduler_s,
-                pbar_Q, log_Q, data_Q, data_end_env, log_end_env
+                pbar_Q, log_Q, data_Q, data_end_env
             )
         )
         if valid_iter:
-            # l_result = pool.apply_async(
-            #     func=tv_log_subprocess_impl,
-            #     args=(
-            #         dill.dumps(deepcopy(net)), dill.dumps(valid_iter),
-            #         criterion_a,
-            #         history, lr_names, criteria_names + loss_names,
-            #         log_Q, pbar_Q
-            #     ),
-            #     # error_callback=termiante_all_subprocess
-            # )
             log_subprocess = Process(
                 target=tv_log_subprocess_impl,
                 args=(
-                    dill.dumps(deepcopy(net)), dill.dumps(valid_iter),
+                    net_copy, valid_iter,
                     criterion_a,
                     history, lr_names, criteria_names + loss_names,
-                    log_Q, pbar_Q, log_end_env
+                    log_Q, pbar_Q, data_end_env
                 )
             )
         else:
             raise NotImplementedError('暂未编写单训练过程')
         # 实时监控各项任务的执行情况
-        train_subprocess.start()
-        log_subprocess.start()
-        while True:
-            item = pbar_Q.get(True)
-            if item is None:
-                break
-            elif isinstance(item, Exception):
-                data_subprocess.terminate()
-                train_subprocess.terminate()
-                log_subprocess.terminate()
-                raise InterruptedError('训练过程中某处触发了异常，请根据上条Trackback信息进行排查！')
-            elif isinstance(item, int):
-                pbar.update(item)
-            elif isinstance(item, str):
-                pbar.set_description(item)
-            elif isinstance(item, History):
-                history = item
-                break
-            else:
-                raise ValueError(f'不识别的信号{item}')
-
-        train_subprocess.join()
-        log_subprocess.join()
-
-        # t_result.successful()
-        # l_result.successful()
-        # d_result.successful()
-        # pool.close()
-        # pool.join()
+        try:
+            data_subprocess.start()
+            train_subprocess.start()
+            log_subprocess.start()
+            while True:
+                # item = pbar_Q.get(True)
+                item = pbar_Q.get()
+                if item is None:
+                    break
+                elif isinstance(item, Exception):
+                    raise InterruptedError('训练过程中某处触发了异常，请根据上条Trackback信息进行排查！')
+                elif isinstance(item, int):
+                    pbar.update(item)
+                elif isinstance(item, str):
+                    pbar.set_description(item)
+                elif isinstance(item, History):
+                    history = item
+                    break
+                else:
+                    raise ValueError(f'不识别的信号{item}')
+            data_subprocess.join()
+            train_subprocess.join()
+            log_subprocess.join()
+        except Exception as e:
+            data_subprocess.terminate()
+            train_subprocess.terminate()
+            log_subprocess.terminate()
         pbar.close()
         return history
 
