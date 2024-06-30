@@ -79,6 +79,7 @@ class BasicNN(nn.Sequential):
         except AttributeError:
             self._gradient_clipping = None
         self.is_train = True
+        return self._optimizer_s, self._scheduler_s, self._ls_fn_s
 
     def _get_optimizer(self, *args) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
         """获取网络优化器。
@@ -438,10 +439,27 @@ class BasicNN(nn.Sequential):
         ls[0].backward()
 
     def get_clone_function(self):
-        return self.__class__.__init__, {
-            k: self._construction_variables[k]
-            for k in self._construction_signature
-        }
+        parameter_group = {name: param for name, param in self._construction_parameters.items()}
+        args_group = [
+            k for k, _ in filter(
+                lambda p: p[1].kind == p[1].POSITIONAL_OR_KEYWORD or
+                          p[1].kind == p[1].POSITIONAL_ONLY or
+                          p[1].kind == p[1].VAR_POSITIONAL,
+                parameter_group.items()
+            )
+        ]
+        kwargs_group = [
+            k for k, _ in filter(
+                lambda p: p[1].kind == p[1].KEYWORD_ONLY or p[1].kind == p[1].VAR_KEYWORD,
+                parameter_group.items()
+            )
+        ]
+        kwargs = {}
+        for k in kwargs_group:
+            kwargs.update(self._construction_variables[k])
+        return [
+            self._construction_variables[k] for k in args_group
+        ], kwargs
 
     def __str__(self):
         return '网络结构：\n' + super().__str__() + '\n所处设备：' + str(self._device)
