@@ -1,6 +1,7 @@
 from collections import OrderedDict
 
 import torch
+import inspect
 
 import utils.func.torch_tools as ttools
 from networks.basic_nn import BasicNN
@@ -36,6 +37,8 @@ class Pix2Pix(BasicNN):
         :param direction: 方向，'AtoB'意为从特征集预测到标签集，'BtoA'意为从标签集预测到特征集
         :param kwargs: BasicNN关键词参数
         """
+        _construction_variables = locals()
+        _construction_signature = list(inspect.signature(self.__init__).parameters)
         self.direction = direction
         netG = Pix2Pix_G(*g_args, **g_kwargs)
 
@@ -48,6 +51,9 @@ class Pix2Pix(BasicNN):
             ]), **kwargs)
         else:
             super(Pix2Pix, self).__init__(netG, **kwargs)
+
+        self._construction_variables = _construction_variables
+        self._construction_signature = _construction_signature
 
     def forward(self, input):
         """前向传播

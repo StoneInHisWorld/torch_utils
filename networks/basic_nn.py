@@ -437,6 +437,12 @@ class BasicNN(nn.Sequential):
     def _backward_impl(self, *ls):
         ls[0].backward()
 
+    def get_clone_function(self):
+        return self.__class__.__init__, {
+            k: self._construction_variables[k]
+            for k in self._construction_signature
+        }
+
     def __str__(self):
         return '网络结构：\n' + super().__str__() + '\n所处设备：' + str(self._device)
 

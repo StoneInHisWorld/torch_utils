@@ -301,7 +301,7 @@ def train_subprocess_impl(
 
 @torch.no_grad()
 def tv_log_subprocess_impl(
-        net, valid_iter,  # 数据相关
+        net_init, net_init_paras, valid_iter,  # 数据相关
         criterion_a,  # 计算相关
         history, lr_names, cri_los_names,  # 记录对象
         log_Q: PQueue, pbar_Q: PQueue, end_env: PEvent  # 信号量相关
@@ -318,7 +318,11 @@ def tv_log_subprocess_impl(
     :return: history历史记录
     """
     try:
-        # net = dill.loads(net)
+        print('\r正在创建模型副本', end='', flush=True)
+        net = net_init(net_init_paras)
+        print('\r模型副本创建完成', end='', flush=True)
+        net.eval()
+        # 创建训练模型的副本
         valid_iter = dill.loads(valid_iter)
         metric = Accumulator(len(cri_los_names) + 1)
         while True:
@@ -558,7 +562,8 @@ class Trainer:
         train_iter = dill.dumps(train_iter)
         valid_iter = dill.dumps(valid_iter) if valid_iter else None
         # net_copy = dill.dumps(deepcopy(net))
-        net_copy = deepcopy(net)
+        # net_copy = deepcopy(net)
+        net_init, net_init_paras = net.get_clone_function()
         net = dill.dumps(net)
         print('\r子进程创建准备完毕')
 
@@ -583,7 +588,7 @@ class Trainer:
             log_subprocess = Process(
                 target=tv_log_subprocess_impl,
                 args=(
-                    net_copy, valid_iter,
+                    net_init, net_init_paras, valid_iter,
                     criterion_a,
                     history, lr_names, criteria_names + loss_names,
                     log_Q, pbar_Q, data_end_env
@@ -591,11 +596,11 @@ class Trainer:
             )
         else:
             raise NotImplementedError('暂未编写单训练过程')
+        process_pool = [data_subprocess, train_subprocess, log_subprocess]
         # 实时监控各项任务的执行情况
         try:
-            data_subprocess.start()
-            train_subprocess.start()
-            log_subprocess.start()
+            for p in process_pool:
+                p.start()
             while True:
                 # item = pbar_Q.get(True)
                 item = pbar_Q.get()
@@ -612,13 +617,13 @@ class Trainer:
                     break
                 else:
                     raise ValueError(f'不识别的信号{item}')
-            data_subprocess.join()
-            train_subprocess.join()
-            log_subprocess.join()
+            for p in process_pool:
+                p.join()
         except Exception as e:
-            data_subprocess.terminate()
-            train_subprocess.terminate()
-            log_subprocess.terminate()
+            for p in process_pool:
+                if p:
+                    p.terminate()
+            raise e
         pbar.close()
         return history
 
