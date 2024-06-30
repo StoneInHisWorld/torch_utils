@@ -7,7 +7,7 @@ from torchsummary import summary
 
 import utils.func.log_tools as ltools
 from utils.func import pytools
-from utils.trainer import Trainer
+from utils.experiment import Experiment
 
 
 def init_log(path):
@@ -91,7 +91,7 @@ class ControlPanel:
             hyper_params = json.load(cfg)
             for hps in pytools.permutation([], *hyper_params.values()):
                 hyper_params = {k: v for k, v in zip(hyper_params.keys(), hps)}
-                self.__cur_trainer = Trainer(
+                self.__cur_exp = Experiment(
                     self.__datasource, hyper_params, self.exp_no,
                     self.__lp, self.__np, self['print_net'], self['save_net']
                 )
@@ -104,7 +104,7 @@ class ControlPanel:
                     torch.cuda.memory._record_memory_history(self['cuda_memrecord'])
                 elif self['device'] == 'cpu' and self['cuda_memrecord']:
                     warnings.warn(f'运行设备为{self["device"]}，不支持显存监控！请使用支持CUDA的处理机，或者设置cuda_memrecord为false')
-                yield self.__cur_trainer
+                yield self.__cur_exp
                 self.__read_runtime_cfg()
 
     def __getitem__(self, item):
@@ -194,11 +194,11 @@ class ControlPanel:
         self.__plot_history(
             history, **plot_kwargs
         )
-        self.__cur_trainer.add_logMsg(
+        self.__cur_exp.add_logMsg(
             True, **log_msg, data_portion=self['data_portion']
         )
         if self.device != torch.device('cpu') and self["cuda_memrecord"]:
-            self.__cur_trainer.add_logMsg(
+            self.__cur_exp.add_logMsg(
                 True,
                 max_GPUmemory_allocated=torch.cuda.max_memory_allocated(self.device) / (1024 ** 3),
                 max_GPUmemory_reserved=torch.cuda.max_memory_reserved(self.device) / (1024 ** 3),

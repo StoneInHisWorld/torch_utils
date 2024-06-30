@@ -7,7 +7,7 @@ import utils.func.log_tools as ltools
 from utils.func import pytools
 
 
-class Trainer:
+class Experiment:
 
     sn_range = ['no', 'entire', 'state']
 
