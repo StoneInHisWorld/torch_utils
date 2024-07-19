@@ -1,0 +1,24 @@
+name: base
+channels:
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main/
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/
+  - defaults
+dependencies:
+  - pip
+  - python
+  - tqdm
+  - wheel
+  - pip:
+      - dill
+      - matplotlib
+      - numpy
+      - pandas
+      - pillow
+      - prefetch-generator
+      - scikit-image
+      - scipy
+      - torch==2.1.2+cu121
+      - torchsummary
+      - torchvision==0.16.2+cu121
+      - tornado==6.4
