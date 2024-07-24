@@ -206,6 +206,10 @@ class ControlPanel:
             torch.cuda.reset_peak_memory_stats(self.device)
 
     @property
+    def runtime_cfg(self):
+        return self.cfg_dict
+
+    @property
     def device(self):
         return torch.device(self['device'])
 
