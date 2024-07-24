@@ -4,7 +4,8 @@ import torch
 import inspect
 
 import utils.func.torch_tools as ttools
-from networks.basic_nn import BasicNN
+# from networks.basic_nn import BasicNN
+from networks.new_basic_nn import BasicNN
 from networks.nets.pix2pix_d import Pix2Pix_D
 from networks.nets.pix2pix_g import Pix2Pix_G
 
@@ -63,38 +64,16 @@ class Pix2Pix(BasicNN):
         """
         return self.netG(input)
 
-    # def __backward_G(self, X, y, pred, backward=True):
-    #     """计算生成器的GAN损失值和L1损失值"""
-    #     ls_es = self._ls_fn_s[0](X, y, pred)
-    #     if backward:
-    #         try:
-    #             ls_es.backward()
-    #             return ls_es.item()
-    #         except:
-    #             ls_es[0].backward()
-    #     return [ls.item() for ls in ls_es]
-    #
-    # def __backward_D(self, X, y, pred, backward=True):
-    #     """计算分辨器的GANLoss"""
-    #     ls_es = self._ls_fn_s[1](X, y, pred)
-    #     if backward:
-    #         try:
-    #             ls_es.backward()
-    #             return ls_es.item()
-    #         except:
-    #             ls_es[0].backward()
-    #     return [ls.item() for ls in ls_es]
-
     def forward_backward(self, X, y, backward=True):
         # 前向传播
         AtoB = self.direction == 'AtoB'
         X, y = [X, y] if AtoB else [y, X]
         pred = self(X)
-        G_lsfn, D_lsfn = self._ls_fn_s
+        G_lsfn, D_lsfn = self.ls_fn_s
         if backward:
             # 需要进行反向传播
             # 取出优化器和损失函数
-            optimizer_G, optimizer_D = self._optimizer_s
+            optimizer_G, optimizer_D = self.optimizer_s
             self.netD.requires_grad_(True)
             optimizer_D.zero_grad()  # set D's gradients to zero
             loss_D = D_lsfn(X, y, pred)
@@ -152,7 +131,7 @@ class Pix2Pix(BasicNN):
         See https://pytorch.org/docs/stable/optim.html for more details.
         """
         scheduler_s = []
-        for (ss, kwargs), optimizer in zip(args, self._optimizer_s):
+        for (ss, kwargs), optimizer in zip(args, self.optimizer_s):
             if ss == 'linear':
                 epoch_count = 1 if 'epoch_count' not in kwargs.keys() else kwargs['epoch_count']
                 n_epochs_decay = 100 if 'n_epochs_decay' not in kwargs.keys() else kwargs['n_epochs_decay']
@@ -189,62 +168,8 @@ class Pix2Pix(BasicNN):
         ls_fns, loss_names, test_ls_names = [], [], []
         supported = ['pcc', 'cGAN']
         for (ss, kwargs) in args:
+            # 根据ss判断损失函数类型
             if ss == 'cGAN':
-                # # 处理关键词参数
-                # try:
-                #     kwargs = args[0]
-                #     gan_mode = kwargs.pop('gan_mode', 'lsgan')
-                #     reduced_form = kwargs.pop('reduced_form', False)
-                #     size_averaged = kwargs.pop('size_averaged', True)
-                #     lambda_l1 = kwargs.pop('lambda_l1', 100.)
-                # except IndexError:
-                #     # 如果没有传递参数
-                #     gan_mode = 'lsgan'
-                #     reduced_form = False
-                #     lambda_l1 = 100.
-                #     kwargs = {}
-                #     size_averaged = True
-                # # 定义损失函数
-                # # criterionGAN = GANLoss(gan_mode, **kwargs).to(self.device)
-                # criterionGAN = ttools.get_ls_fn('gan', gan_mode=gan_mode, device=self.device, **kwargs)
-                # criterionL1 = ttools.get_ls_fn('l1', **kwargs)
-                # self.criterionGAN = lambda pred, target_is_real: criterionGAN(pred, target_is_real)
-                # # self.criterionL1 = lambda X, y: torch.nn.L1Loss(**kwargs)(X, y) * lambda_l1
-                # self.criterionL1 = lambda X, y: criterionL1(X, y) * lambda_l1
-                #
-                # def G_ls_fn(X, y, pred):
-                #     # 首先，G(A)需要骗过分辨器
-                #     fake_AB = torch.cat((X, pred), 1)
-                #     pred_fake = self.netD(fake_AB)
-                #     gan_ls = self.criterionGAN(pred_fake, True)
-                #     l1_ls = self.criterionL1(pred, y)
-                #     if not size_averaged:
-                #         gan_ls = gan_ls.mean(dim=list(range(len(pred_fake.shape)))[1:])
-                #         l1_ls = l1_ls.mean(dim=list(range(len(pred.shape)))[1:])
-                #     if reduced_form:
-                #         return gan_ls + l1_ls
-                #     else:
-                #         return gan_ls + l1_ls, gan_ls, l1_ls
-                #
-                # def D_ls_fn(X, y, pred):
-                #     fake_AB = torch.cat((X, pred), 1)
-                #     pred_fake = self.netD(fake_AB.detach())
-                #     fake_ls = self.criterionGAN(pred_fake, False)
-                #     # 真实值
-                #     real_AB = torch.cat((X, y), 1)
-                #     pred_real = self.netD(real_AB)
-                #     real_ls = self.criterionGAN(pred_real, True)
-                #     # 组合损失值并计算梯度，0.5是两个预测值的权重
-                #     ls = (fake_ls + real_ls) * 0.5
-                #     if reduced_form:
-                #         return ls
-                #     else:
-                #         return ls, real_ls, fake_ls
-                #
-                # ls_fn = D_ls_fn, G_ls_fn
-                # loss_names = ['G_LS', 'D_LS'] if reduced_form else \
-                #     ['G_LS', 'G_GAN', 'G_L1', 'D_LS', 'D_real', 'D_fake']
-                # test_ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_L1']
                 ls_fn, ls_names, tls_names = self.cGAN_ls_fn(**kwargs)
             elif ss == 'pcc':
                 ls_fn, ls_names, tls_names = self.pcc_ls_fn(**kwargs)
@@ -273,7 +198,6 @@ class Pix2Pix(BasicNN):
         # GAN不接受size_averaged参数
         if not size_averaged and 'reduction' not in kwargs.keys():
             kwargs['reduction'] = 'none'
-        # criterionGAN = GANLoss(gan_mode, **kwargs).to(self.device)
         criterionGAN = ttools.get_ls_fn('gan', gan_mode=gan_mode, device=self.device, **kwargs)
         criterionL1 = ttools.get_ls_fn('l1', **kwargs)
         self.criterionGAN = lambda pred, target_is_real: criterionGAN(pred, target_is_real)
