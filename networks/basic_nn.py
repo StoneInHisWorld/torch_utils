@@ -66,12 +66,12 @@ class BasicNN(nn.Sequential):
         if ls_args is None:
             ls_args = []
         if len(o_args) == 0:
-            o_args = ('adam', {})
+            o_args = [('adam', {}), ]
         self._optimizer_s, self.lr_names = self._get_optimizer(*o_args)
         self._scheduler_s = self._get_lr_scheduler(*l_args)
         # 如果不指定，则需要设定默认值
         if len(ls_args) == 0:
-            ls_args = ('mse', {})
+            ls_args = [('mse', {}), ]
         self._ls_fn_s, self.loss_names, self.test_ls_names = self._get_ls_fn(*ls_args)
         try:
             # 设置梯度裁剪方法
