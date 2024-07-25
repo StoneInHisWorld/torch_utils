@@ -33,10 +33,14 @@ class net_builder:
     def __call__(self, func):
 
         def wrapper(*args, **kwargs):
-            _, trainer, net_class, n_init_args, n_init_kwargs, *args = args
-            # 构造网络对象并交由trainer持有
-            net = self.__build(net_class, n_init_args, n_init_kwargs, trainer)
-            setattr(trainer, 'module', net)
+            _, trainer, *args = args
+            if trainer.module is None:
+                # 构造网络对象并交由trainer持有
+                net_class, n_init_args, n_init_kwargs, *args = args
+                net = self.__build(net_class, n_init_args, n_init_kwargs, trainer)
+                setattr(trainer, 'module', net)
+            else:
+                net = trainer.module
             args = trainer, net, *args
             args = func(_, *args, **kwargs)
 
@@ -76,6 +80,8 @@ class net_builder:
 
 class prepare:
 
+    k_fold = False
+
     def __init__(self, what='train'):
         """函数准备装饰器，进行不同类型的函数准备，请使用@prepare()进行调用
 
@@ -105,7 +111,7 @@ class prepare:
                 args = self.__prepare_valid(*args)
                 # 执行本体函数
                 with torch.no_grad():
-                     result = func(*args, **kwargs)
+                    result = func(*args, **kwargs)
             elif self.what == 'test':
                 args = self.__prepare_test(*args)
                 # 执行本体函数
@@ -120,18 +126,24 @@ class prepare:
 
     @net_builder()
     def __prepare_train(self, *args):
-        trainer, net, prepare_args, *args = args
-        # 训练前准备
-        self.optimizer_s, self.scheduler_s, _ = net.prepare_training(*prepare_args)
+        trainer, net, *args = args
+        if not net.ready:
+            # 训练前准备
+            prepare_args, *args = args
+            net.prepare_training(*prepare_args)
         trainer.pbar.set_description('训练中……')
-        args = trainer, self.optimizer_s, self.scheduler_s, *args
+        # args = trainer, net.optimizer_s, net.scheduler_s, *args
+        args = trainer, *args
         return args
 
     def __after_train(self, trainer):
+        if self.k_fold:
+            return
         net = trainer.module
         # 清除训练痕迹
         del net.optimizer_s, net.scheduler_s, net.ls_fn_s, \
             net.lr_names, net.loss_names, net.test_ls_names
+        net.ready = False
 
     @staticmethod
     def __prepare_valid(*args):
@@ -437,20 +449,20 @@ class Trainer:
 
     def train(self, data_iter) -> History:
         """训练公共接口，根据训练器自身参数，以及接口接收参数自动判断进行的训练类型
-        :param prepare_args: 训练准备参数，请指定为(优化器训练参数，学习率规划器参数，损失函数创建参数)
-        :param criterion_a: 训练所用评价指标函数
+
         :param data_iter: 训练所用数据迭代器
-        :param hps: 训练所需超参数
-        :param runtime_cfg: 训练所需运行配置参数
         :return:
         """
         n_workers = self.runtime_cfg['n_workers']
         n_epochs = self.hps['epochs']
+        k = self.hps['k']
         # 判断是否是k折训练
-        if self.hps['k'] > 1:
-            raise NotImplementedError('k折训练尚未实现！')
-            # 是否进行k-折训练
-            # history = self.__train_with_k_fold(data_iter, k, n_workers)
+        if k > 1:
+            pbar_len = k * n_epochs
+            train_fn, train_args = self.__train_with_k_fold, (
+                self.module_class, self.__m_init_args, self.__m_init_kwargs,
+                self.prepare_args, data_iter
+            )
         else:
             # 提取训练迭代器和验证迭代器
             data_iter = list(data_iter)
@@ -487,16 +499,6 @@ class Trainer:
         self.pbar.close()
         return history
 
-    # def test(self, test_iter) -> dict:
-    #     """测试公共接口，调用测试函数进行测试
-    #     取对象构造时传入的prepare_args的2号位作为测试所用损失函数构造位置参数
-    #     :param test_iter: 测试数据迭代器
-    #     :return: 测试记录对象
-    #     """
-    #     return self.__test(
-    #         self.module, self.criterion_a, self.prepare_args[2], test_iter
-    #     )
-
     @prepare('test')
     def test(self, test_iter) -> dict:
         """测试实现，取出迭代器中的下一batch数据，预测后计算准确度和损失
@@ -509,10 +511,6 @@ class Trainer:
 
         其中ls_fn_args用于网络损失函数创建。损失函数会在函数运行完后进行销毁。
 
-        :param net: 测试所用网络模型对象
-        :param criterion_a: 计算准确度所使用的函数，该函数需要求出整个batch的准确率之和。
-            签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
-        :param prefix: 测试记录项前缀
         :param test_iter: 测试数据迭代器
         :return: 测试记录
         """
@@ -556,9 +554,7 @@ class Trainer:
         ) -> dict
 
         @prepare装饰器会生成prefix前缀传递给本函数
-        :param net: 测试所用网络对象
-        :param pbar: 测试所用进度条
-        :param criterion_a: 测试
+
         :param valid_iter: 测试所用数据迭代器
         :return: 测试记录字典
         """
@@ -696,13 +692,8 @@ class Trainer:
         pbar.close()
         return history
 
-    # @staticmethod
-    # @net_builder()
     @prepare('train')
-    def __train_and_valid(self,
-                          optimizer_s, scheduler_s,
-                          train_iter, valid_iter
-                          ) -> History:
+    def __train_and_valid(self, train_iter, valid_iter) -> History:
         """神经网络训练和验证实现函数。
 
         本函数的实际签名为：
@@ -717,8 +708,6 @@ class Trainer:
         module_class、__m_init_args、__m_init_kwargs会被传输给net_builder作为神经网络创建参数，
         prepare_args用于给prepare装饰器进行网络训练准备
 
-        :param optimizer_s: 优化器组合
-        :param scheduler_s: 学习率规划期组合
         :param train_iter: 训练数据供给迭代器
         :param valid_iter: 验证数据供给迭代器
         :return: 训练数据记录`History`对象
@@ -728,6 +717,8 @@ class Trainer:
         net = self.module
         criterion_a = self.criterion_a
         n_epochs = self.hps['epochs']
+        optimizer_s = net.optimizer_s
+        scheduler_s = net.scheduler_s
         # 损失项
         loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
@@ -825,30 +816,37 @@ class Trainer:
             pbar.close()
         return history
 
-    def __train_with_k_fold(self, train_loaders_iter,
-                            k: int = 10, n_workers=1) -> History:
+    @prepare('train')
+    def __train_with_k_fold(self, train_loaders_iter) -> History:
         """
         使用k折验证法进行模型训练
-        :param n_workers: 使用的处理机数量
         :param train_loaders_iter: 数据加载器供给，提供k折验证的每一次训练所需训练集加载器、验证集加载器
-        :param k: 将数据拆分成k折，每一折轮流作验证集，余下k-1折作训练集
         :return: k折训练记录，包括每一折训练时的('train_l', 'train_acc', 'valid_l', 'valid_acc')
         """
+        # 提取训练器参数
+        n_workers = self.runtime_cfg['n_workers']
+        n_epochs = self.hps['epochs']
+        k = self.hps['k']
+        pbar = self.pbar
+        # 根据训练器参数调用相应的训练函数
+        prepare.k_fold = True
         k_fold_history = None
-        with tqdm(total=k * self.__n_epochs, position=0, leave=True, unit='批', mininterval=1) as pbar:
-            for i, (train_iter, valid_iter) in enumerate(train_loaders_iter):
-                pbar.set_description(f'\r训练折{pbar.n}……')
-                # 计算训练批次数
-                pbar.total = k * self.__n_epochs * (len(train_iter) + len(valid_iter))
-                if n_workers <= 1:
-                    history = self.__train_and_valid(train_iter, valid_iter, pbar)
-                else:
-                    history = self.__train_with_subprocesses(train_iter, valid_iter, pbar)
-                if k_fold_history is None:
-                    k_fold_history = history
-                else:
-                    k_fold_history += history
-                pbar.set_description(f'\r折{i + 1}训练完毕')
+        for i, (train_iter, valid_iter) in enumerate(train_loaders_iter):
+            pbar.set_description(f'\r训练折{i + 1}……')
+            # 计算训练批次数
+            pbar.total = k * n_epochs * (len(train_iter) + len(valid_iter))
+            if n_workers <= 3:
+                history = self.__train_and_valid(train_iter, valid_iter)
+            else:
+                raise NotImplementedError('多进程训练尚未实现！')
+                # history = self.__train_with_subprocesses(train_iter, valid_iter, pbar)
+            if k_fold_history is None:
+                k_fold_history = history
+            else:
+                k_fold_history += history
+            pbar.set_description(f'\r折{i + 1}训练完毕')
+        # 去掉prepare中的k_fold标记以提示prepare消除训练痕迹
+        prepare.k_fold = False
         return k_fold_history
 
     def __deal_with_hook(self, net: Iterable[nn.Module]):
