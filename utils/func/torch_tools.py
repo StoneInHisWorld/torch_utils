@@ -112,8 +112,9 @@ def get_ls_fn(ls_str: str = "mse", **kwargs):
 
 
 def init_wb(func_str: str = "xavier", **kwargs):
-    """
-    返回初始化权重、偏移参数的函数。
+    """获取初始化方法
+    根据func_str返回初始化权重、偏移参数的函数，返回的是方法局部函数。
+
     :param func_str: 指定初始化方法的字符串
     :return: 包装好可直接调用的初始化函数
     """
