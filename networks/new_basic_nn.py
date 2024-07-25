@@ -27,7 +27,7 @@ class BasicNN(nn.Sequential):
         device = torch.device('cpu') if 'device' not in kwargs.keys() else kwargs['device']
         with_checkpoint = False if 'with_checkpoint' not in kwargs.keys() else kwargs['with_checkpoint']
         init_kwargs = {} if 'init_kwargs' not in kwargs.keys() else kwargs['init_kwargs']
-        is_train = True if 'is_train' not in kwargs.keys() else kwargs['is_train']
+        # is_train = False if 'is_train' not in kwargs.keys() else kwargs['is_train']
         # 初始化各模块
         super(BasicNN, self).__init__(*args)
         self._init_submodules(init_meth, **init_kwargs)
@@ -35,7 +35,7 @@ class BasicNN(nn.Sequential):
         self.scheduler_s = None
         self.ls_fn_s = None
         # self._gradient_clipping = None
-        self.is_train = is_train
+        self.ready = False
         self.apply(lambda m: m.to(device))
 
         self._device = device
@@ -73,7 +73,7 @@ class BasicNN(nn.Sequential):
             self._gradient_clipping = self._gradient_clipping
         except AttributeError:
             self._gradient_clipping = None
-        self.is_train = True
+        self.ready = True
         return self.optimizer_s, self.scheduler_s, self.ls_fn_s
 
     def _get_optimizer(self, *args) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
