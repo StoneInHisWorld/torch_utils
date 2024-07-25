@@ -5,7 +5,7 @@ import inspect
 
 import utils.func.torch_tools as ttools
 # from networks.basic_nn import BasicNN
-from networks.new_basic_nn import BasicNN
+from networks.basic_nn import BasicNN
 from networks.nets.pix2pix_d import Pix2Pix_D
 from networks.nets.pix2pix_g import Pix2Pix_G
 
