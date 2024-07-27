@@ -7,7 +7,6 @@ from networks.layers.identity import Identity
 
 
 class Pix2Pix_D(BasicNN):
-
     required_shape = (256, 256)
 
     def __init__(self, input_nc, ndf, net_type='basic',
@@ -79,7 +78,7 @@ class Pix2Pix_D(BasicNN):
         :param n_layers: 分辨器的卷积层数量
         :param norm_layer: 正则化层类型
         """
-        if type(norm_layer) == functools.partial:  # 二维批量正则层拥有仿射变量，无需使用偏置
+        if isinstance(norm_layer, functools.partial):  # 二维批量正则层拥有仿射变量，无需使用偏置
             use_bias = norm_layer.func == nn.InstanceNorm2d
         else:
             use_bias = norm_layer == nn.InstanceNorm2d
@@ -91,7 +90,7 @@ class Pix2Pix_D(BasicNN):
             nn.LeakyReLU(0.2, True)
         ]
         nf_mult = 1
-        nf_mult_prev = 1
+        # nf_mult_prev = 1
         for n in range(1, n_layers):  # 逐渐增加过滤层
             nf_mult_prev = nf_mult
             nf_mult = min(2 ** n, 8)
@@ -121,7 +120,7 @@ class Pix2Pix_D(BasicNN):
         :param ndf: 末卷积层的过滤层数
         :param norm_layer: 正则化层类型
         """
-        if type(norm_layer) == functools.partial:  # 二维批量正则层拥有仿射变量，无需使用偏置
+        if isinstance(norm_layer, functools.partial):  # 二维批量正则层拥有仿射变量，无需使用偏置
             use_bias = norm_layer.func == nn.InstanceNorm2d
         else:
             use_bias = norm_layer == nn.InstanceNorm2d
@@ -136,5 +135,3 @@ class Pix2Pix_D(BasicNN):
         ]
 
         return layers
-
-
