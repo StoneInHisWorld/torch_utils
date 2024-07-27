@@ -4,7 +4,7 @@ from typing import Iterable, Tuple, Sized, List, Callable
 
 import torch
 
-from data_related.data_related import data_slicer
+from data_related.dataset_operation import data_slicer
 from data_related.datasets import LazyDataSet, DataSet
 from utils.thread import Thread
 

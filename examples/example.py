@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 import utils.func.torch_tools
-from data_related import data_related as dr
+from data_related import dataset_operation as dr
 from networks.nets.wzynet_essay import WZYNetEssay
 from utils.func import pytools
 from data_related.datasets import DataSet
