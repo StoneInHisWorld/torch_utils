@@ -70,11 +70,13 @@ class BasicNN(nn.Sequential):
         if ls_args is None:
             ls_args = []
         if len(o_args) == 0:
+            warnings.warn('优化器参数不足以构造足够的优化器，将用默认的Adam优化器进行填充！', UserWarning)
             o_args = [('adam', {}), ]
         self.optimizer_s, self.lr_names = self._get_optimizer(*o_args)
         self.scheduler_s = self._get_lr_scheduler(*l_args)
         # 如果不指定，则需要设定默认值
         if len(ls_args) == 0:
+            warnings.warn('损失函数参数不足以构造足够的损失函数，将用默认的mse损失函数进行填充！', UserWarning)
             ls_args = [('mse', {}), ]
         self.ls_fn_s, self.loss_names, self.test_ls_names = self._get_ls_fn(*ls_args)
         try:
@@ -132,10 +134,10 @@ class BasicNN(nn.Sequential):
         test_ls_names = loss_names
         return ls_fn_s, loss_names, test_ls_names
 
-    def _get_comment(self,
-                     inputs, predictions, labels,
-                     metrics, criteria_names, losses
-                     ) -> list:
+    def get_comment(self,
+                    inputs, predictions, labels,
+                    metrics, criteria_names, losses
+                    ) -> list:
         """获取展示输出图片注解。
         输出图片注解分为size_averaged、comments两部分，
         前者为整个输出批次的数据，后者为单张图片的注解信息，由self._comment_impl提供，可以进行重载定制。
