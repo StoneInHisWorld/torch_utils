@@ -264,12 +264,14 @@ def valid_subprocess_impl(
 
 
 class Trainer:
+    """神经网络训练器对象，提供所有针对神经网络的操作，包括训练、验证、测试、预测"""
 
     def __init__(self,
                  module_class, m_init_args, m_init_kwargs, prepare_args,  # 网络模型相关构造参数
-                 datasource, criterion_a, hps, runtime_cfg,  # 训练、验证、测试依赖参数
+                 datasource, criterion_a,
+                 hps=None, runtime_cfg=None,  # 训练、验证、测试依赖参数
                  with_hook=False, hook_mute=True):
-        """神经网络训练器对象。
+        """神经网络训练器对象，提供所有针对神经网络的操作，包括训练、验证、测试、预测。
         Trainer类负责进行网络构建以及网络训练方法实现，可以通过Trainer.module获取训练完成或正在训练的网络对象。
 
         :param module_class: 模型类，用于调用构造函数实现网络构造
@@ -284,11 +286,16 @@ class Trainer:
             注意：启用Hook机制后进度条会重复输出，因此如果不需要测试梯度计算则不要开启本选项！
         :param hook_mute: 静音hook机制，减少Hook机制带来的输出
         """
+        # TODO: 进行默认值检查和填充
+        if runtime_cfg is None:
+            runtime_cfg = {'print_net': False}
+        if hps is None:
+            hps = {}
         assert issubclass(module_class, BasicNN), f'模型类型{module_class}未知，请使用net包下实现的网络模型'
         # 存放网络初始化参数
         self.module_class = module_class
-        self.__m_init_args = m_init_args
-        self.__m_init_kwargs = m_init_kwargs
+        self.m_init_args = m_init_args
+        self.m_init_kwargs = m_init_kwargs
         self.prepare_args = prepare_args
         self.module = None
         # 设置训练、验证、测试依赖参数
@@ -319,8 +326,8 @@ class Trainer:
         if k > 1:
             pbar_len = k * n_epochs
             train_fn, train_args = self.__train_with_k_fold, (
-                self.module_class, self.__m_init_args, self.__m_init_kwargs,
-                self.prepare_args, data_iter
+                # self.module_class, self.m_init_args, self.m_init_kwargs, self.prepare_args,
+                data_iter,
             )
         else:
             # 提取训练迭代器和验证迭代器
@@ -339,14 +346,14 @@ class Trainer:
                 if valid_iter is not None:
                     # 进行训练和验证
                     train_fn, train_args = self.__train_and_valid, (
-                        self.module_class, self.__m_init_args, self.__m_init_kwargs,
-                        self.prepare_args, train_iter, valid_iter
+                        # self.module_class, self.m_init_args, self.m_init_kwargs, self.prepare_args,
+                        train_iter, valid_iter
                     )
                 else:
                     # 进行训练
                     train_fn, train_args = self.__train, (
-                        self.module_class, self.__m_init_args, self.__m_init_kwargs,
-                        self.prepare_args, train_iter
+                        # self.module_class, self.m_init_args, self.m_init_kwargs, self.prepare_args,
+                        train_iter,
                     )
             else:
                 # 启用多进程训练
@@ -360,6 +367,67 @@ class Trainer:
         history = train_fn(*train_args)
         self.pbar.close()
         return history
+
+    @prepare('predict')
+    def predict(self, unwrap_fn):
+        """预测方法。
+        对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
+        :param ls_fn_args: 损失函数序列的关键词参数
+        :param data_iter: 预测数据迭代器。
+        :param criterion_a: 计算准确度所使用的函数序列，该函数需要求出每个样本的准确率。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
+        :param unwrap_fn: 对所有数据进行打包的方法。如不指定，则直接返回预测数据。签名需为：unwrap_fn(inputs, predictions, labels, metrics, losses) -> Any
+        :return: 打包好的数据集
+        """
+        # 提取训练器参数
+        net = self.module
+        criterion_a = self.criterion_a
+        pbar = self.pbar
+        # # 预处理损失函数参数
+        # for (_, kwargs) in ls_fn_args:
+        #     kwargs['size_averaged'] = False
+        # self._ls_fn_s, _, self.test_ls_names = self._get_ls_fn(*ls_fn_args)
+        # 如果传递了包装方法
+        if unwrap_fn is not None:
+            # 将本次预测所产生的全部数据打包并返回。
+            inputs, predictions, labels, metrics, losses = [], [], [], [], []
+            # 对每个批次进行预测，并进行评价指标和损失值的计算
+            for fe_batch, lb_batch in pbar:
+                result = net.forward_backward(fe_batch, lb_batch, False)
+                pre_batch, ls_es = result
+                inputs.append(fe_batch)
+                predictions.append(pre_batch)
+                labels.append(lb_batch)
+                metrics_to_be_appended = [
+                    criterion(pre_batch, lb_batch, size_averaged=False)
+                    for criterion in criterion_a
+                ]
+                metrics.append(torch.vstack(metrics_to_be_appended).T)
+                losses.append(torch.vstack(ls_es).T)
+            pbar.set_description('结果计算完成')
+            # 将所有批次的数据堆叠在一起
+            inputs = torch.cat(inputs, dim=0)
+            predictions = torch.cat(predictions, dim=0)
+            labels = torch.cat(labels, dim=0)
+            metrics = torch.cat(metrics, dim=0)
+            losses = torch.cat(losses, dim=0)
+            # 获取输出结果需要的注解
+            comments = net.get_comment(
+                inputs, predictions, labels,
+                metrics, [criterion.__name__ for criterion in criterion_a],
+                losses
+            )
+            # 将注解与所有数据打包，输出
+            predictions = unwrap_fn(
+                inputs, predictions, labels, metrics, losses, comments
+            )
+        else:
+            # TODO: Untested!
+            # 如果不需要打包数据，则直接返回预测数据集
+            predictions = []
+            for fe_batch, lb_batch in pbar:
+                predictions.append(net(fe_batch))
+            predictions = torch.cat(predictions, dim=0)
+        return predictions
 
     @prepare('train')
     def __train(self, train_iter) -> History:
