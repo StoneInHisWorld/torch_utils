@@ -3,6 +3,7 @@ from functools import wraps
 
 import torch
 from torchsummary import summary
+from tqdm import tqdm
 
 from networks.basic_nn import BasicNN
 
@@ -83,7 +84,7 @@ class net_builder:
             _, trainer, *args = args
             if trainer.module is None:
                 # 构造网络对象并交由trainer持有
-                net_class, n_init_args, n_init_kwargs, *args = args
+                net_class, n_init_args, n_init_kwargs = trainer.module_class, trainer.m_init_args, trainer.m_init_kwargs
                 net = self.__build(net_class, n_init_args, n_init_kwargs, trainer)
                 setattr(trainer, 'module', net)
             else:
@@ -104,7 +105,12 @@ class net_builder:
         """
         assert issubclass(net_class, BasicNN), '请使用BasicNN的子类作为训练网络！'
         print(f'\r正在构造{net_class.__name__}', end='', flush=True)
-        net = net_class(*n_init_args, **n_init_kwargs)
+        try:
+            net = net_class(*n_init_args, **n_init_kwargs)
+        except FileNotFoundError:
+            # 处理预训练网络加载
+            where = n_init_kwargs['init_kwargs']['where'][:-5]
+            net = torch.load(where + '.ptm')
         print(f'\r构造{net_class.__name__}完成')
         self.__list_net(net, trainer)
         return net
@@ -166,6 +172,12 @@ class prepare:
                 with torch.no_grad():
                     result = func(*args, **kwargs)
                 self.__after_test(args[0])
+            elif self.what == 'predict':
+                args = self.__prepare_predict(*args)
+                # 执行本体函数
+                with torch.no_grad():
+                    result = func(*args, **kwargs)
+                self.__after_predict(args[0])
             else:
                 raise ValueError(f'未知准备类型{self.what}!')
             return result
@@ -191,7 +203,7 @@ class prepare:
         trainer, net, *args = args
         if not net.ready:
             # 训练前准备
-            prepare_args, *args = args
+            prepare_args = trainer.prepare_args
             net.prepare_training(*prepare_args)
         # 进度条更新
         trainer.pbar.set_description('训练中……')
@@ -238,7 +250,10 @@ class prepare:
         trainer, *args = args
         net = trainer.module
         # 进行测试准备，获取损失函数
-        net.prepare_training(ls_args=trainer.prepare_args[2])
+        with warnings.catch_warnings():
+            # 忽视优化器参数不足警告
+            warnings.simplefilter('ignore', category=UserWarning)
+            net.prepare_training(ls_args=trainer.prepare_args[2])
         del net.optimizer_s, net.scheduler_s
         # 设置神经网络模式
         net.eval()
@@ -255,3 +270,42 @@ class prepare:
         net = trainer.module
         # 清除测试痕迹
         del net.ls_fn_s, net.lr_names, net.loss_names, net.test_ls_names
+
+    @net_builder()
+    def __prepare_predict(self, *args):
+        """进行预测准备
+        进行预测准备，设置神经网络模式以及更新进度条
+
+        :param args: 需要传递的第一个参数为trainer对象
+        :return: args
+        """
+        trainer, net, data_iter, *args = args
+        if not net.ready:
+            # 预处理损失函数参数
+            ls_fn_args = trainer.prepare_args[2]
+            for (_, kwargs) in ls_fn_args:
+                kwargs['size_averaged'] = False
+            # 进行测试准备，获取损失函数
+            with warnings.catch_warnings():
+                # 忽视优化器参数不足警告
+                warnings.simplefilter('ignore', category=UserWarning)
+                net.prepare_training(ls_args=ls_fn_args)
+            del net.optimizer_s, net.scheduler_s
+        # 创建进度条
+        trainer.pbar = tqdm(
+            data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1
+        )
+        # 设置神经网络模式
+        net.eval()
+        return trainer, *args
+
+    @staticmethod
+    def __after_predict(trainer):
+        """预测后处理
+        清除训练器携带的网络以及进度条
+
+        :param trainer: 训练器对象，神经网络对象的来源
+        :return: None
+        """
+        trainer.pbar.close()
+        del trainer.module
