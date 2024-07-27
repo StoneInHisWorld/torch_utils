@@ -59,6 +59,7 @@ def linear_output(in_features: int, out_features: int,
 
 
 class MultiOutputLayer(nn.Sequential):
+    """多通道输出层。将单通道输入扩展为多通道输出"""
 
     def __init__(self, in_channels, out_n_channel_s,
                  dropout_rate=0., momentum=0., get_mlp=True, regression=False

@@ -5,6 +5,11 @@ from networks.layers.multi_output import MultiOutputLayer
 
 
 class WZYNetEssay(BasicNN):
+    """通过不断卷积，下采样，提取图片信息的网络。
+
+    参考：
+    [1] 王志远. 基于深度学习的散斑光场信息恢复[D]. 厦门：华侨大学，2023
+    """
 
     required_shape = (256, 256)
 

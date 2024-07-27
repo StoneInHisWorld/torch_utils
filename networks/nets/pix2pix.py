@@ -11,6 +11,14 @@ from networks.nets.pix2pix_g import Pix2Pix_G
 
 
 class Pix2Pix(BasicNN):
+    """通过给定数据对学习输入图片到输出图片的映射，适用于图片翻译、转换任务的学习模型。
+
+    参考论文：
+    [1] 王志远. 基于深度学习的散斑光场信息恢复[D]. 厦门：华侨大学，2023
+    [2] Phillip Isola, Jun-Yan Zhu, Tinghui Zhou and Alexei A. Efros.
+       Image-to-Image Translation with Conditional Adversarial Networks[J].
+       CVF, 2017. 1125, 1134
+   """
 
     def __init__(self,
                  g_args, g_kwargs,

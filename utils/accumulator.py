@@ -1,5 +1,11 @@
 class Accumulator:
+    """浮点数累加器，负责训练过程中的浮点数指标的累加"""
+
     def __init__(self, n):
+        """浮点数累加器
+        负责训练过程中的浮点数指标的累加。
+        :param n: 需要累加的指标数
+        """
         self.data = [0.] * n
 
     def add(self, *args):
