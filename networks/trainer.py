@@ -369,7 +369,7 @@ class Trainer:
         return history
 
     @prepare('predict')
-    def predict(self, unwrap_fn):
+    def predict(self, unwrap_fn=None):
         """预测方法。
         对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
         :param ls_fn_args: 损失函数序列的关键词参数
@@ -421,7 +421,6 @@ class Trainer:
                 inputs, predictions, labels, metrics, losses, comments
             )
         else:
-            # TODO: Untested!
             # 如果不需要打包数据，则直接返回预测数据集
             predictions = []
             for fe_batch, lb_batch in pbar:
