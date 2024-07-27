@@ -20,7 +20,10 @@ class Experiment:
                  ):
         """实验对象
         进行神经网络训练的相关周边操作，计时、显存监控、日志编写、网络持久化、历史趋势图绘制及保存。
-        请使用上下文管理器来调用本对象以启用全部功能，示例：with Experiment() as hps:
+        请使用上下文管理器来调用本对象以启用全部功能，示例：`with Experiment() as hps:`。使用上下文管理器后，能够自动开启计时以及显存监控功能，
+        在退出时会自动进行日志编写、异常信息处理以及网络持久化。
+        在神经网络训练完成后，需要调用self.register_result将结果注册，并对其进行一系列输出操作。
+        可以调用self.add_logMsg来增加日志条目信息。
 
         :param exp_no: 实验编号
         :param datasource: 实验所用数据源
@@ -102,31 +105,39 @@ class Experiment:
         :return: None
         """
         self.__net = net
-        log_msg = {}
-        if len(history) <= 0:
-            raise ValueError('历史记录对象为空！')
-        # 输出训练部分的数据
-        for name, log in history:
-            if name != name.replace('train_', '训练'):
-                # 输出训练信息，并记录
-                print(f"{name.replace('train_', '训练')} = {log[-1]:.5f},", end=' ')
-                log_msg[name] = log[-1]
-        # 输出验证部分的数据
-        print('\b\b')
-        for name, log in history:
-            if name != name.replace('valid_', '验证'):
-                # 输出验证信息，并记录
-                print(f"{name.replace('valid_', '验证')} = {log[-1]:.5f},", end=' ')
-                log_msg[name] = log[-1]
-        # 输出测试部分的数据
-        print('\b\b')
-        if test_log is not None:
-            for k, v in test_log.items():
-                print(f"{k.replace('test_', '测试')} = {v:.5f},", end=' ')
-            print('\b\b')
-        log_msg.update(test_log)
+        # log_msg = {}
+        # if len(history) <= 0:
+        #     raise ValueError('历史记录对象为空！')
+        # # 输出训练部分的数据
+        # train_history = filter(lambda h: h[0].startswith('train_'), history)
+        # valid_history = filter(lambda h: h[0].startswith('valid_'), history)
+        # for name, log in history:
+        #     if name != name.replace('train_', '训练'):
+        #         # 输出训练信息，并记录
+        #         print(f"{name.replace('train_', '训练')} = {log[-1]:.5f},", end=' ')
+        #         log_msg[name] = log[-1]
+        # # 输出验证部分的数据
+        #
+        # for name, log in history:
+        #     print('\b\b', end='')
+        #     if name != name.replace('valid_', '验证'):
+        #         # 输出验证信息，并记录
+        #         print(f"{name.replace('valid_', '验证')} = {log[-1]:.5f},", end=' ')
+        #         log_msg[name] = log[-1]
+        #     print('  ', end='')
+        # # 输出测试部分的数据
+        # print('\b\b')
+        # if test_log is not None:
+        #     for k, v in test_log.items():
+        #         print(f"{k.replace('test_', '测试')} = {v:.5f},", end=' ')
+        #     print('\b\b')
+        # log_msg.update(test_log)
         # 绘制历史趋势图
-        self.__plot_history(history, **plot_kwargs)
+        log_msg = self.__print_result(history, test_log)
+        with warnings.catch_warnings():
+            # 忽视空图图例警告
+            warnings.simplefilter('ignore', category=UserWarning)
+            self.__plot_history(history, **plot_kwargs)
         # 编辑日志条目
         self.add_logMsg(
             True, **log_msg, data_portion=self.__runtime_cfg['data_portion']
@@ -139,8 +150,36 @@ class Experiment:
             )
             torch.cuda.reset_peak_memory_stats(self.device)
 
+    def __print_result(self, history, test_log):
+        log_msg = {}
+        if len(history) <= 0:
+            raise ValueError('历史记录对象为空！')
+        # 输出训练部分的数据
+        train_history = filter(lambda h: h[0].startswith('train_'), history)
+        valid_history = list(filter(lambda h: h[0].startswith('valid_'), history))
+        for name, log in train_history:
+            # 输出训练信息，并记录
+            print(f"{name.replace('train_', '训练')} = {log[-1]:.5f},", end=' ')
+            log_msg[name] = log[-1]
+        # 输出验证部分的数据
+        if len(valid_history) > 0:
+            print('\b\b')
+        for name, log in valid_history:
+            # 输出验证信息，并记录
+            print(f"{name.replace('valid_', '验证')} = {log[-1]:.5f},", end=' ')
+            log_msg[name] = log[-1]
+        # 输出测试部分的数据
+        print('\b\b')
+        if test_log is not None:
+            for k, v in test_log.items():
+                print(f"{k.replace('test_', '测试')} = {v:.5f},", end=' ')
+            print('\b\b')
+        log_msg.update(test_log)
+        return log_msg
+
     def add_logMsg(self, mute=True, **kwargs):
         """增加日志条目信息
+
         :param mute: 是否打印日志条目所有信息
         :param kwargs: 增加日志条目信息
         :return: None
