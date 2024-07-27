@@ -1,68 +1,70 @@
 # torch_utils v0.2
-根据pytorch编写的网络框架以及运行支持工具包，使用本框架可以大大减少代码编写量。
+基于`pytorch`框架的训练框架工具包，包括数据处理工具、编写好的网络架构和网络层以及实用的python工具。  
+详细的使用方法参见给出的编程范例以及每个类和方法的pydoc。  
+依赖的库详见`./config/torch_env.yml`。
 
-## ControlPanel
-`from utils.hypa_control import ControlPanel`  
-控制台类。用于读取运行参数设置，设定训练超参数以及自动编写日志文件等一系列与网络构建无关的操作。
-1. 使用`cp = ControlPanel()`初始化
-   1. 使用`for`得到每次训练使用的训练器`Trainer`，单个`Trainer`表示使用一组待训练超参数
-   2. 对训练器使用`with`语句即可得到本次训练使用的超参数。此时，训练开始计时。退出`with`语句块后，计时结束，并编写日志。  
-   示例：
-       ```
-        for trainer in cp:
-            with trainer as hps:
-                epochs, batch_size, ls_fn, lr = hps
-       ```
-2. 得到每组训练超参数对应的`Trainer`前，会读取一次运行配置参数。
-   1. 该运行配置参数可以动态更改，每次更改将在下一组超参数训练中生效。 
-   2. 实验编号`exp_no`属于运行配置参数，将随着`ControlPanel`对象的迭代而递增，即在读取运行配置参数时递增。
-3. 运行配置参数可以通过字典形式访问
-   1. 示例：`device = cp['device']`
-   2. 运行设备`device`属于运行配置参数，可以使用属性访问符直接进行访问。e.g. `device = cp.device`
-   3. 实验编号`exp_no`属于运行配置参数，可以使用属性访问符直接进行访问。e.g. `exp_no = cp.exp_no`
-4. 内置绘制历史函数`plot_history()`，会对训练过程中历史损失值、准确率进行趋势图绘制
-   1. 需要主动调用才会绘制图像，将在未来的版本中自动进行调用
-5. 每次训练器训练完毕后会自动编写日志，或处理和记录出错信息。
-   1. 使用`add_logMsg()`函数增加单条日志的信息项。
-   2. 每条日志都有独立的编号，从小到大排序。
-## networks包
-### networks.layers
-神经网络通用层，可用于构造自定义结构的神经网络模型。
-1. `MultiOutputLayer`：多通道输出层。将单通道输入扩展为多通道输出。
-2. `Reshape`：重塑层，可以将输入的张量进行重塑为所需形状。
-3. `SSIMLoss`：SSIM损失层。计算每对y_hat与y的图片结构相似度，并求其平均逆作为损失值。计算公式为：$$ loss = \frac{\sum_{i=1}^n 1 - ssim}{n} $$ 其中，$ssim$为单个特征-标签对求出的结构相似度，$n$为样本数。
-4. `Val2Fig`: 数值-图片转化层。根据指定模式，对数值进行归一化后反归一化为图片模式像素取值范围，从而转化为可视图片。
-5. 持续添加中……
-### networks.nets
-包含各种神经网络模型，均继承自`BasicNN`
-1. `AlexNet`: 经典AlexNet模型。  
-`from networks.nets.alexnet import AlexNet as NET`
-2. `GoogLeNet`: 经典GoogLeNet模型。  
-`from networks.nets.googlenet import GoogLeNet as NET`
-3. `LeNet`: 经典LeNet模型。  
-`from networks.nets.lenet import LeNet as NET`
-4. `MLP`: 经典多层感知机。  
-`from networks.nets.mlp import MLP as NET`
-5. `Pix2Pix`: 适用于图片翻译、转换任务的学习模型。  
-参考论文：  
-[1] 王志远. 基于深度学习的散斑光场信息恢复[D]. 厦门：华侨大学，2023  
-[2] Phillip Isola, Jun-Yan Zhu, Tinghui Zhou and Alexei A. Efros.
-   Image-to-Image Translation with Conditional Adversarial Networks[J].
-   CVF, 2017. 1125, 1134  
-`from networks.nets.pix2pix import Pix2Pix as NET`
-6. `SLP`: 经典单层感知机。  
-`from networks.nets.slp import SLP as NET`
-7. `VGG`: 经典VGG网络模型，可通过指定conv_arch构造指定版本的VGG网络。  
-`from networks.nets.vgg import VGG as NET`
-8. `WZYNetEssay`: 通过不断卷积，下采样，提取图片信息的网络。  
-参考：  
-[1] 王志远. 基于深度学习的散斑光场信息恢复[D]. 厦门：华侨大学，2023  
-`from networks.nets.wzynet_essay import WZYNetEssay as NET`
-9. 持续添加中……
-### networks.basic_nn
-内置基础网络模型`BasicNN`，继承自`torch.nn.Sequential`，提供神经网络的基本功能，包括权重初始化，训练以及测试。
-### example.py
-尚未完成编辑，请不要使用！
+## data_related
+`import data_related as dr`  
+数据处理工具包，包括评价指标计算方法、数据集及其操作实现。
+1. `import dr.criteria`  
+提供评价指标计算方法。注：此处的评价指标会将`torch.Tensor`转换成`numpy.Array`，因此使用此处的评价指标无法求导。
+若有此需求，请转至`networks.layers`层寻找相关功能。
+2. `import dr.dataset_operation`  
+提供数据集级别的操作，包括k折分割、数据加载器转化、数据集切片以及数据集正则化。
+3. `import dr.dataloader`  
+数据加载器实现，通过索引供给器从数据集中取出数据，包括普通数据加载器以及数据懒加载器，两者都继承于`torch.utils.data.DataLoader`。
+4. `import dr.datasets`  
+数据集实现，持有原始数据集，负责进行数据预处理以及加载器转换工作。包括普通数据集以及懒加载数据集，两者都继承于`torch.utils.data.Dataset`。
+5. `from dr.SelfDefinedDataSet import SelfDefinedDataSet`  
+用户自定义数据集，负责读取原始数据、数据集切片、展示图片保存、数据集转换以及预处理方法生成。该类为用户编辑类，需要实现相关抽象方法以完成上述功能。
+
+## networks
+`import networks`  
+网络包，包含有已实现的、可调用的神经网络层与网络模块。
+1. `import networks.basic_nn`  
+基本神经网络类，提供神经网络的基本功能，包括训练准备（优化器生成、学习率规划器生成、损失函数生成）、模块初始化、前反向传播实现以及展示图片输出注释的实现。
+2. `import networks.trainer`  
+神经网络训练器，提供所有针对神经网络的操作，包括神经网络创建、训练、验证、测试以及预测。
+3. `layers`  
+`from networks.layers import *`  
+包含神经网络通用层及其依赖方法，可用于构造自定义结构的神经网络模型，所有网络层均继承于`torch.nn.Module`。
+4. `nets`  
+`from networks.nets import *`  
+包含神经网络及其依赖方法，可直接用于训练任务。所有神经网络均继承于`from networks.basic_nn import BasicNN`。
+
+## utils
+`import utils`
+实用工具包，提供以上所有包依赖的实用工具。基于`pytorch`、`pandas`、`numpy`、`PIL`库实现。
+1. `func`  
+提供实用工具函数。
+   1. `import utils.func.img_tools as itools`  
+   图片工具包，包括图片重塑、裁剪、读取、二值化、拼接、添加掩膜等一系列操作，依赖于`PIL`、`numpy`编写
+   2. `import utils.func.log_tools as ltools`  
+   日志工具包，包括日志编写、日志读取以及历史趋势图绘制功能，依赖于`matplotlib`编写。
+   3. `import utils.func.pytools as ptools`  
+   基于python内置库的工具包，包括路径检查、超参数列表生成、参数合法性判断以及多线程处理功能。
+   4. `import utils.func.tensor_tools as tstools`  
+   `pytorch`张量工具包，提供张量与PIL图片的互相转换功能。
+   5. `import utils.func.torch_tools as ttools`
+   `pytorch`工具包，提供设备探测、优化器获取、损失函数获取、权重偏移初始化、学习率规划器获取以及激活函数获取功能。
+2. `from utils.accumulator import Accumulator`  
+浮点数累加器，负责训练过程中的浮点数指标的累加。
+3. `from utils.ctrl_panel import ControlPanel`  
+控制台类负责读取、管理动态运行参数、超参数组合，以及实验对象的提供。
+4. `import utils.decorators`  
+装饰器模块，包括训练器依赖的`prepare`、`net_builder`装饰器以及其他装饰器，负责解决核心功能外的预处理和后处理。
+5. `from utils.experiment import Experiment`  
+实验对象，负责神经网络训练的相关周边操作，计时、显存监控、日志编写、网络持久化、历史趋势图绘制及保存。
+6. `from utils.history import History`  
+历史记录器，以数值列表的形式存储在对应名称属性中。
+7. `from utils.history import Process`  
+进程对象，继承于`torch.multiprocessing.Process`，应用于多进程处理任务如多进程训练。
+8. `from utils.history import Thread`  
+线程对象，继承于`threading.Thread`，应用于多线程处理任务如数据集预处理。
+
+## examples
+提供编程范例以快速应用本工具包至具体项目。
+
 ### TODO
 1. 未来将加入GUI用于调整超参数。
 2. 未来将编写编程示例。
