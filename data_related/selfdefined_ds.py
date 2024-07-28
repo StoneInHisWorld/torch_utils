@@ -4,7 +4,7 @@ from typing import Iterable, Tuple, Sized, List, Callable
 
 import torch
 
-from data_related.dataset_operation import data_slicer
+from data_related.ds_operation import data_slicer
 from data_related.datasets import LazyDataSet, DataSet
 from utils.thread import Thread
 
@@ -184,18 +184,33 @@ class SelfDefinedDataSet:
 
     @staticmethod
     @abstractmethod
-    def unwrap_fn(inputs: torch.Tensor,
-                  predictions: torch.Tensor,
-                  labels: torch.Tensor,
-                  acc_s: torch.Tensor,
-                  loss_es: torch.Tensor,
-                  comments: List[str]
-                  ):
+    def wrap_fn(inputs: torch.Tensor,
+                predictions: torch.Tensor,
+                labels: torch.Tensor,
+                metric_s: torch.Tensor,
+                loss_es: torch.Tensor,
+                comments: List[str]
+                ):
+        """输出结果打包函数
+
+        :param inputs: 预测所用到的输入批次数据
+        :param predictions: 预测批次结果
+        :param labels: 预测批次标签数据
+        :param metric_s: 预测批次评价指标计算结果
+        :param loss_es: 预测批次损失值计算结果
+        :param comments: 预测批次每张结果输出图片附带注解
+        :return: 打包结果
+        """
         pass
 
     @staticmethod
     @abstractmethod
     def save_fn(result, root: str) -> None:
+        """输出结果存储函数
+
+        :param result: 输出结果图片批次
+        :param root: 输出结果存储路径
+        """
         pass
 
     def to_dataset(self) -> Tuple[LazyDataSet, LazyDataSet] or Tuple[DataSet, DataSet]:
@@ -242,14 +257,16 @@ class SelfDefinedDataSet:
 
     @abstractmethod
     def default_preprocesses(self):
-        """
-        默认预处理程序。需要实现四个列表的填充：
+        """默认数据集预处理程序。
+        注意：此程序均为本地程序，不可被序列化（pickling）！
 
-        1. self.lbIndex_preprocesses：标签索引集预处理程序
-        2. self.feaIndex_preprocesses：特征索引集预处理程序
-        3. self.lb_preprocesses：标签集预处理程序
-        4. self.fea_preprocesses：特征集预处理程序
+        需要实现四个列表的填充：
+        1. self.lbIndex_preprocesses：标签索引集预处理程序列表
+        2. self.feaIndex_preprocesses：特征索引集预处理程序列表
+        3. self.lb_preprocesses：标签集预处理程序列表
+        4. self.fea_preprocesses：特征集预处理程序列表
         其中索引集预处理程序若未指定本数据集为懒加载，则不会执行。
+
         :return: None
         """
         pass
