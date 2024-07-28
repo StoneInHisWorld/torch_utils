@@ -4,6 +4,7 @@ from torchvision.transforms import Resize
 
 
 class Reshape(nn.Module):
+    """重塑层，可以将输入的张量进行重塑为所需形状"""
 
     def __init__(self, required_shape):
         """

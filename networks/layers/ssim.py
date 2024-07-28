@@ -31,6 +31,11 @@ def calculate_ssim(y_hat: torch.Tensor, y: torch.Tensor, R: torch.Tensor) -> tor
 
 
 class SSIMLoss(nn.Module):
+    """SSIM损失层。计算每对y_hat与y的图片结构相似度，并求其平均逆作为损失值。
+    计算公式为：
+    $$ loss = \frac{\sum_{i=1}^n 1 - ssim}{n} $$
+    其中，$ssim$为单个特征-标签对求出的结构相似度，$n$为样本数
+    """
 
     def __init__(self, mode: str = 'L', size_average=True):
         """SSIM损失层。计算每对y_hat与y的图片结构相似度，并求其平均逆作为损失值。

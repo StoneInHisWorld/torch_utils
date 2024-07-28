@@ -1,3 +1,5 @@
+import functools
+
 import torch
 from torch import cuda, nn as nn
 from torch.nn import init as init
@@ -112,8 +114,9 @@ def get_ls_fn(ls_str: str = "mse", **kwargs):
 
 
 def init_wb(func_str: str = "xavier", **kwargs):
-    """
-    返回初始化权重、偏移参数的函数。
+    """获取初始化方法
+    根据func_str返回初始化权重、偏移参数的函数，返回的是方法局部函数。
+
     :param func_str: 指定初始化方法的字符串
     :return: 包装好可直接调用的初始化函数
     """
@@ -122,38 +125,55 @@ def init_wb(func_str: str = "xavier", **kwargs):
         return None
     elif func_str == "normal":
         mean, std = kwargs.pop('mean', 0), kwargs.pop('std', 1)
-        w_init = lambda m: init.normal_(m, mean, std)
-        b_init = lambda m: init.normal_(m, mean, std)
+        # w_init = lambda m: init.normal_(m, mean, std)
+        # b_init = lambda m: init.normal_(m, mean, std)
+        w_init = functools.partial(init.normal_, mean=mean, std=std)
+        b_init = functools.partial(init.normal_, mean=mean, std=std)
     elif func_str == "xavier":
         w_init, b_init = init.xavier_uniform_, init.zeros_
     elif func_str == "zero":
         w_init, b_init = init.zeros_, init.zeros_
     elif func_str == 'constant':
         w_value, b_value = kwargs.pop('w_value', 1), kwargs.pop('b_value', 0)
-        w_init = lambda m: init.constant_(m, w_value)
-        b_init = lambda m: init.constant_(m, b_value)
+        # w_init = lambda m: init.constant_(m, w_value)
+        # b_init = lambda m: init.constant_(m, b_value)
+        w_init = functools.partial(init.constant_, val=w_value)
+        b_init = functools.partial(init.constant_, val=b_value)
     elif func_str == 'trunc_norm':
         mean, std = kwargs.pop('mean', 0), kwargs.pop('std', 1)
         a, b = kwargs.pop('a', 0), kwargs.pop('b', 1)
-        w_init = lambda m: init.trunc_normal_(m, mean, std, a, b)
+        # w_init = lambda m: init.trunc_normal_(m, )
+        # b_init = init.zeros_
+        w_init = functools.partial(init.trunc_normal_, mean=mean, std=std, a=a, b=b)
         b_init = init.zeros_
+    elif func_str == 'skip':
+        w_init, b_init = lambda ts: None, lambda ts: None
     else:
         raise NotImplementedError(f"不支持的初始化方式{func_str}, 当前支持的初始化方式包括{init_funcs}")
 
-    def _init(m: nn.Module) -> None:
-        if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
-            if m.weight is not None:
-                w_init(m.weight)
-            if m.bias is not None:
-                b_init(m.bias)
-        elif isinstance(m, nn.BatchNorm2d):
-            if func_str != 'xavier':
-                w_init(m.weight)
-                b_init(m.bias)
-        else:
-            return
+    def _init_impl(module_s: nn.Module) -> None:
+        """初始化权重偏置参数的具体实现
+        对于所有包含有weight以及bias属性（其值非None）的模块，本函数都会进行func_str所指示的初始化。
+        针对`nn.Sequential`以及`nn.BatchNorm2d`进行了特殊处理。
 
-    return _init
+        :param module_s: 将要进行初始化的模块或者模块序列
+        """
+        w_init_impl, b_init_impl = w_init, b_init
+        if isinstance(module_s, nn.Sequential):
+            for m in module_s:
+                _init_impl(m)
+            return
+        elif isinstance(module_s, nn.BatchNorm2d):
+            # 使用"全0法"初始化批次标准化层的权重和偏置量会导致计算结果均为0，因此将被跳过！
+            # 泽维尔初始化不支持低于二维的张量初始化，因此将被跳过！
+            if func_str == 'xavier' or func_str == 'zero':
+                w_init_impl, b_init_impl = lambda ts: None, lambda ts: None
+        if hasattr(module_s, 'weight') and module_s.weight is not None:
+            w_init_impl(module_s.weight)
+        if hasattr(module_s, 'bias') and module_s.bias is not None:
+            b_init_impl(module_s.bias)
+
+    return _init_impl
 
 
 def get_lr_scheduler(optimizer, which: str = 'step', **kwargs):

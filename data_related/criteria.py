@@ -4,7 +4,7 @@ from skimage.metrics import (structural_similarity as ssim,
 from scipy.stats import pearsonr
 
 import networks.layers.pcc
-from data_related.data_related import normalize
+from data_related.ds_operation import normalize
 
 """以下评价指标会将torch.Tensor转换成numpy.Array，因此使用此处的评价指标无法求导。
 若有此需求，请转至networks.layers层寻找相关功能"""

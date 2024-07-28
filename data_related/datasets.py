@@ -1,14 +1,12 @@
-import time
-from typing import Iterable, Callable, List, Tuple
+from typing import Iterable, Callable, List
 
+import dill
 import torch
+from torch.multiprocessing import Queue
 from torch.utils.data import Dataset as torch_ds, DataLoader
 from tqdm import tqdm
 
 import utils.func.pytools as tools
-from multiprocessing import Queue, Event, Manager
-from multiprocessing import Process, Pipe
-import dill
 
 
 def fea_apply(result_pipe, features, features_calls, pbar_Q: Queue):
@@ -110,7 +108,7 @@ class DataSet(torch_ds):
             (lb_apply, (), {})
         )
 
-        # TODO：尝试用多进程加速
+        # # TODO：尝试用多进程加速
         # pbar_Q = Queue()
         # fea_rec_conn, fea_send_conn = Pipe()
         # lb_rec_conn, lb_send_conn = Pipe()
@@ -154,6 +152,7 @@ class DataSet(torch_ds):
         # # self._labels = lb_preprocessing.get_result()
         # fea_preprocessing.kill()
         # lb_preprocessing.kill()
+
         pbar.close()
 
     def to_loader(self, batch_size: int = None, shuffle=True,

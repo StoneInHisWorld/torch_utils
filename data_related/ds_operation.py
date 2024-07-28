@@ -11,45 +11,45 @@ import data_related.dataloader
 from data_related.dataloader import LazyDataLoader
 from data_related.datasets import DataSet, LazyDataSet
 
-
-def split_real_data(features: torch.Tensor, labels: torch.Tensor, train, test, valid=.0,
-                    shuffle=True, requires_id=False):
-    """
-    分割数据集为训练集、测试集、验证集（可选）
-    :param requires_id: 是否在数据每条样本前贴上ID
-    :param shuffle: 是否打乱数据集
-    :param labels: 标签集
-    :param features: 特征集
-    :param train: 训练集比例
-    :param test: 测试集比例
-    :param valid: 验证集比例
-    :return: （训练特征集，训练标签集），（验证特征集，验证标签集），（测试特征集，测试标签集）
-    """
-    warnings.warn('分割真实数据集由于涉及对大量数据的操作，很容易发生内存溢出，因此建议不要使用本函数！'
-                  '请使用split_data()以获得索引切分，节省计算量以及内存使用', DeprecationWarning)
-    assert train + test + valid == 1.0, '训练集、测试集、验证集比例之和须为1'
-    data_len = features.shape[0]
-    train_len = int(data_len * train)
-    valid_len = int(data_len * valid)
-    test_len = int(data_len * test)
-    # 将高维特征数据打上id
-    if requires_id:
-        features_ids = torch.tensor([
-            np.ones((1, features.shape[2:])) * i
-            for i in range(data_len)
-        ])
-        features = torch.cat((features_ids, features), 1)
-        del features_ids
-    # 数据集打乱
-    if shuffle:
-        index = torch.randint(0, data_len, (data_len,))
-        features = features[index]
-        labels = labels[index]
-    # 数据集分割
-    train_fea, valid_fea, test_fea = features.split((train_len, valid_len, test_len))
-    train_labels, valid_labels, test_labels = labels.split((train_len, valid_len, test_len))
-    return (train_fea, train_labels), (valid_fea, valid_labels), \
-        (test_fea, test_labels)
+#
+# def split_real_data(features: torch.Tensor, labels: torch.Tensor, train, test, valid=.0,
+#                     shuffle=True, requires_id=False):
+#     """
+#     分割数据集为训练集、测试集、验证集（可选）
+#     :param requires_id: 是否在数据每条样本前贴上ID
+#     :param shuffle: 是否打乱数据集
+#     :param labels: 标签集
+#     :param features: 特征集
+#     :param train: 训练集比例
+#     :param test: 测试集比例
+#     :param valid: 验证集比例
+#     :return: （训练特征集，训练标签集），（验证特征集，验证标签集），（测试特征集，测试标签集）
+#     """
+#     warnings.warn('分割真实数据集由于涉及对大量数据的操作，很容易发生内存溢出，因此建议不要使用本函数！'
+#                   '请使用split_data()以获得索引切分，节省计算量以及内存使用', DeprecationWarning)
+#     assert train + test + valid == 1.0, '训练集、测试集、验证集比例之和须为1'
+#     data_len = features.shape[0]
+#     train_len = int(data_len * train)
+#     valid_len = int(data_len * valid)
+#     test_len = int(data_len * test)
+#     # 将高维特征数据打上id
+#     if requires_id:
+#         features_ids = torch.tensor([
+#             np.ones((1, features.shape[2:])) * i
+#             for i in range(data_len)
+#         ])
+#         features = torch.cat((features_ids, features), 1)
+#         del features_ids
+#     # 数据集打乱
+#     if shuffle:
+#         index = torch.randint(0, data_len, (data_len,))
+#         features = features[index]
+#         labels = labels[index]
+#     # 数据集分割
+#     train_fea, valid_fea, test_fea = features.split((train_len, valid_len, test_len))
+#     train_labels, valid_labels, test_labels = labels.split((train_len, valid_len, test_len))
+#     return (train_fea, train_labels), (valid_fea, valid_labels), \
+#         (test_fea, test_labels)
 
 
 def k1_split_data(dataset: DataSet or LazyDataSet,
@@ -126,13 +126,10 @@ def split_data(dataset: DataSet or LazyDataSet,
 #         )
 
 
-def to_loader(dataset: DataSet or LazyDataSet, transit_fn, device=torch.device('cpu'),
-              batch_size: int = 1, shuffle=True,
-              sampler: Iterable = None, max_load: int = 10000,
-              max_prefetch=3, **kwargs):
+def to_loader(dataset: DataSet or LazyDataSet, transit_fn, batch_size: int = 1, shuffle=True,
+              sampler: Iterable = None, max_prefetch=3, **kwargs):
     """根据数据集类型转化为数据集加载器。生成预处理前，会将预处理程序清除。
-    :param device: DataLoader存放数据的位置。
-    :param max_load: 懒数据集加载器的最大加载量，当使用DataSet时，该参数无效
+    尚未完成懒加载数据集的代码编辑。
     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler，根据shuffle==True or False 提供乱序/顺序下标.
     :param dataset: 转化为加载器的数据集。
     :param batch_size: 每次供给的数据量。默认为整个数据集
@@ -154,10 +151,6 @@ def to_loader(dataset: DataSet or LazyDataSet, transit_fn, device=torch.device('
         # )
     elif type(dataset) == DataSet:
         dataset.pop_preprocesses()
-        # TODO：transit_fn应该在Dataset中被定义
-        # non_blocking = device.type == 'cuda' and pin_memory
-        # transit_fn = lambda batch: (batch[0].to(device, non_blocking=non_blocking),
-        #                             batch[1].to(device, non_blocking=non_blocking))
         return data_related.dataloader.DataLoader(
             dataset, transit_fn, batch_size, max_prefetch=max_prefetch,
             shuffle=shuffle, collate_fn=dataset.collate_fn, sampler=sampler,

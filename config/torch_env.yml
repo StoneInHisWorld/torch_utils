@@ -1,0 +1,22 @@
+name: torch_env
+channels:
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main/
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/
+  - defaults
+dependencies:
+  - pip
+  - python
+  - tqdm
+  - wheel
+  - pip:
+      - dill
+      - matplotlib
+      - numpy
+      - pandas
+      - pillow
+      - prefetch-generator
+      - scikit-image
+      - scipy
+      # 请在https://pytorch.org/get-started/locally/中找到需要的pytorch版本
+      - torchsummary

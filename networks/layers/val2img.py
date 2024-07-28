@@ -3,6 +3,7 @@ from torch import nn
 
 
 class Val2Fig(nn.Module):
+    """数值-图片转化层。根据指定模式，对数值进行归一化后反归一化为图片模式像素取值范围，从而转化为可视图片"""
 
     supported = ['RGB', 'L', '1']
 

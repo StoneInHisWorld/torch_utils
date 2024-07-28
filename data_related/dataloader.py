@@ -1,3 +1,4 @@
+import dill
 import torch
 from prefetch_generator import BackgroundGenerator
 from torch.utils.data import DataLoader as DLoader
@@ -73,11 +74,14 @@ class LazyDataLoader:
 
 class DataLoader(DLoader):
 
-    def __init__(self, dataset, transit_fn, batch_size=1, max_prefetch=3,
+    def __init__(self, dataset, transit_fn,
+                 batch_size=1, transit_kwargs=None, bkgGen=True, max_prefetch=3,
                  *args, **kwargs):
-        # self.device = device
-        # self.non_blocking = self.device.type == 'cuda' and pin_memory
-        self.transit_fn = transit_fn
+        if transit_kwargs is None:
+            transit_kwargs = {}
+        self.transit_kwargs = transit_kwargs
+        self.transit_fn = dill.dumps(transit_fn)
+        self.bkg_gen = bkgGen
         self.max_prefetch = max_prefetch
         # kwargs['pin_memory'] = pin_memory
         super().__init__(
@@ -86,10 +90,10 @@ class DataLoader(DLoader):
         )
 
     def __iter__(self):
-        # if self.transit_fn is None:
-        #     self.transit_fn = lambda batch: batch.to(self.device, self.non_blocking)
+        transit_fn = dill.loads(self.transit_fn)
         unwrapped_generator = (
-            self.transit_fn(batch)
+            transit_fn(batch, **self.transit_kwargs)
             for batch in super().__iter__()
         )
-        return BackgroundGenerator(unwrapped_generator, self.max_prefetch)
+        return unwrapped_generator
+        # return BackgroundGenerator(unwrapped_generator, self.max_prefetch)
