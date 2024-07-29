@@ -95,5 +95,7 @@ class DataLoader(DLoader):
             transit_fn(batch, **self.transit_kwargs)
             for batch in super().__iter__()
         )
-        return unwrapped_generator
-        # return BackgroundGenerator(unwrapped_generator, self.max_prefetch)
+        if self.bkg_gen:
+            return BackgroundGenerator(unwrapped_generator, self.max_prefetch)
+        else:
+            return unwrapped_generator
