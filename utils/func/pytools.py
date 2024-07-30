@@ -126,3 +126,27 @@ def iterable_multi_process(data: Iterable and Sized, task: Callable,
     ):
         ret += res
     return ret
+
+
+def warning_handler(*input_args, func=None, category=None, warning_filter=None, warning_msg_printer=None):
+    """警告处理机
+    将可能弹出警告的函数放在此处运行，通过传入的msg_printer实现定制化的输出。
+
+    :param input_args: 函数的输入位置参数
+    :param func: 可能弹出警告的函数
+    :param category: 需要定制化输出的警告类型
+    :param warning_filter: 警告过滤器，存储截取到的警告
+    :param warning_msg_printer: 实现定制化输出的警告打印机，签名要求为：def msg_printer(*input_args)
+    :return: 函数的输出结果
+    """
+    result = func(*input_args)
+    try:
+        warning = warning_filter.pop()
+        if issubclass(warning.category, category) and warning_msg_printer:
+            warning_msg_printer(*input_args)
+        else:
+            warnings.warn(warning.message, warning.category)
+    except IndexError:
+        pass
+    finally:
+        return result
