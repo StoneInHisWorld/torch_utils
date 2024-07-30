@@ -2,7 +2,6 @@ import time
 import warnings
 
 import torch
-from torchsummary import summary
 
 import utils.func.log_tools as ltools
 from utils.func import pytools
@@ -39,8 +38,6 @@ class Experiment:
         self.__np = net_path
         self.__exp_no = exp_no
         self.__runtime_cfg = runtime_cfg
-        # self.__sn = runtime_cfg['save_net']
-        # self.__pn = runtime_cfg['print_net']
         self.datasource = datasource
         self.__net = None
 
@@ -105,33 +102,6 @@ class Experiment:
         :return: None
         """
         self.__net = net
-        # log_msg = {}
-        # if len(history) <= 0:
-        #     raise ValueError('历史记录对象为空！')
-        # # 输出训练部分的数据
-        # train_history = filter(lambda h: h[0].startswith('train_'), history)
-        # valid_history = filter(lambda h: h[0].startswith('valid_'), history)
-        # for name, log in history:
-        #     if name != name.replace('train_', '训练'):
-        #         # 输出训练信息，并记录
-        #         print(f"{name.replace('train_', '训练')} = {log[-1]:.5f},", end=' ')
-        #         log_msg[name] = log[-1]
-        # # 输出验证部分的数据
-        #
-        # for name, log in history:
-        #     print('\b\b', end='')
-        #     if name != name.replace('valid_', '验证'):
-        #         # 输出验证信息，并记录
-        #         print(f"{name.replace('valid_', '验证')} = {log[-1]:.5f},", end=' ')
-        #         log_msg[name] = log[-1]
-        #     print('  ', end='')
-        # # 输出测试部分的数据
-        # print('\b\b')
-        # if test_log is not None:
-        #     for k, v in test_log.items():
-        #         print(f"{k.replace('test_', '测试')} = {v:.5f},", end=' ')
-        #     print('\b\b')
-        # log_msg.update(test_log)
         # 绘制历史趋势图
         log_msg = self.__print_result(history, test_log)
         with warnings.catch_warnings():
@@ -225,20 +195,6 @@ class Experiment:
             torch.save(self.__net.state_dict(), self.__np + f'{self.__exp_no}.ptsd')
         print('已保存网络')
 
-    # def __list_net(self, net, input_size, batch_size) -> None:
-    #     """
-    #     打印网络信息。
-    #     :param net: 待打印的网络信息。
-    #     :param input_size: 网络输入参数。
-    #     :param batch_size: 训练的批量大小。
-    #     :return: None
-    #     """
-    #     if self.__runtime_cfg['print_net']:
-    #         try:
-    #             summary(net, input_size=input_size, batch_size=batch_size)
-    #         except RuntimeError as _:
-    #             print(net)
-
     def __plot_history(self, history, **plot_kwargs) -> None:
         """绘制历史趋势图
         根据需要绘制历史趋势图，有三种模式可选，模式选择由动态运行参数plot_history指定：
@@ -272,13 +228,6 @@ class Experiment:
             savefig_as=savefig_as, **plot_kwargs
         )
         print('已绘制历史趋势图')
-
-    # def register_net(self, net: torch.nn.Module):
-    #     self.__net = net
-    #     # self.__list_net(
-    #     #     net, (self.datasource.fea_channel, *net.required_shape),
-    #     #     self.__hp['batch_size']
-    #     # )
 
     @property
     def device(self):
