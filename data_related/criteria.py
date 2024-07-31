@@ -74,7 +74,7 @@ def PCC(Y_HAT: torch.Tensor, Y: torch.Tensor, size_averaged: bool = True):
             y, y_hat = input_args
             constant_msg += f'Y:{y[0]}' if np.all(y == y[0]) else ''
             constant_msg += f'Y_HAT:{y_hat[0]}' if np.all(y_hat == y_hat[0]) else ''
-            print(f'\n计算皮尔逊相关系数时遇到常数输入，此时相关系数无定义！常熟输入如下：\n{constant_msg}')
+            print(f'\n计算皮尔逊相关系数时遇到常数输入，此时相关系数无定义！常数输入如下：\n{constant_msg}')
 
         pearsonr_impl = functools.partial(
             warning_handler, func=lambda y, y_hat: pearsonr(y, y_hat)[0],
