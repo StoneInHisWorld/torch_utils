@@ -90,7 +90,7 @@ class DataSet(torch_ds):
             labels_calls = []
 
         pbar = tqdm(total=len(features_calls) + len(labels_calls),
-                    unit='步', position=0, desc=desc, mininterval=1)
+                    unit='步', position=0, desc=desc, mininterval=1, ncols=100)
 
         def fea_apply():
             for call in features_calls:

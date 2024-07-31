@@ -293,7 +293,7 @@ class prepare:
             del net.optimizer_s, net.scheduler_s
         # 创建进度条
         trainer.pbar = tqdm(
-            data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1
+            data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1, ncols=100
         )
         # 设置神经网络模式
         net.eval()

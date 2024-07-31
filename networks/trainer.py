@@ -362,7 +362,7 @@ class Trainer:
         # 设置进度条
         self.pbar = tqdm(
             total=pbar_len, unit='批', position=0,
-            desc=f'正在进行训练准备……', mininterval=1
+            desc=f'正在进行训练准备……', mininterval=1, ncols=100
         )
         history = train_fn(*train_args)
         self.pbar.close()
