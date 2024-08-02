@@ -11,6 +11,7 @@ import data_related.dataloader
 from data_related.dataloader import LazyDataLoader
 from data_related.datasets import DataSet, LazyDataSet
 
+
 #
 # def split_real_data(features: torch.Tensor, labels: torch.Tensor, train, test, valid=.0,
 #                     shuffle=True, requires_id=False):
@@ -210,12 +211,15 @@ def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
     :param epsilon: 防止分母为0的无穷小量。
     :return: 标准化的数据
     """
-    mean, std = [func(data, dim=list(range(2, len(data.shape))), keepdim=True)
-                 for func in [torch.mean, torch.std]]
+    mean, std = [
+        # func(data, dim=list(range(2, len(data.shape))), keepdim=True)
+        func(data, dim=list(range(1, len(data.shape))), keepdim=True)
+        for func in [torch.mean, torch.std]
+    ]
     std += epsilon
     if len(data.shape) == 4:
         return F.normalize(data, mean, std)
-    elif len(data.shape) == 1:
+    elif len(data.shape) < 3:
         return (data - mean) / std
     else:
         raise Exception(f'不支持的数据形状{data.shape}！')
