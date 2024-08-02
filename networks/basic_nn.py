@@ -100,7 +100,7 @@ class BasicNN(nn.Sequential):
             lr_names.append(f'LR_{i}')
         return optimizer_s, lr_names
 
-    def _get_lr_scheduler(self, optimizer_s, *args):
+    def _get_lr_scheduler(self, *args):
         """为优化器定制学习率规划器
         根据参数列表中的每一项调用torch_tools.py中的get_lr_scheduler()来获取学习率规划器。
 
@@ -222,13 +222,13 @@ class BasicNN(nn.Sequential):
         """
         if backward:
             with torch.enable_grad():
-                for optim in self._optimizer_s:
+                for optim in self.optimizer_s:
                     optim.zero_grad()
                 result = self._forward_impl(X, y)
                 self._backward_impl(*result[1])
                 if self._gradient_clipping is not None:
                     self._gradient_clipping()
-                for optim in self._optimizer_s:
+                for optim in self.optimizer_s:
                     optim.step()
             assert len(result) == 2, f'前反向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
             assert len(result[1]) == len(self.loss_names), \
