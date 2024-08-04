@@ -74,12 +74,22 @@ class SelfDefinedDataSet:
         if self._f_lazy:
             print('对于训练集，实行懒加载特征数据集')
         else:
-            self._train_f = self.read_fea_fn(self._train_f, n_worker)
+            pbar = tqdm(
+                total=len(self._train_f), unit='张', position=0,
+                desc=f"读取训练集的特征集图片中……", mininterval=1, leave=True, ncols=80
+            )
+            self._train_f = self.read_fea_fn(self._train_f, n_worker, pbar)
+            pbar.close()
         if self._l_lazy:
             print('对于训练集，实行懒加载标签数据集')
         # self._train_f, self._train_l = self.read_fn(self._train_f, self._train_l, n_worker)
         else:
-            self._train_l = self.read_lb_fn(self._train_l, n_worker)
+            pbar = tqdm(
+                total=len(self._train_l), unit='张', position=0,
+                desc=f"读取训练集的标签集图片中……", mininterval=1, leave=True, ncols=80
+            )
+            self._train_l = self.read_lb_fn(self._train_l, n_worker, pbar)
+            pbar.close()
         # print('按照懒加载程度加载训练数据集……')
         # self._train_f = self.read_fea_fn(self._train_f, n_worker) \
         #     if not self._f_lazy else self._train_f
@@ -94,11 +104,21 @@ class SelfDefinedDataSet:
         if self._f_lazy:
             print('对于测试集，实行懒加载特征数据集')
         else:
-            self._test_f = self.read_fea_fn(self._test_f, n_worker)
+            pbar = tqdm(
+                total=len(self._test_f), unit='张', position=0,
+                desc=f"读取测试集的特征集图片中……", mininterval=1, leave=True, ncols=80
+            )
+            self._test_f = self.read_fea_fn(self._test_f, n_worker, pbar)
+            pbar.close()
         if self._l_lazy:
             print('对于测试集，实行懒加载标签数据集')
         else:
-            self._test_l = self.read_lb_fn(self._test_l, n_worker)
+            pbar = tqdm(
+                total=len(self._test_l), unit='张', position=0,
+                desc=f"读取测试集的标签集图片中……", mininterval=1, leave=True, ncols=80
+            )
+            self._test_l = self.read_lb_fn(self._test_l, n_worker, pbar)
+            pbar.close()
         # self._test_f, self._test_l = self.read_fn(self._test_f, self._test_l, n_worker)
         # print('按照懒加载程度加载测试数据集……')
         # self._test_f = self.read_fea_fn(self._test_f, 16) \
@@ -186,7 +206,7 @@ class SelfDefinedDataSet:
 
     @staticmethod
     @abstractmethod
-    def read_fea_fn(index: Iterable and Sized, n_worker: int = 1) -> Iterable:
+    def read_fea_fn(index: Iterable and Sized, n_worker: int = 1, pbar=None) -> Iterable:
         """
         加载特征集数据批所用方法
         :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
@@ -197,7 +217,7 @@ class SelfDefinedDataSet:
 
     @staticmethod
     @abstractmethod
-    def read_lb_fn(index: Iterable and Sized, n_worker: int = 1) -> Iterable:
+    def read_lb_fn(index: Iterable and Sized, n_worker: int = 1, pbar=None) -> Iterable:
         """
         加载标签集数据批所用方法
         :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
