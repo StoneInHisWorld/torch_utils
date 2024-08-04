@@ -1,5 +1,4 @@
 import random
-import warnings
 from typing import Iterable, Sized
 
 import numpy as np
@@ -63,15 +62,11 @@ def k1_split_data(dataset: DataSet or LazyDataSet,
     :param train: 训练集比例
     :return: （训练集下标DataLoader）或（训练集下标DataLoader，验证集下标DataLoader）
     """
-    # assert train + valid == 1.0, '训练集、测试集、验证集比例之和须为1'
     assert 0 < train <= 1.0, '训练集、验证集比例之和须为1'
     # 数据集分割
     print('\r正在进行数据集分割……', flush=True)
     data_len = len(dataset)
     train_len = int(data_len * train)
-    # valid_len = int(data_len * valid)
-    # train_range, valid_range, test_range = np.split(np.arange(data_len), (train_len, train_len + valid_len))
-    # ranger = (r for r in (train_range, valid_range, test_range) if len(r) > 0)
     ranger = (r for r in np.split(np.arange(data_len), (train_len,)) if len(r) > 0)
     return (
         [
@@ -84,8 +79,13 @@ def k1_split_data(dataset: DataSet or LazyDataSet,
     )
 
 
-def split_data(dataset: DataSet or LazyDataSet,
-               train=0.8, k=1, shuffle=True):
+# def split_data(dataset: DataSet or LazyDataSet,
+#                train=0.8, k=1, shuffle=True):
+def split_data(dataset: DataSet or LazyDataSet, hps,
+               train=0.8, shuffle=True):
+    # 提取超参数
+    k = hps['k']
+    # batch_size = hps['batch_size']
     if k == 1:
         return k1_split_data(dataset, train, shuffle)
     elif k > 1:
@@ -127,8 +127,9 @@ def split_data(dataset: DataSet or LazyDataSet,
 #         )
 
 
-def to_loader(dataset: DataSet or LazyDataSet, transit_fn, batch_size: int = 1, shuffle=True,
-              sampler: Iterable = None, max_prefetch=3, **kwargs):
+def to_loader(dataset: DataSet or LazyDataSet, transit_fn,
+              batch_size: int = 1, shuffle=True, sampler: Iterable = None,
+              max_prefetch=3, bkgGen=True, **kwargs):
     """根据数据集类型转化为数据集加载器。生成预处理前，会将预处理程序清除。
     尚未完成懒加载数据集的代码编辑。
     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler，根据shuffle==True or False 提供乱序/顺序下标.
@@ -142,20 +143,22 @@ def to_loader(dataset: DataSet or LazyDataSet, transit_fn, batch_size: int = 1, 
         shuffle = None
     # pin_memory = kwargs['pin_memory'] if 'pin_memory' in kwargs.keys() else False
     if type(dataset) == LazyDataSet:
-        raise NotImplementedError('懒加载尚未完成编写！')
+        # raise NotImplementedError('懒加载尚未完成编写！')
+        # 懒加载需要保存有数据集预处理方法
         # dataset.pop_preprocesses()
-        # return LazyDataLoader(
-        #     dataset, batch_size,
-        #     max_load=max_load, shuffle=shuffle, collate_fn=dataset.collate_fn,
-        #     sampler=sampler,
-        #     **kwargs
-        # )
+
+        return LazyDataLoader(
+            dataset, transit_fn, batch_size,
+            shuffle=shuffle, sampler=sampler,  # 请注意，LazyDataSet提供的校正方法是针对索引集的，需要另外指定数据校正方法
+            **kwargs
+        )
     elif type(dataset) == DataSet:
         dataset.pop_preprocesses()
         return data_related.dataloader.DataLoader(
-            dataset, transit_fn, batch_size, max_prefetch=max_prefetch,
-            shuffle=shuffle, collate_fn=dataset.collate_fn, sampler=sampler,
-            **kwargs
+            dataset, transit_fn, batch_size,
+            max_prefetch=max_prefetch, bkgGen=bkgGen,
+            shuffle=shuffle, collate_fn=dataset.collate_fn,
+            sampler=sampler, **kwargs
         )
 
 
