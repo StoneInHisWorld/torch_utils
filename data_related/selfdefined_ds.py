@@ -1,8 +1,10 @@
+import functools
 import os
 from abc import abstractmethod
 from typing import Iterable, Tuple, Sized, List, Callable
 
 import torch
+from tqdm import tqdm
 
 from data_related.ds_operation import data_slicer
 from data_related.datasets import LazyDataSet, DataSet
@@ -63,28 +65,46 @@ class SelfDefinedDataSet:
         self._check_path(where, which)
         # 获取特征集、标签集及其索引集的预处理程序
         self._set_preprocess(module)
-        print('进行训练索引获取……')
+        print('\n进行训练索引获取……')
         self._train_f, self._train_l = [], []
         self._get_fea_index(self._train_f, self._train_fd)
         self._get_lb_index(self._train_l, self._train_ld)
         # 按照数据比例切分数据集索引
         self._train_f, self._train_l = data_slicer(data_portion, shuffle, self._train_f, self._train_l)
-        print('按照懒加载程度加载训练数据集……')
-        self._train_f = self.read_fea_fn(self._train_f, n_worker) \
-            if not self._f_lazy else self._train_f
-        self._train_l = self.read_lb_fn(self._train_l, n_worker) \
-            if not self._l_lazy else self._train_l
-        print("进行测试索引获取……")
+        if self._f_lazy:
+            print('对于训练集，实行懒加载特征数据集')
+        else:
+            self._train_f = self.read_fea_fn(self._train_f, n_worker)
+        if self._l_lazy:
+            print('对于训练集，实行懒加载标签数据集')
+        # self._train_f, self._train_l = self.read_fn(self._train_f, self._train_l, n_worker)
+        else:
+            self._train_l = self.read_lb_fn(self._train_l, n_worker)
+        # print('按照懒加载程度加载训练数据集……')
+        # self._train_f = self.read_fea_fn(self._train_f, n_worker) \
+        #     if not self._f_lazy else self._train_f
+        # self._train_l = self.read_lb_fn(self._train_l, n_worker) \
+        #     if not self._l_lazy else self._train_l
+        print("\n进行测试索引获取……")
         self._test_f, self._test_l = [], []
         self._get_fea_index(self._test_f, self._test_fd)
         self._get_lb_index(self._test_l, self._test_ld)
         self._test_f, self._test_l = data_slicer(data_portion, shuffle,
                                                  self._test_f, self._test_l)
-        print('按照懒加载程度加载测试数据集……')
-        self._test_f = self.read_fea_fn(self._test_f, 16) \
-            if not self._f_lazy else self._test_f
-        self._test_l = self.read_lb_fn(self._test_l, 16) \
-            if not self._l_lazy else self._test_l
+        if self._f_lazy:
+            print('对于测试集，实行懒加载特征数据集')
+        else:
+            self._test_f = self.read_fea_fn(self._test_f, n_worker)
+        if self._l_lazy:
+            print('对于测试集，实行懒加载标签数据集')
+        else:
+            self._test_l = self.read_lb_fn(self._test_l, n_worker)
+        # self._test_f, self._test_l = self.read_fn(self._test_f, self._test_l, n_worker)
+        # print('按照懒加载程度加载测试数据集……')
+        # self._test_f = self.read_fea_fn(self._test_f, 16) \
+        #     if not self._f_lazy else self._test_f
+        # self._test_l = self.read_lb_fn(self._test_l, 16) \
+        #     if not self._l_lazy else self._test_l
         assert len(self._train_f) == len(self._train_l), '特征集和标签集长度须一致'
         assert len(self._test_f) == len(self._test_l), '特征集和标签集长度须一致'
         del self._train_fd, self._train_ld, self._test_fd, self._test_ld
@@ -102,30 +122,48 @@ class SelfDefinedDataSet:
         pass
 
     def read_fn(self,
-                fea_index_or_d: Iterable,
-                lb_index_or_d: Iterable) -> Tuple[Iterable, Iterable]:
+                fea_index_or_d: Iterable and Sized, lb_index_or_d: Iterable and Sized,
+                n_workers: int =1, mute=False
+                ) -> Tuple[Iterable, Iterable]:
         """
         懒加载读取数据批所用方法。
         签名必须为：
         read_fn(fea_index: Iterable[path], lb_index: Iterable[path]) -> Tuple[features: Iterable, labels: Iterable]
+        非懒加载必须使用read_fea_fn()、read_lb_fn()来读取数据。
         :param lb_index_or_d: 懒加载读取标签数据批所用索引
         :param fea_index_or_d: 懒加载读取特征数据批所用索引
         :return: 特征数据批，标签数据批
         """
-        read_fea_thread = Thread(self.read_fea_fn, fea_index_or_d)
-        read_lb_thread = Thread(self.read_lb_fn, lb_index_or_d)
-        if self._f_lazy:
-            read_fea_thread.start()
-        if self._l_lazy:
-            read_lb_thread.start()
+        # if self._f_lazy:
+        #     # 如果是懒加载，则不会开启本线程
+        #     read_fea_thread = Thread(self.read_fea_fn, fea_index_or_d, n_workers // 2)
+        # else:
+        fea_pbar = tqdm(
+            total=len(fea_index_or_d), unit='张', position=0,
+            desc=f"读取特征集图片中……", mininterval=1, leave=True, ncols=80
+        ) if not mute else None
+        read_fea_thread = Thread(
+            self.read_fea_fn, fea_index_or_d, n_workers // 2, fea_pbar
+        )
+        read_fea_thread.start()
+        # if self._l_lazy:
+        #     # 如果是懒加载，则不会开启本线程
+        #     read_lb_thread = Thread(self.read_lb_fn, lb_index_or_d, n_workers // 2)
+        # else:
+        lb_pbar = tqdm(
+            total=len(lb_index_or_d), unit='张', position=0,
+            desc=f"读取标签集图片中……", mininterval=1, leave=True, ncols=80
+        ) if not mute else None
+        read_lb_thread = Thread(
+            self.read_lb_fn, lb_index_or_d, n_workers // 2, lb_pbar
+        )
+        read_lb_thread.start()
         if read_fea_thread.is_alive():
             read_fea_thread.join()
         if read_lb_thread.is_alive():
             read_lb_thread.join()
-        if self._f_lazy:
-            fea_index_or_d = read_fea_thread.get_result()
-        if self._l_lazy:
-            lb_index_or_d = read_lb_thread.get_result()
+        fea_index_or_d = read_fea_thread.get_result()
+        lb_index_or_d = read_lb_thread.get_result()
         return fea_index_or_d, lb_index_or_d
 
     @staticmethod
@@ -222,26 +260,35 @@ class SelfDefinedDataSet:
         :return: (训练数据集、测试数据集)，两者均为pytorch框架下数据集
         """
         if self._f_lazy or self._l_lazy:
+            index_collate_fn = functools.partial(
+                lambda data: ([d[0] for d in data], [d[1] for d in data])
+            )
             train_ds = LazyDataSet(
-                self._train_f, self._train_l, read_fn=self.read_fn
+                self._train_f, self._train_l, read_fn=self.read_fn,
+                collate_fn=index_collate_fn
             )
             train_ds.register_preprocess(
                 feaIndex_calls=self.feaIndex_preprocesses, lbIndex_calls=self.lbIndex_preprocesses
             )
             test_ds = LazyDataSet(
-                self._test_f, self._test_l, read_fn=self.read_fn
+                self._test_f, self._test_l, read_fn=self.read_fn,
+                collate_fn=index_collate_fn
             )
             test_ds.register_preprocess(
                 feaIndex_calls=self.feaIndex_preprocesses, lbIndex_calls=self.lbIndex_preprocesses
             )
+            train_preprocess_desc, test_preprocess_desc = \
+                '对训练数据索引集进行预处理……', '对测试数据索引集进行预处理……'
         else:
             train_ds = DataSet(self._train_f, self._train_l)
             test_ds = DataSet(self._test_f, self._test_l)
+            train_preprocess_desc, test_preprocess_desc = \
+                '对训练数据集进行预处理……', '对测试数据集进行预处理……'
         # 进行特征集本身的预处理
         train_ds.register_preprocess(features_calls=self.fea_preprocesses, labels_calls=self.lb_preprocesses)
-        train_ds.preprocess('对训练集进行预处理……')
+        train_ds.preprocess(train_preprocess_desc)
         test_ds.register_preprocess(features_calls=self.fea_preprocesses, labels_calls=self.lb_preprocesses)
-        test_ds.preprocess('对测试集进行预处理……')
+        test_ds.preprocess(test_preprocess_desc)
         return train_ds, test_ds
 
     def _set_preprocess(self, module: type):

@@ -51,7 +51,8 @@ class Experiment:
         for k, v in self.__hp.items():
             print(k + ': ' + str(v))
         print(
-            '\r----------------------------------------------------------------'
+            '\r--------------输入Ctrl+C即可终止本组超参数实验'
+            '--------------'
         )
         device = self.__runtime_cfg['device']
         cuda_memrecord = self.__runtime_cfg['cuda_memrecord']

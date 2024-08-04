@@ -5,7 +5,7 @@ from networks.basic_nn import BasicNN
 from networks.layers.val2img import Val2Fig
 
 
-class AdaP2P(BasicNN):
+class AdaUNet(BasicNN):
 
     def __init__(self,
                  input_channels, output_channels,
