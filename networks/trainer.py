@@ -618,7 +618,7 @@ class Trainer:
         # 提取训练器参数
         net = self.module
         criterion_a = self.criterion_a
-        pbar = tqdm(test_iter, unit='批', position=0, desc=f'测试中……', mininterval=1)
+        pbar = tqdm(test_iter, unit='批', position=0, desc=f'测试中……', mininterval=1, ncols=100)
         # 要统计的数据种类数目
         l_names = net.test_ls_names
         metric = Accumulator(len(criterion_a) + len(l_names) + 1)

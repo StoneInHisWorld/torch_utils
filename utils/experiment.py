@@ -82,11 +82,13 @@ class Experiment:
             else:
                 # 键盘中断则什么也不做
                 print('该组超参数实验被中断！')
-                for i in range(10, 0, -1):
-                    print(f'\r将在{i}秒后继续进行下一组超参数实验，再中断一次即可终止整个程序', end='', flush=True)
-                    time.sleep(1)
-                return True
-                # raise KeyboardInterrupt('该组超参数实验被中断！')
+                try:
+                    for i in range(10, 0, -1):
+                        print(f'\r将在{i}秒后继续进行下一组超参数实验，再中断一次即可终止整个程序', end='', flush=True)
+                        time.sleep(1)
+                    return True
+                except KeyboardInterrupt:
+                    raise KeyboardInterrupt('该组超参数实验被中断！')
         # 记录时间信息
         time_span = time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start))
         self.__hp.update({
