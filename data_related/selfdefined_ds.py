@@ -1,13 +1,12 @@
 import functools
-import os
 from abc import abstractmethod
 from typing import Iterable, Tuple, Sized, List, Callable
 
 import torch
 from tqdm import tqdm
 
-from data_related.ds_operation import data_slicer
 from data_related.datasets import LazyDataSet, DataSet
+from data_related.ds_operation import data_slicer
 from utils.thread import Thread
 
 
@@ -82,7 +81,6 @@ class SelfDefinedDataSet:
             pbar.close()
         if self._l_lazy:
             print('对于训练集，实行懒加载标签数据集')
-        # self._train_f, self._train_l = self.read_fn(self._train_f, self._train_l, n_worker)
         else:
             pbar = tqdm(
                 total=len(self._train_l), unit='张', position=0,
@@ -90,11 +88,7 @@ class SelfDefinedDataSet:
             )
             self._train_l = self.read_lb_fn(self._train_l, n_worker, pbar)
             pbar.close()
-        # print('按照懒加载程度加载训练数据集……')
-        # self._train_f = self.read_fea_fn(self._train_f, n_worker) \
-        #     if not self._f_lazy else self._train_f
-        # self._train_l = self.read_lb_fn(self._train_l, n_worker) \
-        #     if not self._l_lazy else self._train_l
+
         print("\n进行测试索引获取……")
         self._test_f, self._test_l = [], []
         self._get_fea_index(self._test_f, self._test_fd)
