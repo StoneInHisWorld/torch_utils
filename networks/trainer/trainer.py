@@ -1,5 +1,5 @@
-import traceback
-import warnings
+import os.path
+import time
 from typing import Iterable
 
 import dill
@@ -8,266 +8,22 @@ from torch import nn
 from torch.multiprocessing import Event as PEvent
 from torch.multiprocessing import Process
 from torch.multiprocessing import SimpleQueue as PQueue
+import torch
+from torch.profiler import profile, record_function, ProfilerActivity
 from tqdm import tqdm
 
 from networks.basic_nn import BasicNN
+from networks.trainer.__subprocess_impl import data_iter_subpro_impl, train_subprocess_impl, tv_log_subprocess_impl
 from utils.accumulator import Accumulator
 from utils.decorators import prepare
 from utils.history import History
-
-
-def data_iter_subpro_impl(
-        n_epochs, data_iter, data_Q: PQueue, end_env: PEvent
-):
-    """
-    进行data_Q.put()
-    :param n_epochs:
-    :param data_iter:
-    :param data_Q: 数据供给队列，需要给定长度以节省内存
-    :return:
-    """
-    try:
-        data_iter = dill.loads(data_iter)
-        # 训练主循环
-        for epoch in range(n_epochs):
-            data_Q.put(f'{epoch + 1}/{n_epochs}')
-            for batch in data_iter:
-                data_Q.put(batch)
-                if end_env.is_set():
-                    raise InterruptedError('获取数据时被中断！')
-            # 放置None作为世代结束标志
-        # print('data_fetching ends')
-        data_Q.put(None)
-        print('data_iter_subpro_impl ends')
-        end_env.wait()
-    except Exception as e:
-        traceback.print_exc()
-        data_Q.put(e)
-        print('data_iter_subpro_impl ends')
-
-
-def train_subprocess_impl(
-        net_init, net_init_args, net_init_kwargs,  # 网络设置
-        optimizer_s, lr_scheduler_s,  # 训练设置
-        pbar_Q: PQueue, log_Q: PQueue, data_Q: PQueue,  # 队列
-        data_end_env: PEvent
-):
-    """
-    进行data_Q.get()、pbar_Q.put()以及log_Q.put()
-    :param net:
-    :param optimizer_s:
-    :param lr_scheduler_s:
-    :param pbar_Q:
-    :param log_Q:
-    :param data_Q:
-    :param data_end_env:
-    :return:
-    """
-    try:
-        # net = dill.loads(net)
-        print('\r正在创建模型副本', end='', flush=True)
-        net = net_init(*net_init_args, **net_init_kwargs)
-        print('\r模型副本创建完成', end='', flush=True)
-        net.train()
-        while True:
-            item = data_Q.get()
-            # 收到了None，认为是数据供给结束标志
-            if item is None:
-                break
-            # 收到了异常，则抛出
-            elif isinstance(item, Exception):
-                raise item
-            # 收到了字符串，认为是世代结束标志
-            elif isinstance(item, str):
-                pbar_Q.put(f'世代{item} 训练中……')
-                if item.startswith('1'):
-                    # 如果是第一次世代更新，则只放入学习率组
-                    log_Q.put([
-                        [
-                            [param['lr'] for param in optimizer.param_groups]
-                            for optimizer in optimizer_s
-                        ],
-                        # ], True)
-                    ])
-                else:
-                    # log队列中放入每个优化器的学习率组以及网络参数
-                    log_Q.put([
-                        [
-                            [param['lr'] for param in optimizer.param_groups]
-                            for optimizer in optimizer_s
-                        ],
-                        net.state_dict()
-                        # ], True)
-                    ])
-                    # 更新学习率变化器组
-                    with warnings.catch_warnings():
-                        warnings.simplefilter('ignore', category=UserWarning)
-                        for scheduler in lr_scheduler_s:
-                            scheduler.step()
-            # 收到了元组，则认为是数据批次
-            elif isinstance(item, tuple):
-                X, y = item
-                net.train()
-                # 得到预测值以及损失组，即对应每个损失函数的损失值
-                pred, ls_es = net.forward_backward(X, y)
-                ls_es = [ls.detach() for ls in ls_es]
-                # 将网络参数、预测值、损失值、标签值作为信号放入队列中
-                # log_Q.put((pred.detach(), ls_es, y.detach().clone()), True)
-                log_Q.put((pred.detach(), ls_es, y.detach().clone()))
-                # 完成了一批数据的计算，更新进度条
-                pbar_Q.put(1)
-            else:
-                raise ValueError(f'不识别的信号{item}！')
-        # 通知data_iter进程结束，通知log_process结束
-        # data_end_env.set()
-        # log_Q.put(None, True)
-        log_Q.put(None)
-        # 等待记录进程结束
-        # log_end_env.wait()
-        print('train_subpro_impl ends')
-        data_end_env.wait()
-        return
-    except Exception as e:
-        traceback.print_exc()
-        log_Q.put(e)
-        print('train_subpro_impl ends')
-
-
-@torch.no_grad()
-def tv_log_subprocess_impl(
-        net_init, net_init_args, net_init_kwargs,  # 网络相关
-        valid_iter,  # 数据相关
-        criterion_a,  # 计算相关
-        history, lr_names, cri_los_names,  # 记录对象
-        log_Q: PQueue, pbar_Q: PQueue, end_env: PEvent  # 信号量相关
-):
-    """在多线程处理中，训练以及验证数据的记录实现。
-    进行log_Q.get()
-    :param net: 网络结构
-    :param valid_iter: 验证数据迭代器
-    :param criterion_a: 准确率计算函数
-    :param history: 历史记录
-    :param lr_names: 学习率名称，用于记录每个世代的学习率
-    :param cri_los_names: 评价指标和损失值名称，用于记录每个世代的评价指标和损失值组合
-    :param log_Q: 数据交换队列，train_impl通过该队列传输需要记录的信息
-    :return: history历史记录
-    """
-    try:
-        print('\r正在创建模型副本', end='', flush=True)
-        net = net_init(*net_init_args, **net_init_kwargs)
-        print('\r模型副本创建完成', end='', flush=True)
-        net.eval()
-        # 创建训练模型的副本
-        valid_iter = dill.loads(valid_iter)
-        metric = Accumulator(len(cri_los_names) + 1)
-        while True:
-            # 从队列中获取信号
-            # item = log_Q.get(True)
-            item = log_Q.get()
-            # 收到了None，则认为是训练完成信号
-            if item is None:
-                break
-            # 将异常抛出
-            elif isinstance(item, Exception):
-                raise item
-            # 如果收到了序列，则认为是世代结束标志
-            elif isinstance(item, list):
-                if len(item) == 2:
-                    # 若是获取到了学习率组和网络参数，则认为完成了一个世代的迭代，刷新累加器并进行验证
-                    lr_group, state_dict = item
-                    # 进行验证
-                    net.load_state_dict(state_dict)
-                    valid_log = valid_subprocess_impl(net, valid_iter, criterion_a, pbar_Q)
-                    # 记录训练和验证数据
-                    history.add(
-                        cri_los_names + list(valid_log.keys()),
-                        [metric[i] / metric[-1] for i in range(len(metric) - 1)] +
-                        list(valid_log.values())
-                    )
-                    metric.reset()
-                    del state_dict
-                else:
-                    [lr_group] = item
-                # 记录学习率
-                history.add(lr_names, lr_group)
-                del lr_group
-            # 如果收到了元组，则认为是迭代结束标志
-            elif isinstance(item, tuple):
-                # 分解成预测值、损失值、标签值，进行评价指标的计算以及损失值的累加
-                pred, ls_es, y = item
-                # 计算训练准确率数据
-                correct_s = []
-                for criterion in criterion_a:
-                    correct = criterion(pred, y)
-                    correct_s.append(correct)
-                num_examples = y.shape[0]
-                metric.add(
-                    *correct_s, *[ls * num_examples for ls in ls_es],
-                    num_examples
-                )
-                del pred, ls_es, y
-            else:
-                raise NotImplementedError(f'无法识别的信号{item}！')
-            del item
-        # 将结果放在进度条队列中
-        pbar_Q.put(history)
-        print('tv_log_subprocess_impl ends')
-        end_env.set()
-        return
-    except Exception as e:
-        traceback.print_exc()
-        pbar_Q.put(e)
-        print('tv_log_subprocess_impl ends')
-
-
-@torch.no_grad()
-def valid_subprocess_impl(
-        net, valid_iter, criterion_a, pbar_Q
-):
-    """
-    进行pbar_Q.put()
-    :param net:
-    :param valid_iter:
-    :param criterion_a:
-    :param pbar_Q:
-    :return:
-    """
-    net.eval()
-    pbar_Q.put('验证中……')
-    # 要统计的数据种类数目
-    criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
-    # 要统计的数据种类数目
-    l_names = net.test_ls_names
-    metric = Accumulator(len(criterion_a) + len(l_names) + 1)
-    # 计算准确率和损失值
-    for features, labels in valid_iter:
-        preds, ls_es = net.forward_backward(features, labels, False)
-        metric.add(
-            *[criterion(preds, labels) for criterion in criterion_a],
-            *[ls * len(features) for ls in ls_es],
-            len(features)
-        )
-        pbar_Q.put(1)
-    # 生成测试日志
-    log = {}
-    prefix = 'valid_'
-    i = 0
-    for i, computer in enumerate(criterion_a):
-        try:
-            log[prefix + computer.__name__] = metric[i] / metric[-1]
-        except AttributeError:
-            log[prefix + computer.__class__.__name__] = metric[i] / metric[-1]
-    i += 1
-    for j, loss_name in enumerate(l_names):
-        log[prefix + loss_name] = metric[i + j] / metric[-1]
-    return log
 
 
 class Trainer:
     """神经网络训练器对象，提供所有针对神经网络的操作，包括训练、验证、测试、预测"""
 
     def __init__(self,
-                 module_class, m_init_args, m_init_kwargs, prepare_args,  # 网络模型相关构造参数
+                 module_class, m_init_args, m_init_kwargs, input_size, prepare_args,  # 网络模型相关构造参数
                  datasource, criterion_a,
                  hps=None, runtime_cfg=None,  # 训练、验证、测试依赖参数
                  with_hook=False, hook_mute=True):
@@ -299,7 +55,8 @@ class Trainer:
         self.prepare_args = prepare_args
         self.module = None
         # 设置训练、验证、测试依赖参数
-        self.datasource = datasource
+        self.input_size = input_size
+        # self.datasource = datasource
         self.hps = hps
         self.runtime_cfg = runtime_cfg
         self.criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
@@ -481,7 +238,6 @@ class Trainer:
                 pbar.update(1)
             for scheduler in scheduler_s:
                 scheduler.step()
-            # TODO:记录训练数据，可以细化到每个批次
             history.add(
                 criteria_names + loss_names,
                 [metric[i] / metric[-1] for i in range(len(metric) - 1)]
@@ -774,6 +530,99 @@ class Trainer:
             raise e
         pbar.close()
         return history
+
+    def predict_with_profiler(self, data_iter, log_path):
+        # 提取训练器参数
+        k = self.hps['k']
+        # n_epochs = self.hps['epochs']
+        n_epochs = 2
+        # 取相对较少数量的那个数据迭代器进行性能测试
+        if k > 1:
+            _, data_iter = next(data_iter)
+        else:
+            # 提取训练迭代器和验证迭代器
+            data_iter = list(data_iter)
+            if len(data_iter) == 2:
+                _, data_iter = [it[0] for it in data_iter]
+            elif len(data_iter) == 1:
+                data_iter, _ = data_iter[0][0], None
+            else:
+                raise ValueError(f"无法识别的数据迭代器，其提供的长度为{len(data_iter)}")
+
+        # 进度条设置
+        self.pbar = tqdm(
+            total=len(data_iter) * n_epochs, unit='批', position=0,
+            desc=f'正在进行训练准备……', mininterval=1, ncols=100
+        )
+
+        @prepare('train')
+        def _impl(trainer, data_iter):
+            # 提取训练器参数
+            net = trainer.module
+            criterion_a = trainer.criterion_a
+            optimizer_s = net.optimizer_s
+            scheduler_s = net.scheduler_s
+            # 记录项设置
+            loss_names = [f'train_{item}' for item in net.loss_names]
+            criteria_names = [f'train_{criterion.__name__}' for criterion in criterion_a]
+            lr_names = net.lr_names
+            history = History(*(criteria_names + loss_names + lr_names))
+            # 进行性能测试
+            with torch.profiler.profile(
+                    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                    # schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
+                    # on_trace_ready=torch.profiler.tensorboard_trace_handler('./log'),
+                    record_shapes=True,
+                    profile_memory=True,
+                    # with_stack=True,
+            ) as prof:
+                for epoch in range(n_epochs):
+                    with record_function("epoch_switch_consume"):
+                        self.pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中……')
+                        history.add(
+                            lr_names, [
+                                [param['lr'] for param in optimizer.param_groups]
+                                for optimizer in optimizer_s
+                            ]
+                        )
+                        # 记录批次训练损失总和，评价指标，样本数
+                        metric = Accumulator(len(loss_names + criteria_names) + 1)
+                    with record_function("epoch_total_consume"):
+                        for X, y in data_iter:
+                            with torch.profiler.record_function("forward_and_backward"):
+                                net.train()
+                                pred, ls_es = net.forward_backward(X, y)
+                            with torch.profiler.record_function("metric_calculation"):
+                                with torch.no_grad():
+                                    num_examples = X.shape[0]
+                                    correct_s = []
+                                    for criterion in criterion_a:
+                                        correct = criterion(pred, y)
+                                        correct_s.append(correct)
+                                    metric.add(
+                                        *correct_s, *[ls * num_examples for ls in ls_es],
+                                        num_examples
+                                    )
+                            # with torch.profiler.record_function("batch_switch_consume"):
+                            self.pbar.update(1)
+                    with record_function("epoch_switch_consume"):
+                        for scheduler in scheduler_s:
+                            scheduler.step()
+                        history.add(
+                            criteria_names + loss_names,
+                            [metric[i] / metric[-1] for i in range(len(metric) - 1)]
+                        )
+                # prof.step()
+            self.pbar.close()
+            with open(os.path.join(
+                    log_path,
+                    f'{net.__class__.__name__.lower()}_profiling_{time.strftime("%Y-%m-%d-%H.%M.%S", time.localtime())}.txt'),
+                    mode='w') as file:
+                table = prof.key_averages(group_by_input_shape=True).table(sort_by="self_cuda_time_total", row_limit=15)
+                file.writelines(table)
+                print(table)
+
+        _impl(self, data_iter)
 
     def __deal_with_hook(self, net: Iterable[nn.Module]):
         self.__last_forward_output, self.__last_backward_data = {}, {}
