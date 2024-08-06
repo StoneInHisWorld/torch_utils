@@ -325,10 +325,7 @@ class Trainer:
         # 判断是否是k折训练
         if k > 1:
             pbar_len = k * n_epochs
-            train_fn, train_args = self.__train_with_k_fold, (
-                # self.module_class, self.m_init_args, self.m_init_kwargs, self.prepare_args,
-                data_iter,
-            )
+            train_fn, train_args = self.__train_with_k_fold, (data_iter, )
         else:
             # 提取训练迭代器和验证迭代器
             data_iter = list(data_iter)
@@ -346,19 +343,17 @@ class Trainer:
                 if valid_iter is not None:
                     # 进行训练和验证
                     train_fn, train_args = self.__train_and_valid, (
-                        # self.module_class, self.m_init_args, self.m_init_kwargs, self.prepare_args,
                         train_iter, valid_iter
                     )
                 else:
                     # 进行训练
                     train_fn, train_args = self.__train, (
-                        # self.module_class, self.m_init_args, self.m_init_kwargs, self.prepare_args,
                         train_iter,
                     )
             else:
                 # 启用多进程训练
                 raise NotImplementedError('多进程训练尚未实现！')
-                # history = self.__train_with_subprocesses(train_iter, valid_iter, None)
+                history = self.__train_with_subprocesses(train_iter, valid_iter, None)
         # 设置进度条
         self.pbar = tqdm(
             total=pbar_len, unit='批', position=0,
@@ -681,30 +676,27 @@ class Trainer:
             log['valid_' + loss_name] = metric[i + j] / metric[-1]
         return log
 
-    def __train_with_subprocesses(self,
-                                  train_iter, valid_iter=None,
-                                  pbar=None) -> History:
+    @prepare('train')
+    def __train_with_subprocesses(self, train_iter, valid_iter=None) -> History:
         """多进程训练实现
         :param train_iter: 训练数据迭代器
         :param valid_iter: 验证数据迭代器
         :param pbar: 进度条
         :return: 训练历史记录
         """
-        raise NotImplementedError('多进程训练尚未实现！')
-        # 提取基本训练对象
+        # 提取训练器参数
+        pbar = self.pbar
         net = self.module
-        n_epochs = self.__n_epochs
-        criterion_a = self.__criterion_a if isinstance(self.__criterion_a, list) else [self.__criterion_a]
-        progress_len = (len(train_iter) + len(valid_iter)) * n_epochs if valid_iter else len(train_iter) * n_epochs
+        criterion_a = self.criterion_a
+        n_epochs = self.hps['epochs']
+        optimizer_s = net.optimizer_s
+        scheduler_s = net.scheduler_s
         # 损失项
         loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
         criteria_names = [f'train_{criterion.__name__}' for criterion in criterion_a]
         # 学习率项
         lr_names = net.lr_names
-        optimizer_s = self.__optimizer_s
-        lr_scheduler_s = self.__lr_scheduler_s
-        criterion_a = self.__criterion_a
         # 设置历史记录对象
         history = History(*(criteria_names + loss_names + lr_names))
 
@@ -727,10 +719,6 @@ class Trainer:
         # del net
         print('\r子进程创建准备完毕')
 
-        # 设置进度条
-        if pbar is None:
-            # 如果调用函数不提供进度条，则创建一个新的进度条
-            pbar = tqdm(total=progress_len, unit='批', desc='训练中……', mininterval=1)
         # 生成子进程
         data_subprocess = Process(
             target=data_iter_subpro_impl,
@@ -740,7 +728,7 @@ class Trainer:
             target=train_subprocess_impl,
             args=(
                 net_init, net_init_args, net_init_kwargs,
-                optimizer_s, lr_scheduler_s,
+                optimizer_s, scheduler_s,
                 pbar_Q, log_Q, data_Q, data_end_env
             )
         )
