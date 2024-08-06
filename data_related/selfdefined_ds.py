@@ -1,13 +1,12 @@
 import functools
-import os
 from abc import abstractmethod
 from typing import Iterable, Tuple, Sized, List, Callable
 
 import torch
 from tqdm import tqdm
 
-from data_related.ds_operation import data_slicer
 from data_related.datasets import LazyDataSet, DataSet
+from data_related.ds_operation import data_slicer
 from utils.thread import Thread
 
 
@@ -82,7 +81,6 @@ class SelfDefinedDataSet:
             pbar.close()
         if self._l_lazy:
             print('对于训练集，实行懒加载标签数据集')
-        # self._train_f, self._train_l = self.read_fn(self._train_f, self._train_l, n_worker)
         else:
             pbar = tqdm(
                 total=len(self._train_l), unit='张', position=0,
@@ -90,11 +88,7 @@ class SelfDefinedDataSet:
             )
             self._train_l = self.read_lb_fn(self._train_l, n_worker, pbar)
             pbar.close()
-        # print('按照懒加载程度加载训练数据集……')
-        # self._train_f = self.read_fea_fn(self._train_f, n_worker) \
-        #     if not self._f_lazy else self._train_f
-        # self._train_l = self.read_lb_fn(self._train_l, n_worker) \
-        #     if not self._l_lazy else self._train_l
+
         print("\n进行测试索引获取……")
         self._test_f, self._test_l = [], []
         self._get_fea_index(self._test_f, self._test_fd)
@@ -119,12 +113,6 @@ class SelfDefinedDataSet:
             )
             self._test_l = self.read_lb_fn(self._test_l, n_worker, pbar)
             pbar.close()
-        # self._test_f, self._test_l = self.read_fn(self._test_f, self._test_l, n_worker)
-        # print('按照懒加载程度加载测试数据集……')
-        # self._test_f = self.read_fea_fn(self._test_f, 16) \
-        #     if not self._f_lazy else self._test_f
-        # self._test_l = self.read_lb_fn(self._test_l, 16) \
-        #     if not self._l_lazy else self._test_l
         assert len(self._train_f) == len(self._train_l), '特征集和标签集长度须一致'
         assert len(self._test_f) == len(self._test_l), '特征集和标签集长度须一致'
         del self._train_fd, self._train_ld, self._test_fd, self._test_ld
@@ -143,21 +131,17 @@ class SelfDefinedDataSet:
 
     def read_fn(self,
                 fea_index_or_d: Iterable and Sized, lb_index_or_d: Iterable and Sized,
-                n_workers: int =1, mute=False
+                n_workers: int = 1, mute: bool = False
                 ) -> Tuple[Iterable, Iterable]:
-        """
-        懒加载读取数据批所用方法。
-        签名必须为：
-        read_fn(fea_index: Iterable[path], lb_index: Iterable[path]) -> Tuple[features: Iterable, labels: Iterable]
-        非懒加载必须使用read_fea_fn()、read_lb_fn()来读取数据。
+        """懒加载读取数据批所用方法。
+        非懒加载必须分别使用read_fea_fn()、read_lb_fn()来读取特征集、标签集数据。
+
+        :param mute: 是否进行静默加载
+        :param n_workers: 分配的处理机数目
         :param lb_index_or_d: 懒加载读取标签数据批所用索引
         :param fea_index_or_d: 懒加载读取特征数据批所用索引
         :return: 特征数据批，标签数据批
         """
-        # if self._f_lazy:
-        #     # 如果是懒加载，则不会开启本线程
-        #     read_fea_thread = Thread(self.read_fea_fn, fea_index_or_d, n_workers // 2)
-        # else:
         fea_pbar = tqdm(
             total=len(fea_index_or_d), unit='张', position=0,
             desc=f"读取特征集图片中……", mininterval=1, leave=True, ncols=80
@@ -166,10 +150,6 @@ class SelfDefinedDataSet:
             self.read_fea_fn, fea_index_or_d, n_workers // 2, fea_pbar
         )
         read_fea_thread.start()
-        # if self._l_lazy:
-        #     # 如果是懒加载，则不会开启本线程
-        #     read_lb_thread = Thread(self.read_lb_fn, lb_index_or_d, n_workers // 2)
-        # else:
         lb_pbar = tqdm(
             total=len(lb_index_or_d), unit='张', position=0,
             desc=f"读取标签集图片中……", mininterval=1, leave=True, ncols=80
@@ -204,24 +184,26 @@ class SelfDefinedDataSet:
         """
         pass
 
-    @staticmethod
     @abstractmethod
-    def read_fea_fn(index: Iterable and Sized, n_worker: int = 1, pbar=None) -> Iterable:
-        """
-        加载特征集数据批所用方法
-        :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
+    def read_fea_fn(self, index: Iterable and Sized,
+                    n_worker: int = 1, pbar=None) -> Iterable:
+        """加载特征集数据批所用方法
+
         :param index: 加载特征集数据批所用索引
+        :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
+        :param pbar: 加载特征集时所用的进度条
         :return: 读取到的特征集数据批
         """
         pass
 
-    @staticmethod
     @abstractmethod
-    def read_lb_fn(index: Iterable and Sized, n_worker: int = 1, pbar=None) -> Iterable:
-        """
-        加载标签集数据批所用方法
-        :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
+    def read_lb_fn(self, index: Iterable and Sized,
+                   n_worker: int = 1, pbar=None) -> Iterable:
+        """加载标签集数据批所用方法
+
         :param index: 加载标签集数据批所用索引
+        :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
+        :param pbar: 加载标签集时所用的进度条
         :return: 读取到的标签集数据批
         """
         pass
@@ -332,9 +314,10 @@ class SelfDefinedDataSet:
         2. self.feaIndex_preprocesses：特征索引集预处理程序列表
         3. self.lb_preprocesses：标签集预处理程序列表
         4. self.fea_preprocesses：特征集预处理程序列表
-        其中索引集预处理程序若未指定本数据集为懒加载，则不会执行。
+        其中未指定本数据集为懒加载时，索引集预处理程序不会执行。
 
-        :return: None
+        若要定制其他网络的预处理程序，请定义函数：
+        def {the_name_of_your_net}_preprocesses()
         """
         pass
 
