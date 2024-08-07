@@ -51,15 +51,15 @@ class Experiment:
         for k, v in self.__hp.items():
             print(k + ': ' + str(v))
         print(
-            '\r--------------输入Ctrl+C即可终止本组超参数实验'
-            '--------------'
+            '\r-----------------输入Ctrl+C即可终止本组超参数实验'
+            '-----------------'
         )
-        device = self.__runtime_cfg['device']
+        device = torch.device(self.__runtime_cfg['device'])
         cuda_memrecord = self.__runtime_cfg['cuda_memrecord']
         # 开启显存监控
-        if device != 'cpu':
+        if device.type == 'cuda' and cuda_memrecord:
             torch.cuda.memory._record_memory_history(cuda_memrecord)
-        elif device == 'cpu' and cuda_memrecord:
+        elif device.type == 'cpu' and cuda_memrecord:
             warnings.warn(
                 f'运行设备为{device}，不支持显存监控！请使用支持CUDA的处理机，或者设置cuda_memrecord为false')
 
