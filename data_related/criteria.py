@@ -17,8 +17,6 @@ from utils.func.pytools import warning_handler
 若有此需求，请转至networks.layers层寻找相关功能"""
 
 
-# TODO: 使用pytorch实现
-
 def ARGMAX(Y_HAT: torch.Tensor, Y: torch.Tensor, size_averaged=True) -> float:
     y_hat = torch.argmax(Y_HAT, dim=1)
     y = torch.argmax(Y, dim=1)
