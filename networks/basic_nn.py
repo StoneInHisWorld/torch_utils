@@ -210,6 +210,11 @@ class BasicNN(nn.Sequential):
                     raise NotImplementedError('针对预训练好的网络，请使用如下方法获取`net = torch.load("../xx.ptm")`')
             except IndexError:
                 raise ValueError('选择预训练好的参数初始化网络，需要使用where关键词提供参数或者模型的路径！')
+            except FileNotFoundError:
+                if where.endswith('.ptsd'):
+                    raise FileNotFoundError(f'找不到网络参数文件{where}！')
+                elif where.endswith('.ptm'):
+                    raise FileNotFoundError(f'找不到网络文件{where}！')
 
     def forward_backward(self, X, y, backward=True):
         """前向和反向传播。
