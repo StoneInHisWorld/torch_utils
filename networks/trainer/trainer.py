@@ -1,3 +1,4 @@
+import functools
 import os.path
 import time
 from typing import Iterable
@@ -8,8 +9,7 @@ from torch import nn
 from torch.multiprocessing import Event as PEvent
 from torch.multiprocessing import Process
 from torch.multiprocessing import SimpleQueue as PQueue
-import torch
-from torch.profiler import profile, record_function, ProfilerActivity
+from torch.profiler import record_function, ProfilerActivity
 from tqdm import tqdm
 
 from networks.basic_nn import BasicNN
@@ -17,6 +17,20 @@ from networks.trainer.__subprocess_impl import data_iter_subpro_impl, train_subp
 from utils.accumulator import Accumulator
 from utils.decorators import prepare
 from utils.history import History
+
+
+def get_computer_name(computer):
+    """获取一个可调用对象的有意义名称"""
+    if isinstance(computer, functools.partial):
+        # functools.partial对象
+        computer_name = computer.func.__name__
+    elif hasattr(computer, '__name__'):
+        # 函数对象
+        computer_name = computer.__name__
+    else:
+        # 可调用对象
+        computer_name = computer.__class__.__name__
+    return computer_name
 
 
 class Trainer:
@@ -207,7 +221,7 @@ class Trainer:
         # 损失项
         loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
-        criteria_names = [f'train_{criterion.__name__}' for criterion in criterion_a]
+        criteria_names = [f'train_{get_computer_name(criterion)}' for criterion in criterion_a]
         # 学习率项
         lr_names = net.lr_names
         history = History(*(criteria_names + loss_names + lr_names))
@@ -272,7 +286,9 @@ class Trainer:
         # 损失项
         loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
-        criteria_names = [f'train_{criterion.__name__}' for criterion in criterion_a]
+        criteria_names = [
+            f'train_{get_computer_name(criterion)}' for criterion in criterion_a
+        ]
         # 学习率项
         lr_names = net.lr_names
         history = History(*(criteria_names + loss_names + lr_names))
@@ -386,10 +402,7 @@ class Trainer:
         log = {}
         i = 0
         for i, computer in enumerate(criterion_a):
-            try:
-                log['test_' + computer.__name__] = metric[i] / metric[-1]
-            except AttributeError:
-                log['test_' + computer.__class__.__name__] = metric[i] / metric[-1]
+            log['test_' + get_computer_name(computer)] = metric[i] / metric[-1]
         i += 1
         for j, loss_name in enumerate(l_names):
             log['test_' + loss_name] = metric[i + j] / metric[-1]
@@ -423,10 +436,11 @@ class Trainer:
         log = {}
         i = 0
         for i, computer in enumerate(criterion_a):
-            try:
-                log['valid_' + computer.__name__] = metric[i] / metric[-1]
-            except AttributeError:
-                log['valid_' + computer.__class__.__name__] = metric[i] / metric[-1]
+            log['valid_' + get_computer_name(computer)] = metric[i] / metric[-1]
+            # try:
+            #     log['valid_' + computer.__name__] = metric[i] / metric[-1]
+            # except AttributeError:
+            #     log['valid_' + computer.__class__.__name__] = metric[i] / metric[-1]
         i += 1
         for j, loss_name in enumerate(l_names):
             log['valid_' + loss_name] = metric[i + j] / metric[-1]
