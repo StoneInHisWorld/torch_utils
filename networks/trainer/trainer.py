@@ -148,10 +148,6 @@ class Trainer:
         net = self.module
         criterion_a = self.criterion_a
         pbar = self.pbar
-        # # 预处理损失函数参数
-        # for (_, kwargs) in ls_fn_args:
-        #     kwargs['size_averaged'] = False
-        # self._ls_fn_s, _, self.test_ls_names = self._get_ls_fn(*ls_fn_args)
         # 如果传递了包装方法
         if unwrap_fn is not None:
             # 将本次预测所产生的全部数据打包并返回。
@@ -179,7 +175,7 @@ class Trainer:
             # 获取输出结果需要的注解
             comments = net.get_comment(
                 inputs, predictions, labels,
-                metrics, [criterion.__name__ for criterion in criterion_a],
+                metrics, [get_computer_name(criterion) for criterion in criterion_a],
                 losses
             )
             # 将注解与所有数据打包，输出
