@@ -50,6 +50,7 @@ class Experiment:
         # 打印本次训练超参数
         for k, v in self.__hp.items():
             print(k + ': ' + str(v))
+        print(f'data_portion: {self.__runtime_cfg["data_portion"]}')
         print(
             '\r-----------------输入Ctrl+C即可终止本组超参数实验'
             '-----------------'
@@ -62,7 +63,6 @@ class Experiment:
         elif device.type == 'cpu' and cuda_memrecord:
             warnings.warn(
                 f'运行设备为{device}，不支持显存监控！请使用支持CUDA的处理机，或者设置cuda_memrecord为false')
-
         return self.__hp
 
     def __exit__(self, exc_type, exc_val, exc_tb):
