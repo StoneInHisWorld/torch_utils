@@ -4,7 +4,7 @@ import warnings
 import numpy as np
 import torch
 from torchmetrics.image import StructuralSimilarityIndexMeasure, PeakSignalNoiseRatio
-from torchmetrics import PearsonCorrCoef
+from networks.layers import PCC as PearsonCorrCoef
 from skimage.metrics import (structural_similarity as ssim,
                              peak_signal_noise_ratio as psnr)
 from scipy.stats import pearsonr
@@ -32,11 +32,11 @@ def SSIM(Y_HAT: torch.Tensor, Y: torch.Tensor, data_range=255., size_averaged: b
         kwargs = {'data_range': data_range, 'reduction': 'sum'}
     else:
         kwargs = {'data_range': data_range, 'reduction': 'none'}
-
-    with warnings.catch_warnings(record=True) as warning_filter:
-        warnings.simplefilter("ignore", UserWarning)
-        computer = StructuralSimilarityIndexMeasure(**kwargs)
-        return computer(Y_HAT, Y)
+    #
+    # with warnings.catch_warnings(record=True) as warning_filter:
+    # warnings.simplefilter("ignore", UserWarning)
+    computer = StructuralSimilarityIndexMeasure(**kwargs).to(Y_HAT.device)
+    return computer(Y_HAT, Y)
         # def msg_printer(*input_args):
         #     constant_msg = ''
         #     y, y_hat = input_args
@@ -64,13 +64,13 @@ def SSIM(Y_HAT: torch.Tensor, Y: torch.Tensor, data_range=255., size_averaged: b
 
 def PSNR(Y_HAT: torch.Tensor, Y: torch.Tensor, data_range=255., size_averaged: bool = True):
     if size_averaged:
-        kwargs = {'data_range': data_range, 'reduction': 'sum'}
+        kwargs = {'data_range': data_range, 'reduction': 'sum', 'dim': list(range(1, len(Y_HAT.shape)))}
     else:
-        kwargs = {'data_range': data_range, 'reduction': 'none'}
-    with warnings.catch_warnings(record=True) as warning_filter:
-        warnings.simplefilter("ignore", UserWarning)
-        computer = PeakSignalNoiseRatio(**kwargs)
-        return computer(Y_HAT, Y)
+        kwargs = {'data_range': data_range, 'reduction': 'none', 'dim': list(range(1, len(Y_HAT.shape)))}
+    # with warnings.catch_warnings(record=True) as warning_filter:
+    #     warnings.simplefilter("ignore", UserWarning)
+    computer = PeakSignalNoiseRatio(**kwargs).to(Y_HAT.device)
+    return computer(Y_HAT, Y)
 
     # y = normalize(Y).cpu().numpy()
     # y_hat = normalize(Y_HAT).cpu().numpy()
@@ -85,12 +85,13 @@ def PSNR(Y_HAT: torch.Tensor, Y: torch.Tensor, data_range=255., size_averaged: b
     #     return result
 
 
-# def PCC(Y_HAT: torch.Tensor, Y: torch.Tensor, data_range=255., size_averaged: bool = True):
-#     if size_averaged:
-#         kwargs = {'data_range': data_range, 'reduction': 'sum'}
-#     else:
-#         kwargs = {'data_range': data_range, 'reduction': 'none'}
-#     computer = PearsonCorrCoef(**kwargs)
+def PCC(Y_HAT: torch.Tensor, Y: torch.Tensor, size_averaged: bool = True):
+    if size_averaged:
+        kwargs = {'reduction': 'sum'}
+    else:
+        kwargs = {'reduction': 'none'}
+    computer = PearsonCorrCoef(**kwargs)
+    return computer(Y_HAT, Y)
 #     with warnings.catch_warnings(record=True) as warning_filter:
 #         warnings.simplefilter("default", ConstantInputWarning)
 #
