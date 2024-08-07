@@ -541,7 +541,7 @@ class Trainer:
         pbar.close()
         return history
 
-    def predict_with_profiler(self, data_iter, log_path):
+    def train_with_profiler(self, data_iter, log_path):
         # 提取训练器参数
         k = self.hps['k']
         # n_epochs = self.hps['epochs']

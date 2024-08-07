@@ -13,8 +13,7 @@ from scipy.stats import ConstantInputWarning
 from data_related.ds_operation import normalize
 from utils.func.pytools import warning_handler
 
-"""以下评价指标会将torch.Tensor转换成numpy.Array，因此使用此处的评价指标无法求导。
-若有此需求，请转至networks.layers层寻找相关功能"""
+"""请勿编写无法使用CUDA加速的函数，否则会大大影响CUDA设备的训练速度！"""
 
 
 def ARGMAX(Y_HAT: torch.Tensor, Y: torch.Tensor, size_averaged=True) -> float:
