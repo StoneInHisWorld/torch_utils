@@ -1,13 +1,10 @@
 import json
-import warnings
 
 import pandas as pd
 import torch
-from torchsummary import summary
 
-import utils.func.log_tools as ltools
-from utils.func import pytools
 from utils.experiment import Experiment
+from utils.func import pytools
 
 
 def init_log(path):
@@ -110,11 +107,6 @@ class ControlPanel:
                     f'实验{self.exp_no}号/{self.last_expno}号'
                     f'---------------------------'
                 )
-                # # 开启显存监控
-                # if self['device'] != 'cpu':
-                #     torch.cuda.memory._record_memory_history(self['cuda_memrecord'])
-                # elif self['device'] == 'cpu' and self['cuda_memrecord']:
-                #     warnings.warn(f'运行设备为{self["device"]}，不支持显存监控！请使用支持CUDA的处理机，或者设置cuda_memrecord为false')
                 yield self.__cur_exp
                 self.__read_runtime_cfg()
 

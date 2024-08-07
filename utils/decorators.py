@@ -2,7 +2,8 @@ import warnings
 from functools import wraps
 
 import torch
-from torchsummary import summary
+# from torchsummary import summary
+from torchinfo import summary
 from tqdm import tqdm
 
 from networks.basic_nn import BasicNN
@@ -121,13 +122,17 @@ class net_builder:
         :return: None
         """
         if trainer.runtime_cfg['print_net']:
-            input_size = trainer.datasource.fea_channel, *net.required_shape
+            # input_size = trainer.datasource.fea_channel, *net.required_shape
+            input_size = trainer.input_size
+            # input_size = (1, 3, 3)
             try:
                 summary(
-                    net, input_size=input_size,
-                    batch_size=trainer.hps['batch_size']
+                    # net, input_size=input_size,
+                    # batch_size=trainer.hps['batch_size']
+                    net, input_size=(trainer.hps['batch_size'], *input_size)
                 )
-            except RuntimeError as _:
+            except Exception as e:
+                warnings.warn(f"打印网络时遇到错误：{e}，将切换成简洁打印模式！")
                 print(net)
 
 
@@ -293,7 +298,7 @@ class prepare:
             del net.optimizer_s, net.scheduler_s
         # 创建进度条
         trainer.pbar = tqdm(
-            data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1
+            data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1, ncols=100
         )
         # 设置神经网络模式
         net.eval()

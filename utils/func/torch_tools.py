@@ -26,7 +26,6 @@ def try_gpu(i=0):
     return torch.device("cpu")
 
 
-# def get_optimizer(net: torch.nn.Module, optim_str, lr=0.1, w_decay=0., momentum=0.):
 def get_optimizer(net: torch.nn.Module, optim_str='adam', lr=0.1, w_decay=0., **kwargs):
     if optim_str == "asgd":
         # 使用随机平均梯度下降优化器

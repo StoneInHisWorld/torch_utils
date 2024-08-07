@@ -9,31 +9,31 @@ from tqdm import tqdm
 import utils.func.pytools as tools
 
 
-def fea_apply(result_pipe, features, features_calls, pbar_Q: Queue):
-    features_calls = dill.loads(features_calls)
-    n_tasks = len(features_calls)
-    for i, call in enumerate(features_calls):
-        features = call(features)
-        # shared_value['fea'] = call(shared_value['fea'])
-        pbar_Q.put(f'特征集预处理完成{i + 1}/{n_tasks}')
-        pbar_Q.put(1)
-    pbar_Q.put(True)
-    features = features.share_memory_()
-    result_pipe.send(features)
-
-
-def lb_apply(result_pipe, labels, labels_calls, pbar_Q: Queue):
-    # self = dill.loads(self)
-    labels_calls = dill.loads(labels_calls)
-    n_tasks = len(labels_calls)
-    for i, call in enumerate(labels_calls):
-        labels = call(labels)
-        # shared_value['lb'] = call(shared_value['lb'])
-        pbar_Q.put(f'标签集预处理完成{i + 1}/{n_tasks}')
-        pbar_Q.put(1)
-    pbar_Q.put(True)
-    labels = labels.share_memory_()
-    result_pipe.send(labels)
+# def fea_apply(result_pipe, features, features_calls, pbar_Q: Queue):
+#     features_calls = dill.loads(features_calls)
+#     n_tasks = len(features_calls)
+#     for i, call in enumerate(features_calls):
+#         features = call(features)
+#         # shared_value['fea'] = call(shared_value['fea'])
+#         pbar_Q.put(f'特征集预处理完成{i + 1}/{n_tasks}')
+#         pbar_Q.put(1)
+#     pbar_Q.put(True)
+#     features = features.share_memory_()
+#     result_pipe.send(features)
+#
+#
+# def lb_apply(result_pipe, labels, labels_calls, pbar_Q: Queue):
+#     # self = dill.loads(self)
+#     labels_calls = dill.loads(labels_calls)
+#     n_tasks = len(labels_calls)
+#     for i, call in enumerate(labels_calls):
+#         labels = call(labels)
+#         # shared_value['lb'] = call(shared_value['lb'])
+#         pbar_Q.put(f'标签集预处理完成{i + 1}/{n_tasks}')
+#         pbar_Q.put(1)
+#     pbar_Q.put(True)
+#     labels = labels.share_memory_()
+#     result_pipe.send(labels)
 
 
 class DataSet(torch_ds):
@@ -66,94 +66,52 @@ class DataSet(torch_ds):
         :param device: 迁移目标设备
         :return: None
         """
-        assert type(self._features) == torch.Tensor, \
+        assert isinstance(self._features, torch.Tensor), \
             f'数据集特征集数据未转换成张量，无法迁移到{device}中！请在数据读取步骤和预处理步骤将特征集转换成张量。'
-        assert type(self._features) == torch.Tensor, \
+        assert isinstance(self._features, torch.Tensor), \
             f'数据集标签集数据未转换成张量，无法迁移到{device}中！请在数据读取步骤和预处理步骤将标签集转换成张量。'
         self._features = self._features.to(device)
         self._labels = self._labels.to(device)
 
     def apply(self, features_calls: List[Callable[[torch.Tensor], torch.Tensor]] = None,
               labels_calls: List[Callable[[torch.Tensor], torch.Tensor]] = None,
-              desc: str = '对数据集进行操作……'):
-        """
-        对数据调用某种方法，可用作数据预处理。
-        :param desc:
+              pbar: tqdm = None):
+        """对数据调用某种方法，可用作数据预处理。
+
         :param features_calls: 需要对特征集调用的方法列表
         :param labels_calls: 需要对标签集调用的方法列表
-        :return: None
+        :param pbar: 用于通知的进度条，指定为None则静默进行
         """
-        # TODO: 使用多线程加速
         if features_calls is None:
             features_calls = []
         if labels_calls is None:
             labels_calls = []
+        if pbar is not None:
+            pbar.reset(len(features_calls) + len(labels_calls))
 
-        pbar = tqdm(total=len(features_calls) + len(labels_calls),
-                    unit='步', position=0, desc=desc, mininterval=1)
+        def pbar_update(n):
+            """进度条更新方法"""
+            if pbar is not None:
+                pbar.update(n)
 
         def fea_apply():
             for call in features_calls:
                 self._features = call(self._features)
-                pbar.update(1)
+                pbar_update(1)
 
         def lb_apply():
             for call in labels_calls:
                 self._labels = call(self._labels)
-                pbar.update(1)
+                pbar_update(1)
 
         tools.multi_process(
-            2, True, desc,
+            2, True, '',
             (fea_apply, (), {}),
             (lb_apply, (), {})
         )
 
-        # # TODO：尝试用多进程加速
-        # pbar_Q = Queue()
-        # fea_rec_conn, fea_send_conn = Pipe()
-        # lb_rec_conn, lb_send_conn = Pipe()
-        # fea_preprocessing = Process(
-        #     target=fea_apply,
-        #     args=(
-        #         fea_send_conn,
-        #         self._features, dill.dumps(features_calls), pbar_Q
-        #     )
-        # )
-        # lb_preprocessing = Process(
-        #     target=lb_apply,
-        #     args=(
-        #         lb_send_conn,
-        #         self._labels, dill.dumps(labels_calls), pbar_Q
-        #     )
-        # )
-        # del self._features, self._labels
-        # pbar = tqdm(total=len(features_calls) + len(labels_calls),
-        #             unit='步', position=0, desc=desc, mininterval=1)
-        # fea_preprocessing.start()
-        # lb_preprocessing.start()
-        # flag = 0
-        # while True:
-        #     item = pbar_Q.get(True)
-        #     if type(item) == int:
-        #         pbar.update(item)
-        #     elif type(item) == str:
-        #         pbar.set_description(item)
-        #     elif type(item) == bool:
-        #         flag += 1
-        #         if flag == 2:
-        #             pbar.set_description('预处理完成')
-        #             break
-        #     else:
-        #         raise ValueError(f'无法识别的信号{item}')
-        # # fea_preprocessing.join()
-        # # lb_preprocessing.join()
-        # self._features = fea_rec_conn.recv()
-        # self._labels = lb_rec_conn.recv()
-        # # self._labels = lb_preprocessing.get_result()
-        # fea_preprocessing.kill()
-        # lb_preprocessing.kill()
-
-        pbar.close()
+        if pbar is not None:
+            pbar.close()
 
     def to_loader(self, batch_size: int = None, shuffle=True,
                   sampler: Iterable = None, preprocess: bool = True,
@@ -186,7 +144,6 @@ class DataSet(torch_ds):
         注册预处理方法，用于数据加载器对数据进行预处理
         :param features_calls: 需要对特征集调用的方法列表
         :param labels_calls: 需要对标签集调用的方法列表
-        :return: None
         """
         if features_calls is None:
             features_calls = []
@@ -199,14 +156,18 @@ class DataSet(torch_ds):
         """弹出所有的预处理程序。
         此方法用于对Dataset的序列化，将所有预处理的本地化方法转移到内存中。
         """
-        # return self.fea_preprocesses, self.lb_preprocesses
         try:
             del self.fea_preprocesses, self.lb_preprocesses
         except AttributeError:
             return
 
     def preprocess(self, desc='对数据集进行操作……'):
-        self.apply(self.fea_preprocesses, self.lb_preprocesses, desc)
+        """数据集对持有的特征集和标签集进行预处理，此为显式方法，会打印进度条"""
+        pbar = tqdm(
+            [], desc=desc, unit='步', position=0, mininterval=1,
+            ncols=80
+        )
+        self.apply(self.fea_preprocesses, self.lb_preprocesses, pbar)
 
     @property
     def feature_shape(self):
@@ -236,8 +197,9 @@ class LazyDataSet(DataSet):
         self.lbIndex_preprocess = []
         super().__init__(features, labels, collate_fn=collate_fn)
 
-    def to_loader(self, batch_size: int = None, sampler: Iterable = None, shuffle=True,
-                  **kwargs) -> DataLoader:
+    def to_loader(self,
+                  batch_size: int = None, sampler: Iterable = None, shuffle=True,
+                  mute=False, **kwargs) -> DataLoader:
         """
         注意：本函数只会生成普通数据加载器。
         如生成懒数据加载器，则需要调用data_related.to_loader()
@@ -247,16 +209,17 @@ class LazyDataSet(DataSet):
         :param kwargs: DataLoader额外参数
         :return: 加载器对象
         """
-        self.preprocess()
-        return super().to_loader(batch_size, shuffle, sampler, preprocess=False,
-                                 **kwargs)
+        self.preprocess(mute=mute)
+        return super().to_loader(
+            batch_size, shuffle, sampler, preprocess=False, **kwargs
+        )
 
     def register_preprocess(self, features_calls=None, labels_calls=None,
                             feaIndex_calls=None, lbIndex_calls=None):
         """
         注册预处理方法，用于数据加载器对数据进行预处理
-        :param lbIndex_calls:
-        :param feaIndex_calls:
+        :param lbIndex_calls: 对于标签索引集的预处理方法
+        :param feaIndex_calls: 对于特征索引集的预处理方法
         :param features_calls: 需要对特征集调用的方法列表
         :param labels_calls: 需要对标签集调用的方法列表
         :return: None
@@ -270,17 +233,23 @@ class LazyDataSet(DataSet):
         super().register_preprocess(features_calls, labels_calls)
 
     def pop_preprocesses(self):
-        # return (self.feaIndex_preprocess, self.lbIndex_preprocess, *super().pop_preprocesses())
+        """弹出预处理特征集、标签集及其索引集的方法"""
         del self.feaIndex_preprocess, self.lbIndex_preprocess
         super().pop_preprocesses()
 
-    def preprocess(self, desc='对懒加载数据集进行操作……'):
-        """
-        这里只对索引进行预处理。
+    def preprocess(self, desc='对懒加载数据集进行操作……', mute=False):
+        """这里只对索引进行预处理
+
         :param desc: 预处理进度条描述
-        :return: None
+        :param mute: 是否静默处理
         """
-        self.apply(self.feaIndex_preprocess, self.lbIndex_preprocess, desc=desc)
+        pbar = tqdm(
+            [], desc=desc, unit='步', position=0, mininterval=1,
+            ncols=80
+        ) if not mute else None
+        self.apply(
+            self.feaIndex_preprocess, self.lbIndex_preprocess, pbar=pbar
+        )
 
     def to(self, device: torch.device) -> None:
         """
@@ -289,11 +258,11 @@ class LazyDataSet(DataSet):
         :return: None
         """
         to = lambda fea: fea.to(device)
-        if type(self._features) == torch.Tensor:
+        if isinstance(self._features, torch.Tensor):
             self._features = self._features.to(device)
         elif to not in self.fea_preprocesses:
             self.fea_preprocesses += [to]
-        if type(self._labels) == torch.Tensor:
+        if isinstance(self._labels, torch.Tensor):
             self._labels = self._labels.to(device)
         elif to not in self.lb_preprocesses:
             self.lb_preprocesses += [to]
