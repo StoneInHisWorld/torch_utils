@@ -1,11 +1,14 @@
 import traceback
 import warnings
-from multiprocessing import SimpleQueue as PQueue, Event as PEvent
+from torch.multiprocessing import SimpleQueue as PQueue, Event as PEvent
 
 import dill
 import torch
 
 from utils.accumulator import Accumulator
+from utils.decorators import prepare
+from utils.func.pytools import get_computer_name
+from utils.history import History
 
 
 def data_iter_subpro_impl(
@@ -30,17 +33,18 @@ def data_iter_subpro_impl(
             # 放置None作为世代结束标志
         # print('data_fetching ends')
         data_Q.put(None)
-        print('data_iter_subpro_impl ends')
+        # print('data_iter_subpro_impl ends')
         end_env.wait()
     except Exception as e:
         traceback.print_exc()
         data_Q.put(e)
-        print('data_iter_subpro_impl ends')
+        # print('data_iter_subpro_impl ends')
 
 
+@prepare('train')
 def train_subprocess_impl(
-        net_init, net_init_args, net_init_kwargs,  # 网络设置
-        optimizer_s, lr_scheduler_s,  # 训练设置
+        trainer,  # 训练器对象
+        # net,  # 网络对象
         pbar_Q: PQueue, log_Q: PQueue, data_Q: PQueue,  # 队列
         data_end_env: PEvent
 ):
@@ -56,11 +60,10 @@ def train_subprocess_impl(
     :return:
     """
     try:
-        # net = dill.loads(net)
-        print('\r正在创建模型副本', end='', flush=True)
-        net = net_init(*net_init_args, **net_init_kwargs)
-        print('\r模型副本创建完成', end='', flush=True)
-        net.train()
+        # 提取训练器参数
+        net = trainer.module
+        optimizer_s = net.optimizer_s
+        scheduler_s = net.scheduler_s
         while True:
             item = data_Q.get()
             # 收到了None，认为是数据供给结束标志
@@ -94,7 +97,7 @@ def train_subprocess_impl(
                     # 更新学习率变化器组
                     with warnings.catch_warnings():
                         warnings.simplefilter('ignore', category=UserWarning)
-                        for scheduler in lr_scheduler_s:
+                        for scheduler in scheduler_s:
                             scheduler.step()
             # 收到了元组，则认为是数据批次
             elif isinstance(item, tuple):
@@ -125,12 +128,11 @@ def train_subprocess_impl(
         print('train_subpro_impl ends')
 
 
-@torch.no_grad()
+@prepare("valid")
 def tv_log_subprocess_impl(
-        net_init, net_init_args, net_init_kwargs,  # 网络相关
-        valid_iter,  # 数据相关
-        criterion_a,  # 计算相关
-        history, lr_names, cri_los_names,  # 记录对象
+        trainer,  # 训练器对象
+        # net,  # 网络对象
+        criterion_a, valid_iter,  # 验证数据迭代器
         log_Q: PQueue, pbar_Q: PQueue, end_env: PEvent  # 信号量相关
 ):
     """在多线程处理中，训练以及验证数据的记录实现。
@@ -138,17 +140,24 @@ def tv_log_subprocess_impl(
     :param net: 网络结构
     :param valid_iter: 验证数据迭代器
     :param criterion_a: 准确率计算函数
-    :param history: 历史记录
-    :param lr_names: 学习率名称，用于记录每个世代的学习率
-    :param cri_los_names: 评价指标和损失值名称，用于记录每个世代的评价指标和损失值组合
     :param log_Q: 数据交换队列，train_impl通过该队列传输需要记录的信息
     :return: history历史记录
     """
     try:
-        print('\r正在创建模型副本', end='', flush=True)
-        net = net_init(*net_init_args, **net_init_kwargs)
-        print('\r模型副本创建完成', end='', flush=True)
-        net.eval()
+        # 提取训练器参数
+        net = trainer.module
+        criterion_a = trainer.criterion_a
+        # 学习率项
+        lr_names = net.lr_names
+        # 损失项
+        loss_names = [f'train_{item}' for item in net.loss_names]
+        # 评价项
+        criteria_names = [
+            f'train_{get_computer_name(criterion)}' for criterion in criterion_a
+        ]
+        cri_los_names = criteria_names + loss_names
+        # 设置历史记录对象
+        history = History(*(criteria_names + loss_names + lr_names))
         # 创建训练模型的副本
         valid_iter = dill.loads(valid_iter)
         metric = Accumulator(len(cri_los_names) + 1)
@@ -242,14 +251,13 @@ def valid_subprocess_impl(
         pbar_Q.put(1)
     # 生成测试日志
     log = {}
-    prefix = 'valid_'
     i = 0
     for i, computer in enumerate(criterion_a):
         try:
-            log[prefix + computer.__name__] = metric[i] / metric[-1]
+            log['valid_' + get_computer_name(computer)] = metric[i] / metric[-1]
         except AttributeError:
-            log[prefix + computer.__class__.__name__] = metric[i] / metric[-1]
+            log['valid_' + get_computer_name(computer)] = metric[i] / metric[-1]
     i += 1
     for j, loss_name in enumerate(l_names):
-        log[prefix + loss_name] = metric[i + j] / metric[-1]
+        log['valid_' + loss_name] = metric[i + j] / metric[-1]
     return log

@@ -305,12 +305,24 @@ class BasicNN(nn.Sequential):
         :return: 前向传播结果
         """
         if self.__checkpoint:
-            _check_first = False
-            for m in self:
-                # 检查checkpoint适用性以指定前向传播适用函数
-                can_check = _check_first and type(m) != nn.Dropout and type(m) != nn.BatchNorm2d
-                x = checkpoint.checkpoint(m, x) if can_check else m(x)
-                _check_first = True
+            # _check_first = False
+            # # 检查checkpoint适用性以指定前向传播适用函数
+            # _check_first = (_check_first and
+            #                 not isinstance(self, nn.Dropout) and
+            #                 not isinstance(self, nn.BatchNorm2d))
+            # can_check = _check_first
+            x = checkpoint.checkpoint(
+                super(BasicNN, self).__call__, x, use_reentrant=False
+            )
+            _check_first = True
+            # for m in self:
+            #     # 检查checkpoint适用性以指定前向传播适用函数
+            #     _check_first = (_check_first and
+            #                     not isinstance(m, nn.Dropout) and
+            #                     not isinstance(m, nn.BatchNorm2d))
+            #     can_check = _check_first
+            #     x = checkpoint.checkpoint(m, x, use_reentrant=False) if can_check else m(x)
+            #     _check_first = True
             return x
         else:
             # 启用普通的调用函数

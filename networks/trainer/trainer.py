@@ -1,6 +1,5 @@
-import functools
 import os.path
-import time
+from functools import wraps
 from typing import Iterable
 
 import dill
@@ -9,28 +8,16 @@ from torch import nn
 from torch.multiprocessing import Event as PEvent
 from torch.multiprocessing import Process
 from torch.multiprocessing import SimpleQueue as PQueue
-from torch.profiler import record_function, ProfilerActivity
 from tqdm import tqdm
 
 from networks.basic_nn import BasicNN
+from networks.trainer.__hook_impl import hook
+from networks.trainer.__profiler_impl import profiling_impl
 from networks.trainer.__subprocess_impl import data_iter_subpro_impl, train_subprocess_impl, tv_log_subprocess_impl
 from utils.accumulator import Accumulator
 from utils.decorators import prepare
+from utils.func.pytools import get_computer_name
 from utils.history import History
-
-
-def get_computer_name(computer):
-    """获取一个可调用对象的有意义名称"""
-    if isinstance(computer, functools.partial):
-        # functools.partial对象
-        computer_name = computer.func.__name__
-    elif hasattr(computer, '__name__'):
-        # 函数对象
-        computer_name = computer.__name__
-    else:
-        # 可调用对象
-        computer_name = computer.__class__.__name__
-    return computer_name
 
 
 class Trainer:
@@ -75,10 +62,11 @@ class Trainer:
         self.runtime_cfg = runtime_cfg
         self.criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
         self.pbar = None
-        # 处理hook机制
-        self.with_hook = with_hook
-        self.hook_mute = hook_mute
-        self.train = self.hook(self.train)
+        # # 处理hook机制
+        # self.with_hook = with_hook
+        # self.hook_mute = hook_mute
+        # 转化为类装饰器
+        # self.train = self.hook(self.train)
 
     def train(self, data_iter) -> History:
         """训练公共接口。
@@ -113,25 +101,22 @@ class Trainer:
                 # 不启用多线程训练
                 if valid_iter is not None:
                     # 进行训练和验证
-                    train_fn, train_args = self.__train_and_valid, (
-                        train_iter, valid_iter
-                    )
+                    train_fn, train_args = self.__train_and_valid, (train_iter, valid_iter)
                 else:
                     # 进行训练
-                    train_fn, train_args = self.__train, (
-                        train_iter,
-                    )
+                    train_fn, train_args = self.__train, (train_iter, )
             else:
                 # 启用多进程训练
-                raise NotImplementedError('多进程训练尚未实现！')
-                history = self.__train_with_subprocesses(train_iter, valid_iter, None)
+                # raise NotImplementedError('多进程训练尚未实现！')
+                train_fn, train_args = self.__train_with_subprocesses, (train_iter, valid_iter)
         # 设置进度条
-        self.pbar = tqdm(
+        pbar = tqdm(
             total=pbar_len, unit='批', position=0,
             desc=f'正在进行训练准备……', mininterval=1, ncols=100
         )
+        self.pbar = pbar  # 多进程运行需要删除此属性，此举防止pbar被回收
         history = train_fn(*train_args)
-        self.pbar.close()
+        pbar.close()
         return history
 
     @prepare('predict')
@@ -191,6 +176,7 @@ class Trainer:
         return predictions
 
     @prepare('train')
+    @hook()
     def __train(self, train_iter) -> History:
         """简单训练实现。
         从train_iter中每次取出一批次数据进行前反向传播后计算评价指标，记录到History对象中。
@@ -255,6 +241,7 @@ class Trainer:
         return history
 
     @prepare('train')
+    @hook()
     def __train_and_valid(self, train_iter, valid_iter) -> History:
         """训练和验证实现函数。
         从train_iter中每次取出一批次数据进行前反向传播后计算评价指标获得训练日志，随后调用__valid()函数进行验证获得验证日志，
@@ -359,8 +346,8 @@ class Trainer:
             if n_workers <= 3:
                 history = self.__train_and_valid(train_iter, valid_iter)
             else:
-                raise NotImplementedError('多进程训练尚未实现！')
-                # history = self.__train_with_subprocesses(train_iter, valid_iter, pbar)
+                # raise NotImplementedError('多进程训练尚未实现！')
+                history = self.__train_with_subprocesses(train_iter, valid_iter)
             if k_fold_history is None:
                 k_fold_history = history
             else:
@@ -442,7 +429,6 @@ class Trainer:
             log['valid_' + loss_name] = metric[i + j] / metric[-1]
         return log
 
-    @prepare('train')
     def __train_with_subprocesses(self, train_iter, valid_iter=None) -> History:
         """多进程训练实现
         :param train_iter: 训练数据迭代器
@@ -455,16 +441,17 @@ class Trainer:
         net = self.module
         criterion_a = self.criterion_a
         n_epochs = self.hps['epochs']
-        optimizer_s = net.optimizer_s
-        scheduler_s = net.scheduler_s
+        # optimizer_s = net.optimizer_s
+        # scheduler_s = net.scheduler_s
         # 损失项
         loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
-        criteria_names = [f'train_{criterion.__name__}' for criterion in criterion_a]
+        criteria_names = [f'train_{get_computer_name(criterion)}' for criterion in criterion_a]
         # 学习率项
         lr_names = net.lr_names
-        # 设置历史记录对象
-        history = History(*(criteria_names + loss_names + lr_names))
+        # # 设置历史记录对象
+        # history = History(*(criteria_names + loss_names + lr_names))
+        history = None
 
         print('\r正在创建队列和事件对象……', end='', flush=True)
         # 使用进程池处理训练进程和记录进程
@@ -472,19 +459,10 @@ class Trainer:
         log_Q = PQueue()
         data_Q = PQueue()
         data_end_env = PEvent()
-        # log_end_env = PEvent()
         # 将无法pickle的对象进行特殊序列化
         print('\r正在进行特殊序列化……', end='', flush=True)
         train_iter = dill.dumps(train_iter)
-        valid_iter = dill.dumps(valid_iter) if valid_iter else None
-        # net_copy = dill.dumps(deepcopy(net))
-        # net_copy = deepcopy(net)
-        net_init_args, net_init_kwargs = net.get_clone_function()
-        net_init = net.__class__
-        net = dill.dumps(net)
-        # del net
-        print('\r子进程创建准备完毕')
-
+        del self.pbar
         # 生成子进程
         data_subprocess = Process(
             target=data_iter_subpro_impl,
@@ -493,30 +471,26 @@ class Trainer:
         train_subprocess = Process(
             target=train_subprocess_impl,
             args=(
-                net_init, net_init_args, net_init_kwargs,
-                optimizer_s, scheduler_s,
-                pbar_Q, log_Q, data_Q, data_end_env
+                self, pbar_Q, log_Q, data_Q, data_end_env
             )
         )
-        if valid_iter:
+        if valid_iter is not None:
+            valid_iter = dill.dumps(valid_iter)
             log_subprocess = Process(
                 target=tv_log_subprocess_impl,
                 args=(
-                    net_init, net_init_args, net_init_kwargs,
-                    valid_iter, criterion_a,
-                    history, lr_names, criteria_names + loss_names,
-                    log_Q, pbar_Q, data_end_env
+                    self, valid_iter, log_Q, pbar_Q, data_end_env
                 )
             )
         else:
             raise NotImplementedError('暂未编写单训练过程')
         process_pool = [data_subprocess, train_subprocess, log_subprocess]
+        print('\r子进程创建准备完毕')
         # 实时监控各项任务的执行情况
         try:
             for p in process_pool:
                 p.start()
             while True:
-                # item = pbar_Q.get(True)
                 item = pbar_Q.get()
                 if item is None:
                     break
@@ -539,12 +513,13 @@ class Trainer:
                     p.terminate()
             raise e
         pbar.close()
+        if history is None:
+            raise RuntimeError('历史记录对象丢失！')
         return history
 
     def train_with_profiler(self, data_iter, log_path):
         # 提取训练器参数
         k = self.hps['k']
-        # n_epochs = self.hps['epochs']
         n_epochs = 2
         # 取相对较少数量的那个数据迭代器进行性能测试
         if k > 1:
@@ -564,158 +539,90 @@ class Trainer:
             total=len(data_iter) * n_epochs, unit='批', position=0,
             desc=f'正在进行训练准备……', mininterval=1, ncols=100
         )
+        profiling_impl(n_epochs, os, log_path, self, data_iter)
 
-        @prepare('train')
-        def _impl(trainer, data_iter):
-            # 提取训练器参数
-            net = trainer.module
-            criterion_a = trainer.criterion_a
-            optimizer_s = net.optimizer_s
-            scheduler_s = net.scheduler_s
-            # 记录项设置
-            loss_names = [f'train_{item}' for item in net.loss_names]
-            criteria_names = [f'train_{criterion.__name__}' for criterion in criterion_a]
-            lr_names = net.lr_names
-            history = History(*(criteria_names + loss_names + lr_names))
-            # 进行性能测试
-            with torch.profiler.profile(
-                    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-                    # schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
-                    # on_trace_ready=torch.profiler.tensorboard_trace_handler('./log'),
-                    record_shapes=True,
-                    profile_memory=True,
-                    # with_stack=True,
-            ) as prof:
-                for epoch in range(n_epochs):
-                    with record_function("epoch_switch_consume"):
-                        self.pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中……')
-                        history.add(
-                            lr_names, [
-                                [param['lr'] for param in optimizer.param_groups]
-                                for optimizer in optimizer_s
-                            ]
-                        )
-                        # 记录批次训练损失总和，评价指标，样本数
-                        metric = Accumulator(len(loss_names + criteria_names) + 1)
-                    with record_function("epoch_total_consume"):
-                        for X, y in data_iter:
-                            with torch.profiler.record_function("forward_and_backward"):
-                                net.train()
-                                pred, ls_es = net.forward_backward(X, y)
-                            with torch.profiler.record_function("metric_calculation"):
-                                with torch.no_grad():
-                                    num_examples = X.shape[0]
-                                    correct_s = []
-                                    for criterion in criterion_a:
-                                        correct = criterion(pred, y)
-                                        correct_s.append(correct)
-                                    metric.add(
-                                        *correct_s, *[ls * num_examples for ls in ls_es],
-                                        num_examples
-                                    )
-                            # with torch.profiler.record_function("batch_switch_consume"):
-                            self.pbar.update(1)
-                    with record_function("epoch_switch_consume"):
-                        for scheduler in scheduler_s:
-                            scheduler.step()
-                        history.add(
-                            criteria_names + loss_names,
-                            [metric[i] / metric[-1] for i in range(len(metric) - 1)]
-                        )
-                # prof.step()
-            self.pbar.close()
-            with open(os.path.join(
-                    log_path,
-                    f'{net.__class__.__name__.lower()}_profiling_{time.strftime("%Y-%m-%d-%H.%M.%S", time.localtime())}.txt'),
-                    mode='w') as file:
-                table = prof.key_averages(group_by_input_shape=True).table(sort_by="self_cuda_time_total", row_limit=15)
-                file.writelines(table)
-                print(table)
-
-        _impl(self, data_iter)
-
-    def __deal_with_hook(self, net: Iterable[nn.Module]):
-        self.__last_forward_output, self.__last_backward_data = {}, {}
-        forward_handlers = []
-        backward_handlers = []
-
-        def __hook_forward_fn(module, input, output):
-            if self.hook_mute:
-                try:
-                    self.__last_forward_output.pop(module)
-                except Exception as _:
-                    pass
-            else:
-                print(f'{module.__class__.__name__}前传')
-                try:
-                    last_input, last_output = self.__last_forward_output.pop(module)
-                except Exception as _:
-                    pass
-                else:
-                    flag = True
-                    for li, i in zip(last_input, input):
-                        flag = torch.equal(li, i) and flag
-                    print(f'输入相等: {flag}')
-                    flag = True
-                    for lo, o in zip(last_output, output):
-                        flag = torch.equal(lo, o) and flag
-                    print(f'输出相等: {flag}')
-                    print('-' * 20)
-            # 记录模块的梯度
-            self.__last_forward_output[module] = input, output
-            return output
-
-        def __hook_backward_fn(module, grad_input, grad_output):
-            if self.hook_mute:
-                try:
-                    last_input, last_output = self.__last_backward_data.pop(module)
-                except Exception as _:
-                    pass
-                else:
-                    for li, i in zip(last_input, grad_input):
-                        if li is None or i is None:
-                            print(f'{module.__class__.__name__}反向传播中，{li}或{i}出现了None梯度')
-                    for lo, o in zip(last_output, grad_output):
-                        if lo is None or o is None:
-                            print(f'{lo}或{o}出现了None梯度')
-            else:
-                print(f'{module.__class__.__name__}反向传播')
-                try:
-                    last_input, last_output = self.__last_backward_data.pop(module)
-                except Exception as _:
-                    pass
-                else:
-                    flag = True
-                    for li, i in zip(last_input, grad_input):
-                        if li is None or i is None:
-                            print(f'{module.__class__.__name__}反向传播中，{li}或{i}出现了None梯度')
-                        else:
-                            flag = torch.equal(li, i) and flag
-                            print(f'输入梯度相等: {flag}')
-                    flag = True
-                    for lo, o in zip(last_output, grad_output):
-                        if lo is None or o is None:
-                            print(f'{lo}或{o}中出现了None梯度')
-                        else:
-                            flag = torch.equal(lo, o) and flag
-                            print(f'输出梯度相等：{flag}')
-                    print('-' * 20)
-            self.__last_backward_data[module] = grad_input, grad_output
-
-        for m in net:
-            forward_handlers.append(m.register_forward_hook(hook=__hook_forward_fn))
-            backward_handlers.append(m.register_full_backward_hook(hook=__hook_backward_fn))
-        return forward_handlers, backward_handlers
-
-    def hook(self, func):
-
-        def wrapper(*args, **kwargs):
-            if self.with_hook:
-                self.__f_handles, self.__b_handles = self.__deal_with_hook(self.module)
-            ret = func(*args, **kwargs)
-            if self.with_hook:
-                for handle in self.__f_handles + self.__b_handles:
-                    handle.remove()
-            return ret
-
-        return wrapper
+    # def __deal_with_hook(self, net: Iterable[nn.Module]):
+    #     self.__last_forward_output, self.__last_backward_data = {}, {}
+    #     forward_handlers = []
+    #     backward_handlers = []
+    #
+    #     def __hook_forward_fn(module, input, output):
+    #         if self.hook_mute:
+    #             try:
+    #                 self.__last_forward_output.pop(module)
+    #             except Exception as _:
+    #                 pass
+    #         else:
+    #             print(f'{module.__class__.__name__}前传')
+    #             try:
+    #                 last_input, last_output = self.__last_forward_output.pop(module)
+    #             except Exception as _:
+    #                 pass
+    #             else:
+    #                 flag = True
+    #                 for li, i in zip(last_input, input):
+    #                     flag = torch.equal(li, i) and flag
+    #                 print(f'输入相等: {flag}')
+    #                 flag = True
+    #                 for lo, o in zip(last_output, output):
+    #                     flag = torch.equal(lo, o) and flag
+    #                 print(f'输出相等: {flag}')
+    #                 print('-' * 20)
+    #         # 记录模块的梯度
+    #         self.__last_forward_output[module] = input, output
+    #         return output
+    #
+    #     def __hook_backward_fn(module, grad_input, grad_output):
+    #         if self.hook_mute:
+    #             try:
+    #                 last_input, last_output = self.__last_backward_data.pop(module)
+    #             except Exception as _:
+    #                 pass
+    #             else:
+    #                 for li, i in zip(last_input, grad_input):
+    #                     if li is None or i is None:
+    #                         print(f'{module.__class__.__name__}反向传播中，{li}或{i}出现了None梯度')
+    #                 for lo, o in zip(last_output, grad_output):
+    #                     if lo is None or o is None:
+    #                         print(f'{lo}或{o}出现了None梯度')
+    #         else:
+    #             print(f'{module.__class__.__name__}反向传播')
+    #             try:
+    #                 last_input, last_output = self.__last_backward_data.pop(module)
+    #             except Exception as _:
+    #                 pass
+    #             else:
+    #                 flag = True
+    #                 for li, i in zip(last_input, grad_input):
+    #                     if li is None or i is None:
+    #                         print(f'{module.__class__.__name__}反向传播中，{li}或{i}出现了None梯度')
+    #                     else:
+    #                         flag = torch.equal(li, i) and flag
+    #                         print(f'输入梯度相等: {flag}')
+    #                 flag = True
+    #                 for lo, o in zip(last_output, grad_output):
+    #                     if lo is None or o is None:
+    #                         print(f'{lo}或{o}中出现了None梯度')
+    #                     else:
+    #                         flag = torch.equal(lo, o) and flag
+    #                         print(f'输出梯度相等：{flag}')
+    #                 print('-' * 20)
+    #         self.__last_backward_data[module] = grad_input, grad_output
+    #
+    #     for m in net:
+    #         forward_handlers.append(m.register_forward_hook(hook=__hook_forward_fn))
+    #         backward_handlers.append(m.register_full_backward_hook(hook=__hook_backward_fn))
+    #     return forward_handlers, backward_handlers
+    #
+    # def hook(self, func):
+    #     @wraps(func)
+    #     def wrapper(*args, **kwargs):
+    #         if self.with_hook:
+    #             self.__f_handles, self.__b_handles = self.__deal_with_hook(self.module)
+    #         ret = func(*args, **kwargs)
+    #         if self.with_hook:
+    #             for handle in self.__f_handles + self.__b_handles:
+    #                 handle.remove()
+    #         return ret
+    #
+    #     return wrapper

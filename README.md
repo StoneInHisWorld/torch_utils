@@ -1,7 +1,10 @@
-# torch_utils v0.2
+# torch_utils v0.3
 基于`pytorch`框架的训练框架工具包，包括数据处理工具、编写好的网络架构和网络层以及实用的python工具。  
 详细的使用方法参见给出的编程范例以及每个类和方法的pydoc。
 
+## （即将推出）更新日志v0.4
+1. 优化了hook机制的编写架构，移出了`trainer.py`文件，并将启用开关移到了`settings.json`文件中
+2. 使用新的方法调用pytorch的checkpoint机制，使其能够调用定制化的`forward()`前向传播处理，并将启用开关移到了`settings.json`文件中
 ## 更新日志v0.3
 1. 加入了`torch.profile.profiler`的支持，可以通过调用`Trainer().train_with_profiler()`来对网络进行性能评测，
 可以在log/profiling中，根据时间找到相应的训练数据
@@ -99,4 +102,19 @@
 5. `README.md`  
 编辑项目说明。  
 
-注：`settings.json`包括了所有目前支持的运行动态参数，推荐只更改其中的参数值而不是增加或减少参数。
+## settings.json
+`settings.json`包括了所有目前支持的运行动态参数，推荐只更改其中的参数值而不是增加或减少参数。 
+该文件中支持的运行动态参数指示了框架支持的运行机制。
+
+### hook机制
+**hook机制**会在`BasicNN`网络中，逐层注册输入、梯度抓取函数。对于`BasicNN`网络的前后两次前向传播和反向传播，
+比较两次前向传播的输入输出是否相等，前后两次反向传播的梯度输入输出梯度是否相等，并将比较结果输出到命令行中。
+***使用本机制可以检查梯度消失以及求导出错问题，但会增加训练计算、内存消耗。***  
+`with_hook`设置为`True`即可开启pytorch的**hook机制**，`hook_mute`参数设置为`True`，可用于简化**hook机制**输出，屏蔽不必关心的输入或梯度消息。  
+该机制仅作用于`Trainer.__train()`、`Trainer.__train_and_valid()`函数。  
+
+### checkpoint机制
+**checkpoint机制**（**检查点机制**）作用于`BasicNN`网络的`__call__()`函数中，使用`checkpoint.checkpoint()`进行网络的前向传播。
+该机制作用时，`BasicNN`网络的前向传播不会保存结果，反向传播时会再进行一次前向传播以进行梯度计算。
+***使用本机制理论上可以大大降低显存要求，但会增加训练计算量。***  
+`with_checkpoint`设置为`True`即可开启pytorch的**checkpoint机制**

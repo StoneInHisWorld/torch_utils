@@ -1,3 +1,4 @@
+import functools
 import math
 import os.path
 import warnings
@@ -150,3 +151,17 @@ def warning_handler(*input_args, func=None, category=None, warning_filter=None, 
         pass
     finally:
         return result
+
+
+def get_computer_name(computer):
+    """获取一个可调用对象的有意义名称"""
+    if isinstance(computer, functools.partial):
+        # functools.partial对象
+        computer_name = computer.func.__name__
+    elif hasattr(computer, '__name__'):
+        # 函数对象
+        computer_name = computer.__name__
+    else:
+        # 可调用对象
+        computer_name = computer.__class__.__name__
+    return computer_name

@@ -2,7 +2,6 @@ import warnings
 from functools import wraps
 
 import torch
-# from torchsummary import summary
 from torchinfo import summary
 from tqdm import tqdm
 
@@ -72,7 +71,7 @@ class net_builder:
         self.destroy = destroy
 
     def __call__(self, func):
-
+        @wraps(func)
         def wrapper(*args, **kwargs):
             """修饰器本体
             传递给被修饰的函数的参数为trainer, net, *args
@@ -107,6 +106,7 @@ class net_builder:
         assert issubclass(net_class, BasicNN), '请使用BasicNN的子类作为训练网络！'
         print(f'\r正在构造{net_class.__name__}', end='', flush=True)
         try:
+            n_init_kwargs['with_checkpoint'] = trainer.runtime_cfg['with_checkpoint']
             net = net_class(*n_init_args, **n_init_kwargs)
         except FileNotFoundError:
             # 处理预训练网络加载
@@ -159,7 +159,7 @@ class prepare:
         self.what = what
 
     def __call__(self, func):
-
+        @wraps(func)
         def wrapper(*args, **kwargs):
             if self.what == 'train':
                 args = self.__prepare_train(*args)
@@ -183,6 +183,7 @@ class prepare:
                 with torch.no_grad():
                     result = func(*args, **kwargs)
                 self.__after_predict(args[0])
+            # TODO：针对多进程设计一个准备流程
             else:
                 raise ValueError(f'未知准备类型{self.what}!')
             return result
@@ -211,7 +212,8 @@ class prepare:
             prepare_args = trainer.prepare_args
             net.prepare_training(*prepare_args)
         # 进度条更新
-        trainer.pbar.set_description('训练中……')
+        if hasattr(trainer, 'pbar'):
+            trainer.pbar.set_description('训练中……')
         args = trainer, *args
         return args
 
@@ -241,7 +243,8 @@ class prepare:
         """
         trainer, *args = args
         trainer.module.eval()
-        trainer.pbar.set_description('验证中……')
+        if hasattr(trainer, 'pbar'):
+            trainer.pbar.set_description('验证中……')
         return trainer, *args
 
     @staticmethod
