@@ -91,7 +91,7 @@ def train_subprocess_impl(
                             [param['lr'] for param in optimizer.param_groups]
                             for optimizer in optimizer_s
                         ],
-                        net.state_dict()
+                        {k: v.detach().clone() for k, v in net.state_dict().items()}
                         # ], True)
                     ])
                     # 更新学习率变化器组

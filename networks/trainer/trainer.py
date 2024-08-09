@@ -1,3 +1,4 @@
+import multiprocessing
 import os.path
 from functools import wraps
 from typing import Iterable
@@ -460,6 +461,8 @@ class Trainer:
         train_iter = dill.dumps(train_iter)
         del self.pbar
         # 生成子进程
+        # print(multiprocessing.get_start_method())
+        # multiprocessing.set_start_method('forkserver')
         data_subprocess = Process(
             target=data_iter_subpro_impl,
             args=(n_epochs, train_iter, data_Q, data_end_env)
