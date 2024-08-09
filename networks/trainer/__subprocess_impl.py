@@ -119,20 +119,21 @@ def train_subprocess_impl(
         log_Q.put(None)
         # 等待记录进程结束
         # log_end_env.wait()
-        print('train_subpro_impl ends')
+        # print('train_subpro_impl ends')
         data_end_env.wait()
         return
     except Exception as e:
         traceback.print_exc()
         log_Q.put(e)
-        print('train_subpro_impl ends')
+        # print('train_subpro_impl ends')
 
 
 @prepare("valid")
 def tv_log_subprocess_impl(
         trainer,  # 训练器对象
         # net,  # 网络对象
-        criterion_a, valid_iter,  # 验证数据迭代器
+        # criterion_a,
+        valid_iter,  # 验证数据迭代器
         log_Q: PQueue, pbar_Q: PQueue, end_env: PEvent  # 信号量相关
 ):
     """在多线程处理中，训练以及验证数据的记录实现。
@@ -212,13 +213,13 @@ def tv_log_subprocess_impl(
             del item
         # 将结果放在进度条队列中
         pbar_Q.put(history)
-        print('tv_log_subprocess_impl ends')
+        # print('tv_log_subprocess_impl ends')
         end_env.set()
         return
     except Exception as e:
         traceback.print_exc()
         pbar_Q.put(e)
-        print('tv_log_subprocess_impl ends')
+        # print('tv_log_subprocess_impl ends')
 
 
 @torch.no_grad()

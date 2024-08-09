@@ -25,9 +25,9 @@ class Trainer:
 
     def __init__(self,
                  module_class, m_init_args, m_init_kwargs, input_size, prepare_args,  # 网络模型相关构造参数
-                 datasource, criterion_a,
+                 criterion_a,
                  hps=None, runtime_cfg=None,  # 训练、验证、测试依赖参数
-                 with_hook=False, hook_mute=True):
+                 ):
         """神经网络训练器对象，提供所有针对神经网络的操作，包括训练、验证、测试、预测。
         Trainer类负责进行网络构建以及网络训练方法实现，可以通过Trainer.module获取训练完成或正在训练的网络对象。
 
@@ -35,13 +35,9 @@ class Trainer:
         :param m_init_args: 网络构造位置参数
         :param m_init_kwargs: 网络构造关键字参数
         :param prepare_args: 网络训练准备参数，用于BasicNN中的prepare_training()函数
-        :param datasource: 数据来源，用于net_builder中为torchsummary提供图片通道数
         :param criterion_a: 评价指标计算方法，如需指定多个请传入`list`对象
         :param hps: 超参数组合，用于获取其中的超参数进行训练
         :param runtime_cfg: 动态运行参数，用于获取其中的参数指导训练
-        :param with_hook: 是否启用hook机制。hook机制由pytorch框架提供，可用于查看每次每层前向或反向传播后计算所得梯度值。
-            注意：启用Hook机制后进度条会重复输出，因此如果不需要测试梯度计算则不要开启本选项！
-        :param hook_mute: 静音hook机制，减少Hook机制带来的输出
         """
         # TODO: 进行默认值检查和填充
         if runtime_cfg is None:
@@ -97,7 +93,7 @@ class Trainer:
             else:
                 raise ValueError(f"无法识别的数据迭代器，其提供的长度为{len(data_iter)}")
             # 判断是否要进行多线程训练
-            if n_workers <= 3:
+            if n_workers <= 4:
                 # 不启用多线程训练
                 if valid_iter is not None:
                     # 进行训练和验证
@@ -453,14 +449,14 @@ class Trainer:
         # history = History(*(criteria_names + loss_names + lr_names))
         history = None
 
-        print('\r正在创建队列和事件对象……', end='', flush=True)
+        pbar.set_description('\r正在创建队列和事件对象……')
         # 使用进程池处理训练进程和记录进程
         pbar_Q = PQueue()
         log_Q = PQueue()
         data_Q = PQueue()
         data_end_env = PEvent()
         # 将无法pickle的对象进行特殊序列化
-        print('\r正在进行特殊序列化……', end='', flush=True)
+        pbar.set_description('\r正在进行特殊序列化……')
         train_iter = dill.dumps(train_iter)
         del self.pbar
         # 生成子进程
@@ -485,9 +481,9 @@ class Trainer:
         else:
             raise NotImplementedError('暂未编写单训练过程')
         process_pool = [data_subprocess, train_subprocess, log_subprocess]
-        print('\r子进程创建准备完毕')
         # 实时监控各项任务的执行情况
         try:
+            pbar.set_description('\r正在开启子进程……')
             for p in process_pool:
                 p.start()
             while True:
@@ -512,7 +508,8 @@ class Trainer:
                 if p:
                     p.terminate()
             raise e
-        pbar.close()
+        # pbar.close()
+        self.pbar = pbar
         if history is None:
             raise RuntimeError('历史记录对象丢失！')
         return history
