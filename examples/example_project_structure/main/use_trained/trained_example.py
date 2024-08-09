@@ -52,7 +52,7 @@ for exp_no in read_queue:
     prepare_args = ([], [], [...])
     trainer = Trainer(
         Net, net_init_args, net_init_kwargs, prepare_args,
-        DataSet, criterion_a
+        DataSet
     )
     results = trainer.predict(data_iter, DataSet.wrap_fn)
     # TODO：指定结果保存路径

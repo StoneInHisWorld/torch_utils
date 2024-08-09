@@ -78,7 +78,7 @@ if __name__ == '__main__':
             prepare_args = ([...], [...], [...])
             trainer = Trainer(
                 Net, net_init_args, net_init_kwargs, prepare_args,
-                DataSet, criterion_a, hps, cp.runtime_cfg
+                DataSet, hps, cp.runtime_cfg
             )
             # 开始训练、验证和测试
             train_log = trainer.train(data_iter_generator)
