@@ -26,8 +26,8 @@ class Trainer:
 
     def __init__(self,
                  module_class, m_init_args, m_init_kwargs, input_size, prepare_args,  # 网络模型相关构造参数
-                 criterion_a,
-                 hps=None, runtime_cfg=None,  # 训练、验证、测试依赖参数
+                 criterion_a, runtime_cfg,
+                 hps=None,   # 训练、验证、测试依赖参数
                  ):
         """神经网络训练器对象，提供所有针对神经网络的操作，包括训练、验证、测试、预测。
         Trainer类负责进行网络构建以及网络训练方法实现，可以通过Trainer.module获取训练完成或正在训练的网络对象。
@@ -40,9 +40,9 @@ class Trainer:
         :param hps: 超参数组合，用于获取其中的超参数进行训练
         :param runtime_cfg: 动态运行参数，用于获取其中的参数指导训练
         """
-        # TODO: 进行默认值检查和填充
-        if runtime_cfg is None:
-            runtime_cfg = {'print_net': False}
+        # # TODO: 进行默认值检查和填充
+        # if runtime_cfg is None:
+        #     runtime_cfg = {'print_net': False, 'with_checkpoint': False}
         if hps is None:
             hps = {}
         assert issubclass(module_class, BasicNN), f'模型类型{module_class}未知，请使用net包下实现的网络模型'
@@ -109,7 +109,7 @@ class Trainer:
         # 设置进度条
         pbar = tqdm(
             total=pbar_len, unit='批', position=0,
-            desc=f'正在进行训练准备……', mininterval=1, ncols=100
+            desc=f'正在进行训练准备……', mininterval=1, ncols=80
         )
         self.pbar = pbar  # 多进程运行需要删除此属性，此举防止pbar被回收
         history = train_fn(*train_args)
@@ -340,7 +340,7 @@ class Trainer:
             pbar.set_description(f'\r训练折{i + 1}……')
             # 计算训练批次数
             pbar.total = k * n_epochs * (len(train_iter) + len(valid_iter))
-            if n_workers <= 3:
+            if n_workers <= 4:
                 history = self.__train_and_valid(train_iter, valid_iter)
             else:
                 # raise NotImplementedError('多进程训练尚未实现！')
@@ -449,6 +449,7 @@ class Trainer:
         # # 设置历史记录对象
         # history = History(*(criteria_names + loss_names + lr_names))
         history = None
+        # torch.ops.torch_use_cuda_dsa(True)
 
         pbar.set_description('\r正在创建队列和事件对象……')
         # 使用进程池处理训练进程和记录进程
@@ -469,17 +470,13 @@ class Trainer:
         )
         train_subprocess = Process(
             target=train_subprocess_impl,
-            args=(
-                self, pbar_Q, log_Q, data_Q, data_end_env
-            )
+            args=(self, pbar_Q, log_Q, data_Q, data_end_env)
         )
         if valid_iter is not None:
             valid_iter = dill.dumps(valid_iter)
             log_subprocess = Process(
                 target=tv_log_subprocess_impl,
-                args=(
-                    self, valid_iter, log_Q, pbar_Q, data_end_env
-                )
+                args=(self, valid_iter, log_Q, pbar_Q, data_end_env)
             )
         else:
             raise NotImplementedError('暂未编写单训练过程')
@@ -508,10 +505,11 @@ class Trainer:
                 p.join()
         except Exception as e:
             for p in process_pool:
-                if p:
+                if p.is_alive():
                     p.terminate()
             raise e
         # pbar.close()
+        # print(f'进度条队列消耗完毕：{pbar_Q.empty()}')
         self.pbar = pbar
         if history is None:
             raise RuntimeError('历史记录对象丢失！')

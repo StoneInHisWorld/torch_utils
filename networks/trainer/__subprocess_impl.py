@@ -26,11 +26,13 @@ def data_iter_subpro_impl(
         # 训练主循环
         for epoch in range(n_epochs):
             data_Q.put(f'{epoch + 1}/{n_epochs}')
+            # for i, batch in enumerate(data_iter):
             for batch in data_iter:
                 data_Q.put(batch)
+                # print(f'b{i}', end='')
                 if end_env.is_set():
                     raise InterruptedError('获取数据时被中断！')
-            # 放置None作为世代结束标志
+        # 放置None作为数据供给结束标志
         # print('data_fetching ends')
         data_Q.put(None)
         # print('data_iter_subpro_impl ends')
@@ -38,7 +40,35 @@ def data_iter_subpro_impl(
     except Exception as e:
         traceback.print_exc()
         data_Q.put(e)
-        # print('data_iter_subpro_impl ends')
+        print('data_iter_subpro_impl ends')
+
+
+def ends_a_epoch(net, optimizer_s, scheduler_s, log_Q, first_epoch=False):
+    if first_epoch:
+        # 如果是第一次世代更新，则只放入学习率组
+        log_Q.put([
+            [
+                [param['lr'] for param in optimizer.param_groups]
+                for optimizer in optimizer_s
+            ],
+            # ], True)
+        ])
+    else:
+        # log队列中放入每个优化器的学习率组以及网络参数
+        # print(f'传递训练好的网络{v}')
+        log_Q.put([
+            [
+                [param['lr'] for param in optimizer.param_groups]
+                for optimizer in optimizer_s
+            ],
+            {k: v.detach().clone() for k, v in net.state_dict().items()}
+            # ], True)
+        ])
+        # 更新学习率变化器组
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=UserWarning)
+            for scheduler in scheduler_s:
+                scheduler.step()
 
 
 @prepare('train')
@@ -46,7 +76,7 @@ def train_subprocess_impl(
         trainer,  # 训练器对象
         # net,  # 网络对象
         pbar_Q: PQueue, log_Q: PQueue, data_Q: PQueue,  # 队列
-        data_end_env: PEvent
+        end_env: PEvent
 ):
     """
     进行data_Q.get()、pbar_Q.put()以及log_Q.put()
@@ -56,7 +86,7 @@ def train_subprocess_impl(
     :param pbar_Q:
     :param log_Q:
     :param data_Q:
-    :param data_end_env:
+    :param end_env:
     :return:
     """
     try:
@@ -64,41 +94,95 @@ def train_subprocess_impl(
         net = trainer.module
         optimizer_s = net.optimizer_s
         scheduler_s = net.scheduler_s
+        # i = 0
+        # v = 0
+        # e = 0
+        first_epoch = True
         while True:
             item = data_Q.get()
-            # 收到了None，认为是数据供给结束标志
+            # 收到了None，认为是数据供给结束标志，将训练好的网路传递给记录进程进行验证和记录。
             if item is None:
+                # # log队列中放入每个优化器的学习率组以及网络参数
+                # # print(f'传递训练好的网络{v}')
+                # v += 1
+                # log_Q.put([
+                #     [
+                #         [param['lr'] for param in optimizer.param_groups]
+                #         for optimizer in optimizer_s
+                #     ],
+                #     {k: v.detach().clone() for k, v in net.state_dict().items()}
+                #     # ], True)
+                # ])
+                # # 更新学习率变化器组
+                # with warnings.catch_warnings():
+                #     warnings.simplefilter('ignore', category=UserWarning)
+                #     for scheduler in scheduler_s:
+                #         scheduler.step()
+                ends_a_epoch(net, optimizer_s, scheduler_s, log_Q)
                 break
             # 收到了异常，则抛出
             elif isinstance(item, Exception):
                 raise item
-            # 收到了字符串，认为是世代结束标志
+            # 收到了字符串，认为是世代开始标志
             elif isinstance(item, str):
                 pbar_Q.put(f'世代{item} 训练中……')
-                if item.startswith('1'):
-                    # 如果是第一次世代更新，则只放入学习率组
-                    log_Q.put([
-                        [
-                            [param['lr'] for param in optimizer.param_groups]
-                            for optimizer in optimizer_s
-                        ],
-                        # ], True)
-                    ])
-                else:
-                    # log队列中放入每个优化器的学习率组以及网络参数
-                    log_Q.put([
-                        [
-                            [param['lr'] for param in optimizer.param_groups]
-                            for optimizer in optimizer_s
-                        ],
-                        {k: v.detach().clone() for k, v in net.state_dict().items()}
-                        # ], True)
-                    ])
-                    # 更新学习率变化器组
-                    with warnings.catch_warnings():
-                        warnings.simplefilter('ignore', category=UserWarning)
-                        for scheduler in scheduler_s:
-                            scheduler.step()
+                # print(f'世代结束标志{e}')
+                # e += 1
+                ends_a_epoch(net, optimizer_s, scheduler_s, log_Q, first_epoch)
+                first_epoch = False
+                # if item.startswith('1'):
+                #     # 如果是第一次世代更新，则只放入学习率组
+                #     log_Q.put([
+                #         [
+                #             [param['lr'] for param in optimizer.param_groups]
+                #             for optimizer in optimizer_s
+                #         ],
+                #         # ], True)
+                #     ])
+                # else:
+                #     # log队列中放入每个优化器的学习率组以及网络参数
+                #     # print(f'传递训练好的网络{v}')
+                #     v += 1
+                #     log_Q.put([
+                #         [
+                #             [param['lr'] for param in optimizer.param_groups]
+                #             for optimizer in optimizer_s
+                #         ],
+                #         {k: v.detach().clone() for k, v in net.state_dict().items()}
+                #         # ], True)
+                #     ])
+                #     # 更新学习率变化器组
+                #     with warnings.catch_warnings():
+                #         warnings.simplefilter('ignore', category=UserWarning)
+                #         for scheduler in scheduler_s:
+                #             scheduler.step()
+                # if first_epoch:
+                #     # 如果是第一次世代更新，则只放入学习率组
+                #     log_Q.put([
+                #         [
+                #             [param['lr'] for param in optimizer.param_groups]
+                #             for optimizer in optimizer_s
+                #         ],
+                #         # ], True)
+                #     ])
+                #     first_epoch = False
+                # else:
+                #     # log队列中放入每个优化器的学习率组以及网络参数
+                #     # print(f'传递训练好的网络{v}')
+                #     v += 1
+                #     log_Q.put([
+                #         [
+                #             [param['lr'] for param in optimizer.param_groups]
+                #             for optimizer in optimizer_s
+                #         ],
+                #         {k: v.detach().clone() for k, v in net.state_dict().items()}
+                #         # ], True)
+                #     ])
+                #     # 更新学习率变化器组
+                #     with warnings.catch_warnings():
+                #         warnings.simplefilter('ignore', category=UserWarning)
+                #         for scheduler in scheduler_s:
+                #             scheduler.step()
             # 收到了元组，则认为是数据批次
             elif isinstance(item, tuple):
                 X, y = item
@@ -110,17 +194,20 @@ def train_subprocess_impl(
                 # log_Q.put((pred.detach(), ls_es, y.detach().clone()), True)
                 log_Q.put((pred.detach(), ls_es, y.detach().clone()))
                 # 完成了一批数据的计算，更新进度条
+                # print(f't{i}')
+                # i += 1
                 pbar_Q.put(1)
             else:
                 raise ValueError(f'不识别的信号{item}！')
         # 通知data_iter进程结束，通知log_process结束
         # data_end_env.set()
         # log_Q.put(None, True)
+        # print(f'数据队列消耗完毕：{data_Q.empty()}')
         log_Q.put(None)
         # 等待记录进程结束
         # log_end_env.wait()
         # print('train_subpro_impl ends')
-        data_end_env.wait()
+        end_env.wait()
         return
     except Exception as e:
         traceback.print_exc()
@@ -212,6 +299,7 @@ def tv_log_subprocess_impl(
                 raise NotImplementedError(f'无法识别的信号{item}！')
             del item
         # 将结果放在进度条队列中
+        # print(f'日志队列消耗完毕：{log_Q.empty()}')
         pbar_Q.put(history)
         # print('tv_log_subprocess_impl ends')
         end_env.set()
@@ -235,6 +323,7 @@ def valid_subprocess_impl(
     :return:
     """
     net.eval()
+    # print('进行了验证')
     pbar_Q.put('验证中……')
     # 要统计的数据种类数目
     criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
@@ -242,6 +331,7 @@ def valid_subprocess_impl(
     l_names = net.test_ls_names
     metric = Accumulator(len(criterion_a) + len(l_names) + 1)
     # 计算准确率和损失值
+    # for i, (features, labels) in enumerate(valid_iter):
     for features, labels in valid_iter:
         preds, ls_es = net.forward_backward(features, labels, False)
         metric.add(
@@ -250,6 +340,7 @@ def valid_subprocess_impl(
             len(features)
         )
         pbar_Q.put(1)
+        # print(f'v{i}', end=' ')
     # 生成测试日志
     log = {}
     i = 0
