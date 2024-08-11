@@ -43,7 +43,7 @@ def data_iter_subpro_impl(
         print('data_iter_subpro_impl ends')
 
 
-def ends_a_epoch(net, optimizer_s, scheduler_s, log_Q, first_epoch=False):
+def when_epoch_ends(net, optimizer_s, scheduler_s, log_Q, first_epoch=False):
     if first_epoch:
         # 如果是第一次世代更新，则只放入学习率组
         log_Q.put([
@@ -118,7 +118,7 @@ def train_subprocess_impl(
                 #     warnings.simplefilter('ignore', category=UserWarning)
                 #     for scheduler in scheduler_s:
                 #         scheduler.step()
-                ends_a_epoch(net, optimizer_s, scheduler_s, log_Q)
+                when_epoch_ends(net, optimizer_s, scheduler_s, log_Q)
                 break
             # 收到了异常，则抛出
             elif isinstance(item, Exception):
@@ -128,7 +128,7 @@ def train_subprocess_impl(
                 pbar_Q.put(f'世代{item} 训练中……')
                 # print(f'世代结束标志{e}')
                 # e += 1
-                ends_a_epoch(net, optimizer_s, scheduler_s, log_Q, first_epoch)
+                when_epoch_ends(net, optimizer_s, scheduler_s, log_Q, first_epoch)
                 first_epoch = False
                 # if item.startswith('1'):
                 #     # 如果是第一次世代更新，则只放入学习率组
