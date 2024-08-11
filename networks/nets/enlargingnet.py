@@ -19,7 +19,8 @@ class EnLargingNN(BasicNN):
         :param exp:
         :param kwargs:
         """
-        o_fea_chan_array = [base ** i for i in range(exp + 1)]
+        fea_chan = int(fea_chan)
+        o_fea_chan_array = [int(base ** i) for i in range(int(exp + 1))]
         layers = []
         # 上采样
         for o in o_fea_chan_array:
