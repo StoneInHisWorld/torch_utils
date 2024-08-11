@@ -31,14 +31,14 @@ def data_iter_subpro_impl(
                 if end_env.is_set():
                     raise InterruptedError('获取数据时被中断！')
             # 放置None作为世代结束标志
-        # print('data_fetching ends')
+        print('data_fetching ends')
         data_Q.put(None)
-        # print('data_iter_subpro_impl ends')
+        print('data_iter_subpro_impl ends')
         end_env.wait()
     except Exception as e:
         traceback.print_exc()
         data_Q.put(e)
-        # print('data_iter_subpro_impl ends')
+        print('data_iter_subpro_impl ends')
 
 
 @prepare('train')
@@ -119,13 +119,13 @@ def train_subprocess_impl(
         log_Q.put(None)
         # 等待记录进程结束
         # log_end_env.wait()
-        # print('train_subpro_impl ends')
+        print('train_subpro_impl ends')
         data_end_env.wait()
         return
     except Exception as e:
         traceback.print_exc()
         log_Q.put(e)
-        # print('train_subpro_impl ends')
+        print('train_subpro_impl ends')
 
 
 @prepare("valid")
@@ -213,13 +213,13 @@ def tv_log_subprocess_impl(
             del item
         # 将结果放在进度条队列中
         pbar_Q.put(history)
-        # print('tv_log_subprocess_impl ends')
+        print('tv_log_subprocess_impl ends')
         end_env.set()
         return
     except Exception as e:
         traceback.print_exc()
         pbar_Q.put(e)
-        # print('tv_log_subprocess_impl ends')
+        print('tv_log_subprocess_impl ends')
 
 
 @torch.no_grad()
