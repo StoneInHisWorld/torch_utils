@@ -1,6 +1,9 @@
+import math
+
 import dill
 from prefetch_generator import BackgroundGenerator
 from torch.utils.data import DataLoader as DLoader
+import utils.func.pytools as ptools
 
 from data_related.datasets import LazyDataSet
 
@@ -56,7 +59,8 @@ class LazyDataLoader:
         # 注：不可使用dataset的collate方法，因其为索引集的校验方法
         self.__collate_fn = kwargs.pop('collate_fn', lambda d: d)
         self.__sampler = sampler
-        self.__len = len(index_dataset) // batch_size
+        self.__len = math.ceil(len(sampler) / batch_size) if sampler \
+            else math.ceil(len(index_dataset) / batch_size)
         self.bkg_gen = bkgGen
         self.max_prefetch = max_prefetch
         self.__kwargs = kwargs
@@ -75,6 +79,16 @@ class LazyDataLoader:
             batch_size, sampler, shuffle, mute=True,
         )
 
+    def __fea_preprocess(self, fea_s):
+        for call in self.__fea_preprocesses:
+            fea_s = call(fea_s)
+        return fea_s
+
+    def __lb_preprocess(self, lb_s):
+        for call in self.__lb_preprocesses:
+            lb_s = call(lb_s)
+        return lb_s
+
     def __iter__(self):
         # 进行预处理
         # 此处不可以使用用户提供的sampler，会发生越界问题
@@ -86,11 +100,16 @@ class LazyDataLoader:
                     fea_indexes, lb_indexes,
                     n_workers=self.__kwargs.pop('num_workers', 2), mute=True
                 )
-                # 对读取到的数据进行预处理
-                for call in self.__fea_preprocesses:
-                    fea_s = call(fea_s)
-                for call in self.__lb_preprocesses:
-                    lb_s = call(lb_s)
+                fea_s, lb_s = ptools.multi_process(
+                    2, True, '',
+                    (self.__fea_preprocess, (fea_s,), {}),
+                    (self.__lb_preprocess, (lb_s,), {})
+                )
+                # # 对读取到的数据进行预处理
+                # for call in self.__fea_preprocesses:
+                #     fea_s = call(fea_s)
+                # for call in self.__lb_preprocesses:
+                #     lb_s = call(lb_s)
                 yield self.__collate_fn((fea_s, lb_s))
 
         unwrapped_generator = (

@@ -40,7 +40,7 @@ def data_iter_subpro_impl(
     except Exception as e:
         traceback.print_exc()
         data_Q.put(e)
-        print('data_iter_subpro_impl ends')
+        # print('data_iter_subpro_impl ends')
 
 
 def when_epoch_ends(net, optimizer_s, scheduler_s, log_Q, first_epoch=False):
