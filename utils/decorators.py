@@ -59,16 +59,16 @@ class net_builder:
     使用@new_builder()进行调用，创建好网络后传输给需要的函数。
     """
 
-    def __init__(self, destroy=False):
+    def __init__(self, mute=False):
         """网络创建装饰器。
         使用@new_builder()进行调用，创建好网络后传输给需要的函数。
         需要修饰的方法的前四个参数指定为trainer, net_class, n_init_args, n_init_kwargs，
             其中trainer提供数据源信息，后三个参数提供网络构造参数。
         若不需要构造网络，则令trainer.module对象不为None即可，此时只需向args提供trainer参数。
 
-        :param destroy: 是否在函数调用过后销毁网络，以节省内存。Deprecated!
+        :param mute: 是否在函数调用过后销毁网络，以节省内存。Deprecated!
         """
-        self.destroy = destroy
+        self.mute = mute
 
     def __call__(self, func):
         @wraps(func)
@@ -81,22 +81,22 @@ class net_builder:
             :param kwargs:
             :return:
             """
-            _, trainer, *args = args
+            prepare_obj, trainer, *args = args
             if trainer.module is None:
                 # 构造网络对象并交由trainer持有
                 net_class, n_init_args, n_init_kwargs = trainer.module_class, trainer.m_init_args, trainer.m_init_kwargs
-                net = self.__build(net_class, n_init_args, n_init_kwargs, trainer)
+                net = self.__build(net_class, n_init_args, n_init_kwargs, trainer, prepare_obj.mute)
                 setattr(trainer, 'module', net)
             else:
                 net = trainer.module
             args = trainer, net, *args
-            args = func(_, *args, **kwargs)
+            args = func(prepare_obj, *args, **kwargs)
 
             return args
 
         return wrapper
 
-    def __build(self, net_class, n_init_args, n_init_kwargs, trainer):
+    def __build(self, net_class, n_init_args, n_init_kwargs, trainer, mute):
         """根据参数构造一个神经网络
         :param net_class: 构造的神经网络类型，作为类构造器传入
         :param n_init_args: 类构造器所用位置参数
@@ -104,7 +104,8 @@ class net_builder:
         :return: 构造完成的神经网络
         """
         assert issubclass(net_class, BasicNN), '请使用BasicNN的子类作为训练网络！'
-        print(f'\r正在构造{net_class.__name__}', end='', flush=True)
+        if not mute:
+            print(f'\r正在构造{net_class.__name__}', end='', flush=True)
         try:
             n_init_kwargs['with_checkpoint'] = trainer.runtime_cfg['with_checkpoint']
             net = net_class(*n_init_args, **n_init_kwargs)
@@ -112,8 +113,9 @@ class net_builder:
             # 处理预训练网络加载
             where = n_init_kwargs['init_kwargs']['where'][:-5]
             net = torch.load(where + '.ptm')
-        print(f'\r构造{net_class.__name__}完成')
-        self.__list_net(net, trainer)
+        if not mute:
+            print(f'\r构造{net_class.__name__}完成')
+            self.__list_net(net, trainer)
         return net
 
     def __list_net(self, net, trainer) -> None:
@@ -122,15 +124,9 @@ class net_builder:
         :return: None
         """
         if trainer.runtime_cfg['print_net']:
-            # input_size = trainer.datasource.fea_channel, *net.required_shape
             input_size = trainer.input_size
-            # input_size = (1, 3, 3)
             try:
-                summary(
-                    # net, input_size=input_size,
-                    # batch_size=trainer.hps['batch_size']
-                    net, input_size=(trainer.hps['batch_size'], *input_size)
-                )
+                summary(net, input_size=(trainer.hps['batch_size'], *input_size))
             except Exception as e:
                 warnings.warn(f"打印网络时遇到错误：{e}，将切换成简洁打印模式！")
                 print(net)
@@ -142,7 +138,7 @@ class prepare:
     # 是否处于k_fold模式
     k_fold = False
 
-    def __init__(self, what='train'):
+    def __init__(self, what='train', mute=False):
         """函数准备装饰器，进行不同类型的准备，请使用@prepare()进行调用
 
         'train': 需要传入参数net、prepare_args、criterion_a、*args，其含义分别为训练待使用的网络对象，
@@ -157,6 +153,7 @@ class prepare:
         :param what: 进行何种准备
         """
         self.what = what
+        self.mute = mute
 
     def __call__(self, func):
         @wraps(func)
@@ -183,7 +180,6 @@ class prepare:
                 with torch.no_grad():
                     result = func(*args, **kwargs)
                 self.__after_predict(args[0])
-            # TODO：针对多进程设计一个准备流程
             else:
                 raise ValueError(f'未知准备类型{self.what}!')
             return result

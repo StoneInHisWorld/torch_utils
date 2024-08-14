@@ -1,11 +1,7 @@
-import multiprocessing
 import os.path
-from functools import wraps
-from typing import Iterable
 
 import dill
 import torch
-from torch import nn
 from torch.multiprocessing import Event as PEvent
 from torch.multiprocessing import Process
 from torch.multiprocessing import SimpleQueue as PQueue
@@ -14,10 +10,11 @@ from tqdm import tqdm
 from networks.basic_nn import BasicNN
 from networks.trainer.__hook_impl import hook
 from networks.trainer.__profiler_impl import profiling_impl
-from networks.trainer.__subprocess_impl import data_iter_subpro_impl, train_subprocess_impl, tv_log_subprocess_impl
+from networks.trainer.__subprocess_impl import data_iter_impl, train_impl, eval_impl, vlog_impl, \
+    tlog_impl
 from utils.accumulator import Accumulator
 from utils.decorators import prepare
-from utils.func.pytools import get_computer_name
+from utils.func.pytools import get_computer_name, is_multiprocessing
 from utils.history import History
 
 
@@ -94,7 +91,7 @@ class Trainer:
             else:
                 raise ValueError(f"无法识别的数据迭代器，其提供的长度为{len(data_iter)}")
             # 判断是否要进行多线程训练
-            if n_workers <= 4:
+            if is_multiprocessing(n_workers):
                 # 不启用多线程训练
                 if valid_iter is not None:
                     # 进行训练和验证
@@ -104,12 +101,11 @@ class Trainer:
                     train_fn, train_args = self.__train, (train_iter, )
             else:
                 # 启用多进程训练
-                # raise NotImplementedError('多进程训练尚未实现！')
                 train_fn, train_args = self.__train_with_subprocesses, (train_iter, valid_iter)
         # 设置进度条
         pbar = tqdm(
             total=pbar_len, unit='批', position=0,
-            desc=f'正在进行训练准备……', mininterval=1, ncols=80
+            desc=f'正在进行训练准备……', mininterval=1, ncols=100
         )
         self.pbar = pbar  # 多进程运行需要删除此属性，此举防止pbar被回收
         history = train_fn(*train_args)
@@ -340,11 +336,10 @@ class Trainer:
             pbar.set_description(f'\r训练折{i + 1}……')
             # 计算训练批次数
             pbar.total = k * n_epochs * (len(train_iter) + len(valid_iter))
-            if n_workers <= 4:
-                history = self.__train_and_valid(train_iter, valid_iter)
-            else:
-                # raise NotImplementedError('多进程训练尚未实现！')
+            if is_multiprocessing(n_workers):
                 history = self.__train_with_subprocesses(train_iter, valid_iter)
+            else:
+                history = self.__train_and_valid(train_iter, valid_iter)
             if k_fold_history is None:
                 k_fold_history = history
             else:
@@ -435,57 +430,58 @@ class Trainer:
         """
         # 提取训练器参数
         pbar = self.pbar
-        net = self.module
-        criterion_a = self.criterion_a
         n_epochs = self.hps['epochs']
-        # optimizer_s = net.optimizer_s
-        # scheduler_s = net.scheduler_s
-        # 损失项
-        loss_names = [f'train_{item}' for item in net.loss_names]
-        # 评价项
-        criteria_names = [f'train_{get_computer_name(criterion)}' for criterion in criterion_a]
-        # 学习率项
-        lr_names = net.lr_names
-        # # 设置历史记录对象
-        # history = History(*(criteria_names + loss_names + lr_names))
         history = None
-        # torch.ops.torch_use_cuda_dsa(True)
 
         pbar.set_description('\r正在创建队列和事件对象……')
         # 使用进程池处理训练进程和记录进程
         pbar_Q = PQueue()
-        log_Q = PQueue()
         data_Q = PQueue()
-        data_end_env = PEvent()
+        eval_Q = PQueue()
+        log_Q = PQueue()
+        if valid_iter is not None:
+            valid_Q = PQueue()
+        end_env = PEvent()
         # 将无法pickle的对象进行特殊序列化
-        pbar.set_description('\r正在进行特殊序列化……')
+        pbar.set_description('\r正在开启子进程……')
         train_iter = dill.dumps(train_iter)
         del self.pbar
         # 生成子进程
-        # print(multiprocessing.get_start_method())
-        # multiprocessing.set_start_method('forkserver')
         data_subprocess = Process(
-            target=data_iter_subpro_impl,
-            args=(n_epochs, train_iter, data_Q, data_end_env)
+            target=data_iter_impl,
+            args=(n_epochs, train_iter, data_Q, end_env)
         )
         train_subprocess = Process(
-            target=train_subprocess_impl,
-            args=(self, pbar_Q, log_Q, data_Q, data_end_env)
+            target=train_impl,
+            args=(self, pbar_Q, eval_Q, log_Q, data_Q, end_env)
         )
-        if valid_iter is not None:
-            valid_iter = dill.dumps(valid_iter)
-            log_subprocess = Process(
-                target=tv_log_subprocess_impl,
-                args=(self, valid_iter, log_Q, pbar_Q, data_end_env)
-            )
-        else:
-            raise NotImplementedError('暂未编写单训练过程')
-        process_pool = [data_subprocess, train_subprocess, log_subprocess]
+        eval_subprocess = Process(
+            target=eval_impl,
+            args=(self, pbar_Q, eval_Q, log_Q, end_env)
+        )
+        process_pool = [data_subprocess, train_subprocess, eval_subprocess]
         # 实时监控各项任务的执行情况
         try:
             pbar.set_description('\r正在开启子进程……')
             for p in process_pool:
                 p.start()
+            # 设置日志子进程
+            module = self.module
+            # 如果self携带有网络，则将网络对象解绑以减少内存消耗
+            self.module = None
+            if valid_iter:
+                log_subprocess = Process(
+                    target=vlog_impl,
+                    args=(self, dill.dumps(valid_iter), pbar_Q, log_Q, end_env)
+                )
+            else:
+                log_subprocess = Process(
+                    target=tlog_impl,
+                    args=(self, pbar_Q, log_Q, end_env)
+                )
+            log_subprocess.start()
+            process_pool.append(log_subprocess)
+            self.module = module
             while True:
                 item = pbar_Q.get()
                 if item is None:
@@ -508,12 +504,99 @@ class Trainer:
                 if p.is_alive():
                     p.terminate()
             raise e
-        # pbar.close()
-        # print(f'进度条队列消耗完毕：{pbar_Q.empty()}')
         self.pbar = pbar
         if history is None:
             raise RuntimeError('历史记录对象丢失！')
         return history
+
+    # def __train_with_subprocesses(self, train_iter, valid_iter=None) -> History:
+    #     """多进程训练实现
+    #     :param train_iter: 训练数据迭代器
+    #     :param valid_iter: 验证数据迭代器
+    #     :param pbar: 进度条
+    #     :return: 训练历史记录
+    #     """
+    #     # 提取训练器参数
+    #     pbar = self.pbar
+    #     net = self.module
+    #     criterion_a = self.criterion_a
+    #     n_epochs = self.hps['epochs']
+    #     # optimizer_s = net.optimizer_s
+    #     # scheduler_s = net.scheduler_s
+    #     # 损失项
+    #     loss_names = [f'train_{item}' for item in net.loss_names]
+    #     # 评价项
+    #     criteria_names = [f'train_{get_computer_name(criterion)}' for criterion in criterion_a]
+    #     # 学习率项
+    #     lr_names = net.lr_names
+    #     # # 设置历史记录对象
+    #     # history = History(*(criteria_names + loss_names + lr_names))
+    #     history = None
+    #     # torch.ops.torch_use_cuda_dsa(True)
+    #
+    #     pbar.set_description('\r正在创建队列和事件对象……')
+    #     # 使用进程池处理训练进程和记录进程
+    #     pbar_Q = PQueue()
+    #     log_Q = PQueue()
+    #     data_Q = PQueue()
+    #     data_end_env = PEvent()
+    #     # 将无法pickle的对象进行特殊序列化
+    #     pbar.set_description('\r正在进行特殊序列化……')
+    #     train_iter = dill.dumps(train_iter)
+    #     del self.pbar
+    #     # 生成子进程
+    #     # print(multiprocessing.get_start_method())
+    #     # multiprocessing.set_start_method('forkserver')
+    #     data_subprocess = Process(
+    #         target=data_iter_subpro_impl,
+    #         args=(n_epochs, train_iter, data_Q, data_end_env)
+    #     )
+    #     train_subprocess = Process(
+    #         target=train_subprocess_impl,
+    #         args=(self, pbar_Q, log_Q, data_Q, data_end_env)
+    #     )
+    #     if valid_iter is not None:
+    #         valid_iter = dill.dumps(valid_iter)
+    #         log_subprocess = Process(
+    #             target=tv_log_subprocess_impl,
+    #             args=(self, valid_iter, log_Q, pbar_Q, data_end_env)
+    #         )
+    #     else:
+    #         raise NotImplementedError('暂未编写单训练过程')
+    #     process_pool = [data_subprocess, train_subprocess, log_subprocess]
+    #     # 实时监控各项任务的执行情况
+    #     try:
+    #         pbar.set_description('\r正在开启子进程……')
+    #         for p in process_pool:
+    #             p.start()
+    #         while True:
+    #             item = pbar_Q.get()
+    #             if item is None:
+    #                 break
+    #             elif isinstance(item, Exception):
+    #                 raise InterruptedError('训练过程中某处触发了异常，请根据上条Trackback信息进行排查！')
+    #             elif isinstance(item, int):
+    #                 pbar.update(item)
+    #             elif isinstance(item, str):
+    #                 pbar.set_description(item)
+    #             elif isinstance(item, History):
+    #                 history = item
+    #                 break
+    #             else:
+    #                 raise ValueError(f'不识别的信号{item}')
+    #         for p in process_pool:
+    #             p.join()
+    #     except Exception as e:
+    #         for p in process_pool:
+    #             if p.is_alive():
+    #                 p.terminate()
+    #         raise e
+    #     # pbar.close()
+    #     # print(f'进度条队列消耗完毕：{pbar_Q.empty()}')
+    #     self.pbar = pbar
+    #     if history is None:
+    #         raise RuntimeError('历史记录对象丢失！')
+    #     return history
 
     def train_with_profiler(self, data_iter, log_path):
         # 提取训练器参数

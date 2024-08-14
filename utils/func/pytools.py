@@ -165,3 +165,7 @@ def get_computer_name(computer):
         # 可调用对象
         computer_name = computer.__class__.__name__
     return computer_name
+
+
+def is_multiprocessing(n_workers):
+    return n_workers > 5
