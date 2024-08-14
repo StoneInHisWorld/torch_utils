@@ -1,17 +1,7 @@
-import functools
-import warnings
-
-import numpy as np
 import torch
 from torchmetrics.image import StructuralSimilarityIndexMeasure, PeakSignalNoiseRatio
-from networks.layers import PCC as PearsonCorrCoef
-from skimage.metrics import (structural_similarity as ssim,
-                             peak_signal_noise_ratio as psnr)
-from scipy.stats import pearsonr
-from scipy.stats import ConstantInputWarning
 
-from data_related.ds_operation import normalize
-from utils.func.pytools import warning_handler
+from networks.layers import PCC as PearsonCorrCoef
 
 """请勿编写无法使用CUDA加速的函数，否则会大大影响CUDA设备的训练速度！"""
 
