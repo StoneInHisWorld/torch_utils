@@ -2,14 +2,19 @@ import torch
 
 from networks import BasicNN
 from torch.nn import Conv2d, ReLU, BatchNorm2d, ConvTranspose2d, Upsample, Linear
+from utils.func.pytools import check_para
 
 
 class EnLargingNN(BasicNN):
 
     activation = ReLU
     norm_layer = BatchNorm2d
+    version_supported = ['1', '2']
 
-    def __init__(self, fea_chan, out_chan, required_shape, base=2, exp=2, **kwargs):
+    def __init__(self,
+                 fea_chan, out_chan, required_shape,
+                 base=2, exp=2, version='1',
+                 **kwargs):
         """请根据需要指定exp参数，上采样的次数等于exp的次数，上采样的结果形状有可能会超过required_shape
 
         :param fea_chan:
@@ -22,6 +27,8 @@ class EnLargingNN(BasicNN):
         fea_chan = int(fea_chan)
         o_fea_chan_array = [int(base ** i) for i in range(int(exp + 1))]
         layers = []
+        assert check_para('version', version, EnLargingNN.version_supported), 'version参数设置错误！'
+        self.version = version
         # 上采样
         for o in o_fea_chan_array:
             layers += self.get_ELBlock(fea_chan, o)
@@ -56,9 +63,19 @@ class EnLargingNN(BasicNN):
         ]
 
     def get_OutputBlock(self, i, o):
-        return [
-            # 压缩特征
-            Conv2d(i, o, kernel_size=3, stride=1, padding=1),
-            self.norm_layer(o),
-            self.activation(),
-        ]
+        if self.version == '1':
+            return [
+                # 压缩特征
+                Conv2d(i, o, kernel_size=3, stride=1, padding=1),
+                self.norm_layer(o),
+                self.activation(),
+            ]
+        elif self.version == '2':
+            return [
+                # 压缩特征
+                Conv2d(i, o, kernel_size=1),
+                self.norm_layer(o),
+                self.activation(),
+            ]
+        else:
+            raise ValueError(f"不支持的版本{self.version}")
