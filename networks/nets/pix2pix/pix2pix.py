@@ -6,8 +6,8 @@ import inspect
 import utils.func.torch_tools as ttools
 # from networks.basic_nn import BasicNN
 from networks.basic_nn import BasicNN
-from networks.nets.pix2pix_d import Pix2Pix_D
-from networks.nets.pix2pix_g import Pix2Pix_G
+from networks.nets.pix2pix.pix2pix_d import Pix2Pix_D
+from networks.nets.pix2pix.pix2pix_g import Pix2Pix_G
 
 
 class Pix2Pix(BasicNN):
@@ -25,7 +25,7 @@ class Pix2Pix(BasicNN):
                  d_args, d_kwargs,
                  direction='AtoB', isTrain=True,
                  **kwargs):
-        """实现pix2pix模型，通过给定数据对学习输入图片到输出图片的映射。
+        r"""实现pix2pix模型，通过给定数据对学习输入图片到输出图片的映射。
 
         pix2pix不使用图片缓存。
 
