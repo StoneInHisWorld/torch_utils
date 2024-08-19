@@ -439,36 +439,37 @@ class Trainer:
         data_Q = PQueue()
         eval_Q = PQueue()
         log_Q = PQueue()
-        if valid_iter is not None:
-            valid_Q = PQueue()
         end_env = PEvent()
         # 将无法pickle的对象进行特殊序列化
         pbar.set_description('\r正在开启子进程……')
-        train_iter = dill.dumps(train_iter)
+        # self.module = dill.dumps(self.module)
         del self.pbar
-        # 生成子进程
-        data_subprocess = Process(
-            target=data_iter_impl,
-            args=(n_epochs, train_iter, data_Q, end_env)
-        )
-        train_subprocess = Process(
-            target=train_impl,
-            args=(self, pbar_Q, eval_Q, log_Q, data_Q, end_env)
-        )
-        eval_subprocess = Process(
-            target=eval_impl,
-            args=(self, pbar_Q, eval_Q, log_Q, end_env)
-        )
-        process_pool = [data_subprocess, train_subprocess, eval_subprocess]
-        # 实时监控各项任务的执行情况
+        # 生成子进程并开启
+        process_pool = []
         try:
-            pbar.set_description('\r正在开启子进程……')
-            for p in process_pool:
-                p.start()
-            # 设置日志子进程
-            module = self.module
+            data_subprocess = Process(
+                target=data_iter_impl,
+                args=(n_epochs, dill.dumps(train_iter), data_Q, end_env)
+            )
+            process_pool = [data_subprocess]
+            data_subprocess.start()
+            pbar.set_description('\r数据加载子进程已开启')
+            train_subprocess = Process(
+                target=train_impl,
+                args=(dill.dumps(self), pbar_Q, eval_Q, log_Q, data_Q, end_env)
+            )
+            process_pool += [train_subprocess]
+            train_subprocess.start()
+            pbar.set_description('\r训练子进程已开启')
             # 如果self携带有网络，则将网络对象解绑以减少内存消耗
+            module = self.module
             self.module = None
+            eval_subprocess = Process(
+                target=eval_impl,
+                args=(module.loss_names, self.criterion_a, pbar_Q, eval_Q, log_Q, end_env)
+            )
+            process_pool += [eval_subprocess]
+            # 日志进程
             if valid_iter:
                 log_subprocess = Process(
                     target=vlog_impl,
@@ -479,9 +480,13 @@ class Trainer:
                     target=tlog_impl,
                     args=(self, pbar_Q, log_Q, end_env)
                 )
-            log_subprocess.start()
-            process_pool.append(log_subprocess)
+            process_pool += [log_subprocess]
+            for p in process_pool:
+                if not p.is_alive():
+                    p.start()
+            pbar.set_description('\r全部子进程已开启')
             self.module = module
+            # 接受进度条队列消息
             while True:
                 item = pbar_Q.get()
                 if item is None:
@@ -498,7 +503,8 @@ class Trainer:
                 else:
                     raise ValueError(f'不识别的信号{item}')
             for p in process_pool:
-                p.join()
+                if p.is_alive():
+                    p.join()
         except Exception as e:
             for p in process_pool:
                 if p.is_alive():

@@ -1,6 +1,7 @@
 import warnings
 from functools import wraps
 
+import dill
 import torch
 from torchinfo import summary
 from tqdm import tqdm
@@ -82,6 +83,9 @@ class net_builder:
             :return:
             """
             prepare_obj, trainer, *args = args
+            if isinstance(trainer, bytes):
+                # 如果trainer被序列化了
+                trainer = dill.loads(trainer)
             if trainer.module is None:
                 # 构造网络对象并交由trainer持有
                 net_class, n_init_args, n_init_kwargs = trainer.module_class, trainer.m_init_args, trainer.m_init_kwargs
