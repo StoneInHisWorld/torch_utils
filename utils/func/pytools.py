@@ -168,4 +168,4 @@ def get_computer_name(computer):
 
 
 def is_multiprocessing(n_workers):
-    return n_workers > 5
+    return n_workers >= 5
