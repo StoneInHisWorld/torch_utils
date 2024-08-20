@@ -9,11 +9,11 @@ class EnLargingNN(BasicNN):
 
     activation = ReLU
     norm_layer = BatchNorm2d
-    version_supported = ['1', '2']
+    version_supported = ['v1', 'v2']
 
     def __init__(self,
-                 fea_chan, out_chan, output_shape,
-                 base=2, exp=2, version='1',
+                 fea_chan, out_chan, input_shape, output_shape,
+                 base=2, exp=2, version='v1',
                  **kwargs):
         """请根据需要指定exp参数，上采样的次数等于exp的次数
 
@@ -29,9 +29,11 @@ class EnLargingNN(BasicNN):
         layers = []
         assert check_para('version', version, EnLargingNN.version_supported), 'version参数设置错误！'
         self.version = version
+        cur_shape = input_shape
         # 上采样
         for o in o_fea_chan_array:
-            layers += self.get_ELBlock(fea_chan, o)
+            cur_shape, elbks = self.get_ELBlock(fea_chan, o, cur_shape, output_shape)
+            layers += elbks
             fea_chan = o
         layers.append(Upsample(output_shape))
         # 使用三层卷积压缩通道以调整至输出通道
@@ -41,36 +43,43 @@ class EnLargingNN(BasicNN):
             o = int(o)
             layers += self.get_OutputBlock(fea_chan, o)
             fea_chan = o
-        # for o in list(reversed(o_fea_chan_array))[:-1]:
-        #     layers += self.get_OutputBlock(fea_chan, o)
-        #     fea_chan = o
         # 去掉末尾的标准化层和激活函数
-        # layers.append(Conv2d(fea_chan, out_chan, kernel_size=3, stride=1, padding=1))
         layers.pop()
         layers.pop()
         super().__init__(*layers, **kwargs)
 
-    def get_ELBlock(self, i, o):
-        return [
-            # 提取特征
-            Conv2d(i, o, kernel_size=3, stride=1, padding=1),
-            self.norm_layer(o),
-            self.activation(),
-            # 上采样2倍
-            ConvTranspose2d(o, o, kernel_size=3, stride=2, padding=1),
-            self.norm_layer(o),
-            self.activation()
-        ]
+    def get_ELBlock(self, i, o, cur_shape, required_shape):
+        ct_s, ct_k, ct_p = 2, 3, 1
+        oshape_h = (cur_shape[0] - 1) * ct_s + ct_k - 2 * ct_p
+        oshape_w = (cur_shape[0] - 1) * ct_s + ct_k - 2 * ct_p
+        if oshape_h < required_shape[0] and oshape_w < required_shape[1]:
+            return (cur_shape[0] * 2 - 1, cur_shape[1] * 2 - 1), [
+                # 提取特征
+                Conv2d(i, o, kernel_size=3, stride=1, padding=1),
+                self.norm_layer(o),
+                self.activation(),
+                # 上采样2倍
+                ConvTranspose2d(o, o, kernel_size=ct_k, stride=ct_s, padding=ct_p),
+                self.norm_layer(o),
+                self.activation()
+            ]
+        else:
+            return cur_shape, [
+                # 提取特征
+                Conv2d(i, o, kernel_size=3, stride=1, padding=1),
+                self.norm_layer(o),
+                self.activation(),
+            ]
 
     def get_OutputBlock(self, i, o):
-        if self.version == '1':
+        if self.version == 'v1':
             return [
                 # 压缩特征
                 Conv2d(i, o, kernel_size=3, stride=1, padding=1),
                 self.norm_layer(o),
                 self.activation(),
             ]
-        elif self.version == '2':
+        elif self.version == 'v2':
             return [
                 # 压缩特征
                 Conv2d(i, o, kernel_size=1),
