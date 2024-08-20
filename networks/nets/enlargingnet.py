@@ -1,7 +1,7 @@
 import torch
+from torch.nn import Conv2d, ReLU, BatchNorm2d, ConvTranspose2d, Upsample
 
 from networks import BasicNN
-from torch.nn import Conv2d, ReLU, BatchNorm2d, ConvTranspose2d, Upsample, Linear
 from utils.func.pytools import check_para
 
 
@@ -12,14 +12,14 @@ class EnLargingNN(BasicNN):
     version_supported = ['1', '2']
 
     def __init__(self,
-                 fea_chan, out_chan, required_shape,
+                 fea_chan, out_chan, output_shape,
                  base=2, exp=2, version='1',
                  **kwargs):
-        """请根据需要指定exp参数，上采样的次数等于exp的次数，上采样的结果形状有可能会超过required_shape
+        """请根据需要指定exp参数，上采样的次数等于exp的次数
 
         :param fea_chan:
         :param out_chan:
-        :param required_shape:
+        :param output_shape:
         :param base:
         :param exp:
         :param kwargs:
@@ -33,7 +33,7 @@ class EnLargingNN(BasicNN):
         for o in o_fea_chan_array:
             layers += self.get_ELBlock(fea_chan, o)
             fea_chan = o
-        layers.append(Upsample(required_shape))
+        layers.append(Upsample(output_shape))
         # 使用三层卷积压缩通道以调整至输出通道
         for o in torch.logspace(
             exp, torch.log(torch.tensor(out_chan)) / torch.log(torch.tensor(base)), 3, base=base

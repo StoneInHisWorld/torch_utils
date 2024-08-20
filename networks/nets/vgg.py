@@ -13,7 +13,7 @@ VGG_11 = (
 
 class VGG(BasicNN):
 
-    required_shape = (224, 224)
+    input_size = (224, 224)
 
     def __init__(self, in_channels: int, out_features: Iterable or int,
                  conv_arch: Tuple[int, int] = VGG_11, regression=False,

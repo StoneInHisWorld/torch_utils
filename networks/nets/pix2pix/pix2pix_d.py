@@ -7,7 +7,7 @@ from networks.layers.identity import Identity
 
 
 class Pix2Pix_D(BasicNN):
-    required_shape = (256, 256)
+    input_size = (256, 256)
 
     def __init__(self, input_nc, ndf, net_type='basic',
                  n_layers_D=3, norm_type='batch',

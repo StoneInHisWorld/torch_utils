@@ -15,8 +15,6 @@ class BasicNN(nn.Sequential):
     提供神经网络的基本功能，包括训练准备（优化器生成、学习率规划器生成、损失函数生成）、模块初始化、前反向传播实现以及展示图片输出注释的实现。
     """
 
-    required_shape = (-1,)
-
     def __init__(self, *args, **kwargs) -> None:
         """基本神经网络
         提供神经网络的基本功能，包括训练准备（优化器生成、学习率规划器生成、损失函数生成）、模块初始化、前反向传播实现以及展示图片输出注释的实现。
@@ -33,6 +31,9 @@ class BasicNN(nn.Sequential):
         device = torch.device('cpu') if 'device' not in kwargs.keys() else kwargs['device']
         with_checkpoint = False if 'with_checkpoint' not in kwargs.keys() else kwargs['with_checkpoint']
         init_kwargs = {} if 'init_kwargs' not in kwargs.keys() else kwargs['init_kwargs']
+        self.input_size = None if 'input_size' not in kwargs.keys() else kwargs['input_size']
+        # 设置状态标志
+        self.ready = False
         # 初始化各模块
         super(BasicNN, self).__init__(*args)
         self._init_submodules(init_meth, **init_kwargs)
@@ -40,7 +41,7 @@ class BasicNN(nn.Sequential):
         self.scheduler_s = None
         self.ls_fn_s = None
         # self._gradient_clipping = None
-        self.ready = False
+        # 设备迁移
         self.apply(lambda m: m.to(device))
 
         self._device = device
@@ -304,25 +305,15 @@ class BasicNN(nn.Sequential):
         :param x: 前向传播输入
         :return: 前向传播结果
         """
+        # 形状检查
+        if self.input_size:
+            assert x.shape[-2:] == self.input_size, f'输入网络的张量形状{x.shape}与网络要求形状{self.input_size}不匹配！'
+        # checkpoint检查
         if self.__checkpoint:
-            # _check_first = False
-            # # 检查checkpoint适用性以指定前向传播适用函数
-            # _check_first = (_check_first and
-            #                 not isinstance(self, nn.Dropout) and
-            #                 not isinstance(self, nn.BatchNorm2d))
-            # can_check = _check_first
             x = checkpoint.checkpoint(
                 super(BasicNN, self).__call__, x, use_reentrant=False
             )
             _check_first = True
-            # for m in self:
-            #     # 检查checkpoint适用性以指定前向传播适用函数
-            #     _check_first = (_check_first and
-            #                     not isinstance(m, nn.Dropout) and
-            #                     not isinstance(m, nn.BatchNorm2d))
-            #     can_check = _check_first
-            #     x = checkpoint.checkpoint(m, x, use_reentrant=False) if can_check else m(x)
-            #     _check_first = True
             return x
         else:
             # 启用普通的调用函数

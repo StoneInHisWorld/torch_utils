@@ -13,7 +13,7 @@ from networks.layers.multi_output import MultiOutputLayer
 
 class GoogLeNet(BasicNN):
 
-    required_shape = (224, 224)
+    input_size = (224, 224)
 
     def __init__(self, in_channels, out_features,
                  version='1', regression=False, dropout_rate=0., bn_momen=0.95,

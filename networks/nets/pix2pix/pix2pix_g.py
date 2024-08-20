@@ -217,7 +217,6 @@ class ResNetGenerator(nn.Sequential):
 
 
 class Pix2Pix_G(BasicNN):
-    required_shape = (256, 256)
 
     def __init__(self, version='u256', *args, **kwargs):
         """
@@ -237,14 +236,14 @@ class Pix2Pix_G(BasicNN):
         supported = ['u256', 'r9']
         if version == 'u256':
             model = UNet256Genarator(*args, **kwargs)
-            self.required_shape = (256, 256)
+            kwargs['required_shape'] = (256, 256)
         if version == 'u128':
             model = UNet128Genarator(*args, **kwargs)
-            self.required_shape = (128, 128)
+            kwargs['required_shape'] = (128, 128)
         elif version == 'r9':
             kwargs['n_blocks'] = 9
             model = ResNetGenerator(*args, **kwargs)
-            self.required_shape = (256, 256)
+            kwargs['required_shape'] = (256, 256)
         else:
             raise NotImplementedError(f'不支持的生成器版本{version}，支持的生成器版本包括{supported}')
         super(Pix2Pix_G, self).__init__(model, **kwargs)
