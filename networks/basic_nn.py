@@ -5,8 +5,7 @@ import torch
 import torch.nn as nn
 from torch.utils import checkpoint
 
-import utils.func.torch_tools as ttools
-from utils.func.torch_tools import sample_wise_ls_fn
+from utils.func import torch_tools as ttools
 
 
 class BasicNN(nn.Sequential):
@@ -130,7 +129,7 @@ class BasicNN(nn.Sequential):
             unwrapped_fn = ttools.get_ls_fn(type_s, **kwargs)
             ls_fn_s.append(
                 unwrapped_fn if size_averaged else
-                lambda x, y: sample_wise_ls_fn(x, y, unwrapped_fn)
+                lambda x, y: ttools.sample_wise_ls_fn(x, y, unwrapped_fn)
             )
         test_ls_names = loss_names
         return ls_fn_s, loss_names, test_ls_names
