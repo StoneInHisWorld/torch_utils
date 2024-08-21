@@ -1,3 +1,4 @@
+import functools
 import random
 from typing import Tuple, Iterable, Callable, List
 
@@ -7,8 +8,10 @@ from PIL import Image as IMAGE, ImageDraw
 from PIL.Image import Image
 from tqdm import tqdm
 
+from utils.func.pytools import check_para
 
-def resize_img(image: Image, required_shape: Tuple[int, int]) -> Image:
+
+def resize_img(image: Image, required_shape: Tuple[int, int], interpolation='nearest') -> Image:
     """
     重塑图片。
     先将图片等比例放大到最大（放缩到最小）满足required_shape的尺寸，再对图片随机取部分或填充黑边以适配所需形状
@@ -28,8 +31,22 @@ def resize_img(image: Image, required_shape: Tuple[int, int]) -> Image:
     # 计算图片缺失shape
     dw = w - new_w
     dh = h - new_h
+
     # 等比例缩放数据
-    image = image.resize((new_h, new_w), IMAGE.BICUBIC)
+    def __get_interpolation():
+        """获取插值方法"""
+        supported = ['nearest', 'bicubic', 'bilinear', 'lanczos']
+        assert check_para('interpolation', interpolation, supported)
+        if interpolation == 'nearest':
+            return PIL.Image.NEAREST
+        elif interpolation == 'bicubic':
+            return PIL.Image.BICUBIC
+        elif interpolation == 'bilinear':
+            return PIL.Image.BILINEAR
+        elif interpolation == 'lanczos':
+            return PIL.Image.LANCZOS
+
+    image = image.resize((new_h, new_w), __get_interpolation())
     # 若需求图片大小较大，则进行填充
     if dw > 0 or dh > 0:
         back_ground = IMAGE.new(image.mode, (w, h), 0)
@@ -76,23 +93,23 @@ def crop_img(img: Image, required_shape, loc: str or Tuple[int, int]) -> Image:
     return img.crop(loc)
 
 
-def read_img(path: str, mode: str = 'L', requires_id: bool = False,
-             *preprocesses: Iterable[Tuple[Callable, dict]]) -> np.ndarray:
+def read_img(path: str, mode: str = 'L', *preprocesses: Iterable[Callable]) -> np.ndarray:
     """
     读取图片
     :param path: 图片所在路径
     :param mode: 图片读取模式
-    :param requires_id: 是否需要给图片打上ID
     :return: 图片对应numpy数组，形状为（通道，图片高，图片宽，……）
     """
     img_modes = ['L', 'RGB', '1']
     assert mode in img_modes, f'不支持的图像模式{mode}！'
     # img = Image.open(path).convert(mode)
     img = IMAGE.open(path)
-    preprocesses = (*preprocesses, (Image.convert, (mode,), {}))
+    # preprocesses = (*preprocesses, (Image.convert, (mode,), {}))
+    preprocesses = (*preprocesses, functools.partial(Image.convert, mode=mode))
     for preprocess in preprocesses:
-        func, args, kwargs = preprocess
-        img = func(img, *args, **kwargs)
+        # func, args, kwargs = preprocess
+        # img = func(img, *args, **kwargs)
+        img = preprocess(img)
     img = np.array(img)
     # 复原出通道。1表示样本数量维
     if mode == 'L' or mode == '1':
@@ -102,10 +119,6 @@ def read_img(path: str, mode: str = 'L', requires_id: bool = False,
     else:
         img_channels = -1
     img = img.reshape((img_channels, *img.shape[:2]))
-    # if requires_id:
-    #     # 添加上读取文件名
-    #     file_name = os.path.split(path)[-1]
-    #     img = np.hstack((file_name, img))
     return img
 
 
@@ -135,10 +148,11 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     :param kwargs: 关键词参数。支持的参数包括：comment，单个白板的脚注；text_size，标签及脚注的文字大小；border_size，图片/标签/边界之间的宽度
     :return: 生成的结果图序列
     """
-    comments = kwargs['comments'] if 'comments' in kwargs.keys() else ['' for _ in
-                                                                       range(len(groups_of_imgs_labels_list))]
+    footnotes = kwargs['footnotes'] if 'footnotes' in kwargs.keys() \
+        else ['' for _ in range(len(groups_of_imgs_labels_list))]
     text_size = kwargs['text_size'] if 'text_size' in kwargs.keys() else 15
     border_size = kwargs['border_size'] if 'border_size' in kwargs.keys() else 5
+    img_size = kwargs['img_size'] if 'img_size' in kwargs.keys() else None
     required_shape = kwargs['required_shape'] if 'required_shape' in kwargs.keys() else None
     # 判断白板所用模式
     mode = '1'
@@ -147,38 +161,52 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
         modes.add(img.mode)
     if 'CMYK' in modes:
         mode = 'CMYK'
+        color = (255, 255, 255, 255)
+        text_color = (0, 0, 0, 0)
     elif 'RGB' in modes:
         mode = 'RGB'
+        color = (255, 255, 255)
+        text_color = (0, 0, 0)
     elif 'L' in modes:
         mode = 'L'
+        color = 255
+        text_color = 0
 
-    def _concat_imgs(comment: str = "",
+    def _concat_imgs(footnotes: str = "",
                      *imgs_and_labels: Tuple[Image, str]
                      ) -> Image:
         """拼接图片和标签，再添加脚注形成单张图片"""
         # 计算绘图窗格大小
-        cb_height = max([img.height for img, _ in imgs_and_labels])
-        cb_width = max([img.width for img, _ in imgs_and_labels])
+        if img_size:
+            cb_height, cb_width = img_size
+        else:
+            cb_height = max([img.height for img, _ in imgs_and_labels])
+            cb_width = max([img.width for img, _ in imgs_and_labels])
         n_cube = len(imgs_and_labels)
         # 计算脚注空间
-        n_cm_lines = comment.count('\n') + 2  # 加上'COMMENT:'和内容
+        n_ftn_lines = footnotes.count('\n') + 2  # 加上'COMMENT:'和内容
         text_indent = int(np.ceil(text_size / 3))
-        cm_height = text_size * n_cm_lines + text_indent * (n_cm_lines - 1)
-        cm_width = int(max([len(l) for l in comment.split('\n')]) * text_size / 2.5)
+        ftn_height = text_size * n_ftn_lines + text_indent * (n_ftn_lines - 1)
+        ftn_width = int(max([len(l) for l in footnotes.split('\n')]) * text_size / 2.5)
         # 绘制白板
         wb_width = max(
             (n_cube + 1) * border_size + n_cube * cb_width,
-            2 * border_size + cm_width
+            2 * border_size + ftn_width
         )
-        wb_height = 3 * border_size + text_size + text_indent + cb_height + cm_height
+        wb_height = 3 * border_size + text_size + text_indent + cb_height + ftn_height
         # 制作输入、输出、标签对照图
-        whiteboard = IMAGE.new(
-            mode, (wb_width, wb_height), color=255
-        )
+        whiteboard = IMAGE.new(mode, (wb_width, wb_height), color=color)
         draw = ImageDraw.Draw(whiteboard)
         # 绘制标签和图片
         for i, (img, label) in enumerate(imgs_and_labels):
-            draw.text(((i + 1) * border_size + i * cb_width, border_size), label)
+            if img_size:
+                img = resize_img(img, img_size)
+            # 添加图片标题
+            draw.text(
+                ((i + 1) * border_size + i * cb_width, border_size),
+                label, fill=text_color
+            )
+            # 拼接图片
             whiteboard.paste(
                 img.convert(mode),
                 (
@@ -188,22 +216,24 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
             )
         # 绘制脚注
         draw.text(
-            (border_size, wb_height - cm_height - border_size),
-            'COMMENT: \n' + comment
+            (border_size, wb_height - ftn_height - border_size),
+            'COMMENT: \n' + footnotes, fill=text_color
         )
         return whiteboard
 
     rets = []
     with tqdm(
-            total=min(len(groups_of_imgs_labels_list), len(comments)),
-            unit='张', position=0, desc=f"正在拼装图片中……", mininterval=1, leave=True
+            # total=min(len(groups_of_imgs_labels_list), len(footnotes)),
+            zip(groups_of_imgs_labels_list, footnotes), total=len(groups_of_imgs_labels_list),
+            unit='张', position=0, desc=f"正在拼装图片中……",
+            mininterval=1, leave=True, ncols=80
     ) as pbar:
-        for imgs_and_labels, comment in zip(groups_of_imgs_labels_list, comments):
-            ret = _concat_imgs(comment, *imgs_and_labels)
+        # for imgs_and_labels, comment in zip(groups_of_imgs_labels_list, footnotes):
+        for imgs_and_labels, foot_note in pbar:
+            ret = _concat_imgs(foot_note, *imgs_and_labels)
             if required_shape is not None:
                 ret = ret.resize(required_shape)
             rets.append(ret)
-            pbar.update(1)
     return rets
 
 
