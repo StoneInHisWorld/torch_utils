@@ -4,9 +4,9 @@ import torch
 from torch import cuda, nn as nn
 from torch.nn import init as init
 
-from networks.layers.ganloss import GANLoss
-from networks.layers.pcc import PCCLoss
-from networks.layers.ssim import SSIMLoss
+from networks.layers import GANLoss
+from networks.layers import PCCLoss
+from networks.layers import SSIMLoss
 
 loss_es = ["l1", "entro", "mse", "huber", "ssim", "pcc", 'gan']
 init_funcs = ["normal", "xavier", "zero", "state", 'constant', 'trunc_norm']
