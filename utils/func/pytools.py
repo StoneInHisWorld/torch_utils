@@ -58,7 +58,7 @@ def check_para(name, value, val_range) -> bool:
     if value in val_range:
         return True
     else:
-        warnings.warn(f'参数{name}需要取值限于{val_range}！')
+        warnings.warn(f'参数{name}的取值{value}需要取值限于{val_range}！')
         return False
 
 
