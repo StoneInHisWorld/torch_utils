@@ -1,7 +1,8 @@
 import functools
 from abc import abstractmethod
-from typing import Iterable, Tuple, Sized, List, Callable
-
+from typing import Iterable, Tuple, Sized, List, Callable, Any
+import utils.func.tensor_tools as tstools
+import utils.func.img_tools as itools
 import torch
 from tqdm import tqdm
 
@@ -33,7 +34,7 @@ class SelfDefinedDataSet:
         :param which: 实验所用数据集的文件名，用于区分同一实验，不同采样批次。
         :param module: 实验涉及数据集类型。数据集会根据实验所用模型来自动指定数据预处理程序。
         :param data_portion: 选取的数据集比例
-        :param shuffle: 是否打乱数据
+        :param shuffle: 在划分数据集前是否打乱数据
         :param f_lazy: 特征集懒加载参数。指定后，特征集将变为懒加载模式。
         :param l_lazy: 标签集懒加载参数。指定后，标签集将变为懒加载模式。
         :param lazy: 懒加载参数。指定后，数据集会进行懒加载，即每次通过索引取数据时，才从存储中取出数据。lazy的优先级比f/l_lazy高。
@@ -62,8 +63,6 @@ class SelfDefinedDataSet:
         self._test_fd = None
         self._test_ld = None
         self._check_path(where, which)
-        # 获取特征集、标签集及其索引集的预处理程序
-        self._set_preprocess(module)
         print('\n进行训练索引获取……')
         self._train_f, self._train_l = [], []
         self._get_fea_index(self._train_f, self._train_fd)
@@ -115,6 +114,10 @@ class SelfDefinedDataSet:
             pbar.close()
         assert len(self._train_f) == len(self._train_l), '特征集和标签集长度须一致'
         assert len(self._test_f) == len(self._test_l), '特征集和标签集长度须一致'
+        # 获取特征集、标签集及其索引集的预处理程序
+        self._set_preprocess(module)
+        # 获取结果包装程序
+        self._set_wrap_fn(module)
         del self._train_fd, self._train_ld, self._test_fd, self._test_ld
 
     @abstractmethod
@@ -222,36 +225,36 @@ class SelfDefinedDataSet:
         """
         pass
 
-    @staticmethod
-    @abstractmethod
-    def wrap_fn(inputs: torch.Tensor,
-                predictions: torch.Tensor,
-                labels: torch.Tensor,
-                metric_s: torch.Tensor,
-                loss_es: torch.Tensor,
-                comments: List[str]
-                ):
-        """输出结果打包函数
+    # @staticmethod
+    # @abstractmethod
+    # def wrap_fn(inputs: torch.Tensor,
+    #             predictions: torch.Tensor,
+    #             labels: torch.Tensor,
+    #             metric_s: torch.Tensor,
+    #             loss_es: torch.Tensor,
+    #             comments: List[str]
+    #             ):
+    #     """输出结果打包函数
+    #
+    #     :param inputs: 预测所用到的输入批次数据
+    #     :param predictions: 预测批次结果
+    #     :param labels: 预测批次标签数据
+    #     :param metric_s: 预测批次评价指标计算结果
+    #     :param loss_es: 预测批次损失值计算结果
+    #     :param comments: 预测批次每张结果输出图片附带注解
+    #     :return: 打包结果
+    #     """
+    #     pass
 
-        :param inputs: 预测所用到的输入批次数据
-        :param predictions: 预测批次结果
-        :param labels: 预测批次标签数据
-        :param metric_s: 预测批次评价指标计算结果
-        :param loss_es: 预测批次损失值计算结果
-        :param comments: 预测批次每张结果输出图片附带注解
-        :return: 打包结果
-        """
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def save_fn(result, root: str) -> None:
-        """输出结果存储函数
-
-        :param result: 输出结果图片批次
-        :param root: 输出结果存储路径
-        """
-        pass
+    # @staticmethod
+    # @abstractmethod
+    # def save_fn(result, root: str) -> None:
+    #     """输出结果存储函数
+    #
+    #     :param result: 输出结果图片批次
+    #     :param root: 输出结果存储路径
+    #     """
+    #     pass
 
     def to_dataset(self) -> Tuple[LazyDataSet, LazyDataSet] or Tuple[DataSet, DataSet]:
         """
@@ -293,6 +296,12 @@ class SelfDefinedDataSet:
         test_ds.preprocess(test_preprocess_desc)
         return train_ds, test_ds
 
+    def _set_wrap_fn(self, module: type):
+        if hasattr(self, f'{module.__name__}_wrap_fn'):
+            self.wrap_fn = getattr(self, f'{module.__name__}_wrap_fn')
+        else:
+            self.wrap_fn = self.default_wrap_fn
+
     def _set_preprocess(self, module: type):
         """
         根据处理模型的类型，自动指定预处理程序
@@ -320,6 +329,28 @@ class SelfDefinedDataSet:
         def {the_name_of_your_net}_preprocesses()
         """
         pass
+
+    def default_wrap_fn(self,
+                        inputs: torch.Tensor,
+                        predictions: torch.Tensor,
+                        labels: torch.Tensor,
+                        footnotes: list
+                        ) -> Any:
+        inp_s = tstools.tensor_to_img(inputs, self.fea_mode)
+        pre_s = tstools.tensor_to_img(predictions, self.lb_mode)
+        lb_s = tstools.tensor_to_img(labels, self.lb_mode)
+        del inputs, predictions, labels
+        # 制作输入、输出、标签对照图
+        ret = itools.concat_imgs(
+            *[
+                [(inp, f'input_{inp.size}'), (pre, f'prediction_{pre.size}'),
+                 (lb, f'labels_{lb.size}')]
+                for rd, inp, pre, lb in zip(inp_s, pre_s, lb_s)
+            ],
+            footnotes=footnotes, text_size=10, border_size=2, img_size=(192, 192),
+            required_shape=(1000, 1000)
+        )
+        return ret
 
     def __len__(self):
         return len(self._train_f)

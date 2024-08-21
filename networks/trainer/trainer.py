@@ -14,7 +14,8 @@ from networks.trainer.__subprocess_impl import data_iter_impl, train_impl, eval_
     tlog_impl
 from utils.accumulator import Accumulator
 from utils.decorators import prepare
-from utils.func.pytools import get_computer_name, is_multiprocessing
+from utils.func import pytools as ptools
+# from utils.func.pytools import get_computer_name, is_multiprocessing
 from utils.history import History
 
 
@@ -24,7 +25,7 @@ class Trainer:
     def __init__(self,
                  module_class, m_init_args, m_init_kwargs, input_size, prepare_args,  # 网络模型相关构造参数
                  criterion_a, runtime_cfg,
-                 hps=None,   # 训练、验证、测试依赖参数
+                 hps=None,  # 训练、验证、测试依赖参数
                  ):
         """神经网络训练器对象，提供所有针对神经网络的操作，包括训练、验证、测试、预测。
         Trainer类负责进行网络构建以及网络训练方法实现，可以通过Trainer.module获取训练完成或正在训练的网络对象。
@@ -78,7 +79,7 @@ class Trainer:
         # 判断是否是k折训练
         if k > 1:
             pbar_len = k * n_epochs
-            train_fn, train_args = self.__train_with_k_fold, (data_iter, )
+            train_fn, train_args = self.__train_with_k_fold, (data_iter,)
         else:
             # 提取训练迭代器和验证迭代器
             data_iter = list(data_iter)
@@ -91,14 +92,14 @@ class Trainer:
             else:
                 raise ValueError(f"无法识别的数据迭代器，其提供的长度为{len(data_iter)}")
             # 判断是否要进行多线程训练
-            if is_multiprocessing(n_workers):
+            if ptools.is_multiprocessing(n_workers):
                 # 不启用多线程训练
                 if valid_iter is not None:
                     # 进行训练和验证
                     train_fn, train_args = self.__train_and_valid, (train_iter, valid_iter)
                 else:
                     # 进行训练
-                    train_fn, train_args = self.__train, (train_iter, )
+                    train_fn, train_args = self.__train, (train_iter,)
             else:
                 # 启用多进程训练
                 train_fn, train_args = self.__train_with_subprocesses, (train_iter, valid_iter)
@@ -113,13 +114,13 @@ class Trainer:
         return history
 
     @prepare('predict')
-    def predict(self, unwrap_fn=None):
+    def predict(self, wrap_fn=None, save_path=None):
         """预测方法。
         对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
         :param ls_fn_args: 损失函数序列的关键词参数
         :param data_iter: 预测数据迭代器。
         :param criterion_a: 计算准确度所使用的函数序列，该函数需要求出每个样本的准确率。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
-        :param unwrap_fn: 对所有数据进行打包的方法。如不指定，则直接返回预测数据。签名需为：unwrap_fn(inputs, predictions, labels, metrics, losses) -> Any
+        :param wrap_fn: 对所有数据进行打包的方法。如不指定，则直接返回预测数据。签名需为：unwrap_fn(inputs, predictions, labels, metrics, losses) -> Any
         :return: 打包好的数据集
         """
         # 提取训练器参数
@@ -127,7 +128,7 @@ class Trainer:
         criterion_a = self.criterion_a
         pbar = self.pbar
         # 如果传递了包装方法
-        if unwrap_fn is not None:
+        if wrap_fn is not None:
             # 将本次预测所产生的全部数据打包并返回。
             inputs, predictions, labels, metrics, losses = [], [], [], [], []
             # 对每个批次进行预测，并进行评价指标和损失值的计算
@@ -153,19 +154,24 @@ class Trainer:
             # 获取输出结果需要的注解
             comments = net.get_comment(
                 inputs, predictions, labels,
-                metrics, [get_computer_name(criterion) for criterion in criterion_a],
+                metrics, [ptools.get_computer_name(criterion) for criterion in criterion_a],
                 losses
             )
             # 将注解与所有数据打包，输出
-            predictions = unwrap_fn(
-                inputs, predictions, labels, metrics, losses, comments
-            )
+            predictions = wrap_fn(inputs, predictions, labels, comments)
         else:
             # 如果不需要打包数据，则直接返回预测数据集
             predictions = []
             for fe_batch, lb_batch in pbar:
                 predictions.append(net(fe_batch))
             predictions = torch.cat(predictions, dim=0)
+        # 如果指定了保存路径，则保存预测结果
+        if save_path:
+            ptools.check_path(save_path)
+            with tqdm(predictions, unit='张', position=0, desc=f"正在保存结果……",
+                      mininterval=1, leave=True, ncols=80) as pbar:
+                for i, res in enumerate(pbar):
+                    res.save(os.path.join(save_path, f'{i}.jpg'))
         return predictions
 
     @prepare('train')
@@ -196,7 +202,7 @@ class Trainer:
         # 损失项
         loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
-        criteria_names = [f'train_{get_computer_name(criterion)}' for criterion in criterion_a]
+        criteria_names = [f'train_{ptools.get_computer_name(criterion)}' for criterion in criterion_a]
         # 学习率项
         lr_names = net.lr_names
         history = History(*(criteria_names + loss_names + lr_names))
@@ -263,7 +269,7 @@ class Trainer:
         loss_names = [f'train_{item}' for item in net.loss_names]
         # 评价项
         criteria_names = [
-            f'train_{get_computer_name(criterion)}' for criterion in criterion_a
+            f'train_{ptools.get_computer_name(criterion)}' for criterion in criterion_a
         ]
         # 学习率项
         lr_names = net.lr_names
@@ -336,7 +342,7 @@ class Trainer:
             pbar.set_description(f'\r训练折{i + 1}……')
             # 计算训练批次数
             pbar.total = k * n_epochs * (len(train_iter) + len(valid_iter))
-            if is_multiprocessing(n_workers):
+            if ptools.is_multiprocessing(n_workers):
                 history = self.__train_with_subprocesses(train_iter, valid_iter)
             else:
                 history = self.__train_and_valid(train_iter, valid_iter)
@@ -377,7 +383,7 @@ class Trainer:
         log = {}
         i = 0
         for i, computer in enumerate(criterion_a):
-            log['test_' + get_computer_name(computer)] = metric[i] / metric[-1]
+            log['test_' + ptools.get_computer_name(computer)] = metric[i] / metric[-1]
         i += 1
         for j, loss_name in enumerate(l_names):
             log['test_' + loss_name] = metric[i + j] / metric[-1]
@@ -411,7 +417,7 @@ class Trainer:
         log = {}
         i = 0
         for i, computer in enumerate(criterion_a):
-            log['valid_' + get_computer_name(computer)] = metric[i] / metric[-1]
+            log['valid_' + ptools.get_computer_name(computer)] = metric[i] / metric[-1]
             # try:
             #     log['valid_' + computer.__name__] = metric[i] / metric[-1]
             # except AttributeError:
