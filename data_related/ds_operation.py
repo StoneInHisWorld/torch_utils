@@ -226,3 +226,14 @@ def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
         return (data - mean) / std
     else:
         raise Exception(f'不支持的数据形状{data.shape}！')
+
+
+def denormalize(data: torch.Tensor, mean, std) -> torch.Tensor:
+    """进行数据反标准化
+
+    :param data: 需要进行标准化的数据。
+    :param mean: 反标准化所用均值
+    :param std: 反标准化所用标准差
+    :return: 反标准化的数据
+    """
+    return data * std + mean
