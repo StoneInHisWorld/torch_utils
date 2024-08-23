@@ -434,6 +434,7 @@ class Trainer:
         :param pbar: 进度条
         :return: 训练历史记录
         """
+        raise NotImplementedError('多线程运行提供的历史记录会有缺失，在修复之前请不要使用！')
         # 提取训练器参数
         pbar = self.pbar
         n_epochs = self.hps['epochs']
