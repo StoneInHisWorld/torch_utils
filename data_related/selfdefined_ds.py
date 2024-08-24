@@ -345,7 +345,7 @@ class SelfDefinedDataSet:
             *[
                 [(inp, f'input_{inp.size}'), (pre, f'prediction_{pre.size}'),
                  (lb, f'labels_{lb.size}')]
-                for rd, inp, pre, lb in zip(inp_s, pre_s, lb_s)
+                for inp, pre, lb in zip(inp_s, pre_s, lb_s)
             ],
             footnotes=footnotes, text_size=10, border_size=2, img_size=(192, 192),
             required_shape=(1000, 1000)
