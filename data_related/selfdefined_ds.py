@@ -1,7 +1,7 @@
 import functools
 from abc import abstractmethod
 from multiprocessing import Pool
-from typing import Iterable, Tuple, Sized, List, Callable, Any
+from typing import Iterable, Tuple, Sized, List, Callable, Any, Mapping
 
 import toolz
 import torch
@@ -25,7 +25,7 @@ class SelfDefinedDataSet:
     l_required_shape = (256, 256)
 
     def __init__(self,
-                 where: str, which: str, module: type, control_panel,
+                 where: str, which: str, module: type, control_panel: Mapping,
                  shuffle=True, f_lazy: bool = True, l_lazy: bool = False,
                  f_req_sha: Tuple[int, int] = (256, 256),
                  l_req_sha: Tuple[int, int] = (256, 256),
@@ -88,12 +88,21 @@ class SelfDefinedDataSet:
         else:
             def data_read_impl(prompt, fn, indexes, preprocessing):
                 fn = toolz.compose(preprocessing, fn)
-                ls_ret = list(tqdm(
+                # ls_ret = fn(indexes)
+                data = []
+                for d in tqdm(
                     map(fn, [[i] for i in indexes]),
                     total=len(indexes), unit='张', position=0,
                     desc=prompt, mininterval=1, leave=True, ncols=80
-                ))
-                return torch.vstack(ls_ret)
+                ):
+                    data.append(d)
+                # ls_ret = list(tqdm(
+                #     map(fn, [[i] for i in indexes]),
+                #     total=len(indexes), unit='张', position=0,
+                #     desc=prompt, mininterval=1, leave=True, ncols=80
+                # ))
+                # return torch.vstack(ls_ret)
+                return torch.vstack(data)
 
         # def data_read_impl(prompt, fn, indexes, preprocessing):
         #     fn = toolz.compose(preprocessing, fn)
@@ -203,6 +212,37 @@ class SelfDefinedDataSet:
         # 获取结果包装程序
         self._set_wrap_fn(module)
         del self._train_fd, self._train_ld, self._test_fd, self._test_ld
+
+    def read_data(self, n_worker, bulk_preprocess):
+        # 进行数据集加载
+        if n_worker > 2:
+            def data_read_impl(prompt, fn, indexes, preprocessing):
+                fn = toolz.compose(preprocessing, fn)
+                with Pool(n_worker - 1) as p:
+                    ls_ret = list(tqdm(
+                        p.imap(fn, [[f] for f in indexes]),
+                        total=len(indexes), unit='张', position=0,
+                        desc=prompt, mininterval=1, leave=True, ncols=80
+                    ))
+                return torch.vstack(ls_ret)
+        else:
+            def data_read_impl(prompt, fn, indexes, preprocessing):
+                fn = toolz.compose(preprocessing, fn)
+                # ls_ret = fn(indexes)
+                data = []
+                for d in tqdm(
+                    map(fn, [[i] for i in indexes]),
+                    total=len(indexes), unit='张', position=0,
+                    desc=prompt, mininterval=1, leave=True, ncols=80
+                ):
+                    data.append(d)
+                # ls_ret = list(tqdm(
+                #     map(fn, [[i] for i in indexes]),
+                #     total=len(indexes), unit='张', position=0,
+                #     desc=prompt, mininterval=1, leave=True, ncols=80
+                # ))
+                # return torch.vstack(ls_ret)
+                return torch.vstack(data)
 
     @abstractmethod
     def _check_path(self, root: str, which: str) -> None:
