@@ -25,7 +25,7 @@ class SelfDefinedDataSet:
     l_required_shape = (256, 256)
 
     def __init__(self,
-                 where: str, which: str, module: type, control_panel: Mapping,
+                 where: str, which: str, module: type, control_panel: dict,
                  shuffle=True, f_lazy: bool = True, l_lazy: bool = False,
                  f_req_sha: Tuple[int, int] = (256, 256),
                  l_req_sha: Tuple[int, int] = (256, 256),
