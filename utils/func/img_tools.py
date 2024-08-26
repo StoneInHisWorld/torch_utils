@@ -93,7 +93,7 @@ def crop_img(img: Image, required_shape, loc: str or Tuple[int, int]) -> Image:
     return img.crop(loc)
 
 
-def read_img(path: str, mode: str = 'L', *preprocesses: Iterable[Callable]) -> np.ndarray:
+def read_img(path: str, mode: str = 'L', *preprocesses: Iterable[Callable]):
     """
     读取图片
     :param path: 图片所在路径
@@ -102,23 +102,23 @@ def read_img(path: str, mode: str = 'L', *preprocesses: Iterable[Callable]) -> n
     """
     img_modes = ['L', 'RGB', '1']
     assert mode in img_modes, f'不支持的图像模式{mode}！'
-    # img = Image.open(path).convert(mode)
-    img = IMAGE.open(path)
+    img = IMAGE.open(path).convert(mode)
+    # img = IMAGE.open(path)
     # preprocesses = (*preprocesses, (Image.convert, (mode,), {}))
-    preprocesses = (*preprocesses, functools.partial(Image.convert, mode=mode))
-    for preprocess in preprocesses:
-        # func, args, kwargs = preprocess
-        # img = func(img, *args, **kwargs)
-        img = preprocess(img)
-    img = np.array(img)
-    # 复原出通道。1表示样本数量维
-    if mode == 'L' or mode == '1':
-        img_channels = 1
-    elif mode == 'RGB':
-        img_channels = 3
-    else:
-        img_channels = -1
-    img = img.reshape((img_channels, *img.shape[:2]))
+    # preprocesses = (*preprocesses, functools.partial(Image.convert, mode=mode))
+    # for preprocess in preprocesses:
+    #     # func, args, kwargs = preprocess
+    #     # img = func(img, *args, **kwargs)
+    #     img = preprocess(img)
+    # img = np.array(img)
+    # # 复原出通道。1表示样本数量维
+    # if mode == 'L' or mode == '1':
+    #     img_channels = 1
+    # elif mode == 'RGB':
+    #     img_channels = 3
+    # else:
+    #     img_channels = -1
+    # img = img.reshape((img_channels, *img.shape[:2]))
     return img
 
 
@@ -352,6 +352,9 @@ def get_mean_LI_of_holes(images: np.ndarray,
     assert len(hole_poses) == len(hole_sizes), \
         f'挖孔位置需要和挖孔大小一一对应，提供了{len(hole_poses)}个位置但只收到了{len(hole_sizes)}个大小要求。'
     mean_LIs_groups = []
+    if len(images.shape) <= 3:
+        # 如果只有一张图片
+        images = [images]
     for image in images:
         mean_LIs = []
         for (x, y), size in zip(hole_poses, hole_sizes):
