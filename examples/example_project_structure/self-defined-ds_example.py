@@ -101,7 +101,7 @@ class TheNameOfYourDS(SelfDefinedDataSet):
         """
         ...
 
-    def default_preprocesses(self):
+    def __default_preprocesses(self):
         """默认数据集预处理程序。
         注意：此程序均为本地程序，不可被序列化（pickling）！
 

@@ -1,11 +1,14 @@
 import functools
 from abc import abstractmethod
+from multiprocessing import Pool
 from typing import Iterable, Tuple, Sized, List, Callable, Any
-import utils.func.tensor_tools as tstools
-import utils.func.img_tools as itools
+
+import toolz
 import torch
 from tqdm import tqdm
 
+import utils.func.img_tools as itools
+import utils.func.tensor_tools as tstools
 from data_related.datasets import LazyDataSet, DataSet
 from data_related.ds_operation import data_slicer
 from utils.thread import Thread
@@ -22,9 +25,8 @@ class SelfDefinedDataSet:
     l_required_shape = (256, 256)
 
     def __init__(self,
-                 where: str, which: str, module: type,
-                 data_portion=1., shuffle=True, n_worker=1,
-                 f_lazy: bool = True, l_lazy: bool = False, lazy: bool = True,
+                 where: str, which: str, module: type, control_panel,
+                 shuffle=True, f_lazy: bool = True, l_lazy: bool = False,
                  f_req_sha: Tuple[int, int] = (256, 256),
                  l_req_sha: Tuple[int, int] = (256, 256),
                  required_shape: Tuple[int, int] = None):
@@ -33,20 +35,23 @@ class SelfDefinedDataSet:
         :param where: 数据集所处路径
         :param which: 实验所用数据集的文件名，用于区分同一实验，不同采样批次。
         :param module: 实验涉及数据集类型。数据集会根据实验所用模型来自动指定数据预处理程序。
-        :param data_portion: 选取的数据集比例
         :param shuffle: 在划分数据集前是否打乱数据
         :param f_lazy: 特征集懒加载参数。指定后，特征集将变为懒加载模式。
         :param l_lazy: 标签集懒加载参数。指定后，标签集将变为懒加载模式。
-        :param lazy: 懒加载参数。指定后，数据集会进行懒加载，即每次通过索引取数据时，才从存储中取出数据。lazy的优先级比f/l_lazy高。
         :param f_req_sha: 需要的特征集图片形状。指定后，会将读取到的特征集图片放缩成该形状。
         :param l_req_sha: 需要的标签集图片形状。指定后，会将读取到的标签集图片放缩成该形状。
         :param required_shape: 需要的图片形状。指定后，会将读取到的图片放缩成该形状。required_shape优先级比f/l_req_sha低
         """
-        # 初始化预处理过程序
-        self.lbIndex_preprocesses = []
-        self.feaIndex_preprocesses = []
-        self.lb_preprocesses = []
-        self.fea_preprocesses = []
+        # 从运行动态参数中获取参数
+        n_worker = control_panel['n_workers']
+        lazy = control_panel['lazy']
+        data_portion = control_panel['data_portion']
+        bulk_preprocess = control_panel['bulk_preprocess']
+        # # 初始化预处理过程序
+        # self.lbIndex_preprocesses = toolz.compose()
+        # self.feaIndex_preprocesses = toolz.compose()
+        # self.lb_preprocesses = toolz.compose()
+        # self.fea_preprocesses = toolz.compose()
         # 判断图片指定形状
         self.f_required_shape = required_shape
         self.l_required_shape = required_shape
@@ -69,25 +74,72 @@ class SelfDefinedDataSet:
         self._get_lb_index(self._train_l, self._train_ld)
         # 按照数据比例切分数据集索引
         self._train_f, self._train_l = data_slicer(data_portion, shuffle, self._train_f, self._train_l)
+        # 进行数据集加载
+        if n_worker > 2:
+            def data_read_impl(prompt, fn, indexes, preprocessing):
+                fn = toolz.compose(preprocessing, fn)
+                with Pool(n_worker - 1) as p:
+                    ls_ret = list(tqdm(
+                        p.imap(fn, [[f] for f in indexes]),
+                        total=len(indexes), unit='张', position=0,
+                        desc=prompt, mininterval=1, leave=True, ncols=80
+                    ))
+                return torch.vstack(ls_ret)
+        else:
+            def data_read_impl(prompt, fn, indexes, preprocessing):
+                fn = toolz.compose(preprocessing, fn)
+                ls_ret = list(tqdm(
+                    map(fn, [[i] for i in indexes]),
+                    total=len(indexes), unit='张', position=0,
+                    desc=prompt, mininterval=1, leave=True, ncols=80
+                ))
+                return torch.vstack(ls_ret)
+
+        # def data_read_impl(prompt, fn, indexes, preprocessing):
+        #     fn = toolz.compose(preprocessing, fn)
+        #     ls_ret = list(tqdm(
+        #         map(fn, [[i] for i in indexes]),
+        #         total=len(indexes), unit='张', position=0,
+        #         desc=prompt, mininterval=1, leave=True, ncols=80
+        #     ))
+        #     return torch.vstack(ls_ret)
+
+        if not bulk_preprocess:
+            self._set_preprocess(module)
+        else:
+            self.__default_preprocesses()
+        # 加载训练集
         if self._f_lazy:
             print('对于训练集，实行懒加载特征数据集')
         else:
-            pbar = tqdm(
-                total=len(self._train_f), unit='张', position=0,
-                desc=f"读取训练集的特征集图片中……", mininterval=1, leave=True, ncols=80
+            train_f = self._train_f
+            del self._train_f
+            self._train_f = data_read_impl(
+                "读取训练集的特征集图片中……", self.read_fea_fn, train_f,
+                self.fea_preprocesses
             )
-            self._train_f = self.read_fea_fn(self._train_f, n_worker, pbar)
-            pbar.close()
+            # pbar = tqdm(
+            #     total=len(self._train_f), unit='张', position=0,
+            #     desc=f"读取训练集的特征集图片中……", mininterval=1, leave=True, ncols=80
+            # )
+            # self._train_f = self.read_fea_fn(self._train_f, n_worker, pbar)
+            # pbar.close()
         if self._l_lazy:
             print('对于训练集，实行懒加载标签数据集')
         else:
-            pbar = tqdm(
-                total=len(self._train_l), unit='张', position=0,
-                desc=f"读取训练集的标签集图片中……", mininterval=1, leave=True, ncols=80
+            train_l = self._train_l
+            del self._train_l
+            self._train_l = data_read_impl(
+                "读取训练集的标签集图片中……", self.read_lb_fn, train_l,
+                self.lb_preprocesses
             )
-            self._train_l = self.read_lb_fn(self._train_l, n_worker, pbar)
-            pbar.close()
-
+            # pbar = tqdm(
+            #     total=len(self._train_l), unit='张', position=0,
+            #     desc=f"读取训练集的标签集图片中……", mininterval=1, leave=True, ncols=80
+            # )
+            # self._train_l = self.read_lb_fn(self._train_l, n_worker, pbar)
+            # pbar.close()
+        # 加载测试集
         print("\n进行测试索引获取……")
         self._test_f, self._test_l = [], []
         self._get_fea_index(self._test_f, self._test_fd)
@@ -97,25 +149,57 @@ class SelfDefinedDataSet:
         if self._f_lazy:
             print('对于测试集，实行懒加载特征数据集')
         else:
-            pbar = tqdm(
-                total=len(self._test_f), unit='张', position=0,
-                desc=f"读取测试集的特征集图片中……", mininterval=1, leave=True, ncols=80
+            test_f = self._test_f
+            del self._test_f
+            self._test_f = data_read_impl(
+                "读取测试集的特征集图片中……", self.read_fea_fn, test_f,
+                self.fea_preprocesses
             )
-            self._test_f = self.read_fea_fn(self._test_f, n_worker, pbar)
-            pbar.close()
+            # pbar = tqdm(
+            #     total=len(self._test_f), unit='张', position=0,
+            #     desc=f"读取测试集的特征集图片中……", mininterval=1, leave=True, ncols=80
+            # )
+            #
+            # def update_pbar(ret):
+            #     print('called back!')
+            #     pbar.update(1)
+            # with Pool(n_worker - 1) as p:
+            #     ret = list(tqdm(
+            #         p.imap(self.read_fea_fn, [[f] for f in self._test_f]),
+            #         total=len(self._test_f)
+            #     ))
+                # p.close()
+                # p.join()
+
+            # self._test_f = ret
+            # self._test_f = self.read_fea_fn(self._test_f, n_worker, pbar)
+            # pbar.close()
         if self._l_lazy:
             print('对于测试集，实行懒加载标签数据集')
         else:
-            pbar = tqdm(
-                total=len(self._test_l), unit='张', position=0,
-                desc=f"读取测试集的标签集图片中……", mininterval=1, leave=True, ncols=80
+            test_l = self._test_l
+            del self._test_l
+            self._test_l = data_read_impl(
+                "读取测试集的标签集图片中……", self.read_lb_fn, test_l,
+                self.lb_preprocesses
             )
-            self._test_l = self.read_lb_fn(self._test_l, n_worker, pbar)
-            pbar.close()
-        assert len(self._train_f) == len(self._train_l), '特征集和标签集长度须一致'
-        assert len(self._test_f) == len(self._test_l), '特征集和标签集长度须一致'
+            # pbar = tqdm(
+            #     total=len(self._test_l), unit='张', position=0,
+            #     desc=f"读取测试集的标签集图片中……", mininterval=1, leave=True, ncols=80
+            # )
+            # self._test_l = self.read_lb_fn(self._test_l, n_worker, pbar)
+            # pbar.close()
+        assert len(self._train_f) == len(self._train_l), \
+            f'训练集的特征集和标签集长度{len(self._train_f)}&{len(self._train_l)}不一致'
+        assert len(self._test_f) == len(self._test_l), \
+            f'测试集的特征集和标签集长度{len(self._test_f)}&{len(self._test_l)}不一致'
+        print(f'训练集长度为{len(self._train_f)}')
+        print(f'测试集长度为{len(self._test_f)}')
         # 获取特征集、标签集及其索引集的预处理程序
-        self._set_preprocess(module)
+        if bulk_preprocess:
+            self._set_preprocess(module)
+        else:
+            self.__default_preprocesses()
         # 获取结果包装程序
         self._set_wrap_fn(module)
         del self._train_fd, self._train_ld, self._test_fd, self._test_ld
@@ -145,6 +229,36 @@ class SelfDefinedDataSet:
         :param fea_index_or_d: 懒加载读取特征数据批所用索引
         :return: 特征数据批，标签数据批
         """
+        # # 开启进度条
+        # pbar = tqdm(
+        #     total=len(fea_index_or_d) + len(lb_index_or_d), unit='张',
+        #     position=0, desc=f"读取数据集中……", mininterval=1, leave=True, ncols=80
+        # ) if not mute else None
+        # pbar_Q = SimpleQueue()
+        # # 创建子进程
+        # pool = Pool(processes=2)  # 子进程数
+        # fea_res = pool.apply_async(
+        #     self.read_fea_fn, fea_index_or_d, (n_workers - 1) // 2, pbar_Q
+        # )
+        # lb_res = pool.apply_async(
+        #     self.read_lb_fn, lb_index_or_d, (n_workers - 1) // 2, pbar_Q
+        # )
+        # pool.shutdown()
+        # # 接受进度条信息
+        # while True:
+        #     item = pbar_Q.get()
+        #     if item is None:
+        #         if pool.isTerminated():
+        #             break
+        #     # elif isinstance(item, Exception):
+        #     #     raise InterruptedError('数据集读取过程中某处触发了异常，请根据上条Trackback信息进行排查！')
+        #     elif isinstance(item, int):
+        #         pbar.update(item)
+        #     else:
+        #         raise ValueError(f'不识别的信号{item}')
+        # fea_index_or_d = fea_res.get()
+        # lb_index_or_d = lb_res.get()
+        # return fea_index_or_d, lb_index_or_d
         fea_pbar = tqdm(
             total=len(fea_index_or_d), unit='张', position=0,
             desc=f"读取特征集图片中……", mininterval=1, leave=True, ncols=80
@@ -311,10 +425,10 @@ class SelfDefinedDataSet:
         if hasattr(self, f'{module.__name__}_preprocesses'):
             exec(f'self.{module.__name__}_preprocesses()')
         else:
-            self.default_preprocesses()
+            self.__default_preprocesses()
 
-    @abstractmethod
-    def default_preprocesses(self):
+    # @abstractmethod
+    def __default_preprocesses(self):
         """默认数据集预处理程序。
         注意：此程序均为本地程序，不可被序列化（pickling）！
 
@@ -328,7 +442,11 @@ class SelfDefinedDataSet:
         若要定制其他网络的预处理程序，请定义函数：
         def {the_name_of_your_net}_preprocesses()
         """
-        pass
+        # 初始化预处理过程序
+        self.lbIndex_preprocesses = toolz.compose()
+        self.feaIndex_preprocesses = toolz.compose()
+        self.lb_preprocesses = toolz.compose()
+        self.fea_preprocesses = toolz.compose()
 
     def default_wrap_fn(self,
                         inputs: torch.Tensor,

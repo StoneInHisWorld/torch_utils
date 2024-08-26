@@ -1,6 +1,7 @@
 from typing import Iterable, Callable, List
 
 import dill
+import toolz.functoolz
 import torch
 from torch.multiprocessing import Queue
 from torch.utils.data import Dataset as torch_ds, DataLoader
@@ -51,8 +52,8 @@ class DataSet(torch_ds):
         self._features = features
         self._labels = labels
         self.collate_fn = collate_fn
-        self.fea_preprocesses = []
-        self.lb_preprocesses = []
+        self.fea_preprocesses = toolz.compose()
+        self.lb_preprocesses = toolz.compose()
 
     def __getitem__(self, item):
         return self._features[item], self._labels[item]
@@ -73,8 +74,9 @@ class DataSet(torch_ds):
         self._features = self._features.to(device)
         self._labels = self._labels.to(device)
 
-    def apply(self, features_calls: List[Callable[[torch.Tensor], torch.Tensor]] = None,
-              labels_calls: List[Callable[[torch.Tensor], torch.Tensor]] = None,
+    def apply(self,
+              features_calls: List[Callable[[torch.Tensor], torch.Tensor]] or Callable = None,
+              labels_calls: List[Callable[[torch.Tensor], torch.Tensor]] or Callable = None,
               pbar: tqdm = None):
         """对数据调用某种方法，可用作数据预处理。
 
@@ -83,35 +85,45 @@ class DataSet(torch_ds):
         :param pbar: 用于通知的进度条，指定为None则静默进行
         """
         if features_calls is None:
-            features_calls = []
+            features_calls = toolz.compose()
         if labels_calls is None:
-            labels_calls = []
-        if pbar is not None:
-            pbar.reset(len(features_calls) + len(labels_calls))
+            labels_calls = toolz.compose()
+        # if pbar is not None:
+        #     pbar.reset(len(features_calls) + len(labels_calls))
 
-        def pbar_update(n):
-            """进度条更新方法"""
-            if pbar is not None:
-                pbar.update(n)
+        # def pbar_update(n):
+        #     """进度条更新方法"""
+        #     if pbar is not None:
+        #         pbar.update(n)
 
-        def fea_apply():
-            for call in features_calls:
-                self._features = call(self._features)
-                pbar_update(1)
+        # def fea_apply():
+        #     for call in features_calls:
+        #         self._features = call(self._features)
+        #         pbar_update(1)
+        #
+        # def lb_apply():
+        #     for call in labels_calls:
+        #         self._labels = call(self._labels)
+        #         pbar_update(1)
 
-        def lb_apply():
-            for call in labels_calls:
-                self._labels = call(self._labels)
-                pbar_update(1)
+        # tools.multi_process(
+        #     2, True, '',
+        #     (fea_apply, (), {}),
+        #     (lb_apply, (), {})
+        # )
 
-        tools.multi_process(
-            2, True, '',
-            (fea_apply, (), {}),
-            (lb_apply, (), {})
-        )
-
-        if pbar is not None:
-            pbar.close()
+        # if pbar is not None:
+        #     pbar.close()
+        if isinstance(features_calls, Callable):
+            self._features = features_calls(self._features)
+        else:
+            raise ValueError('特征集调用请使用Callable对象，已经停止对list对象的支持！'
+                             '多个Callable对象请使用toolz.compose()组合成流水线')
+        if isinstance(labels_calls, Callable):
+            self._labels = labels_calls(self._labels)
+        else:
+            raise ValueError('标签集调用请使用Callable对象，已经停止对list对象的支持！'
+                             '多个Callable对象请使用toolz.compose()组合成流水线')
 
     def to_loader(self, batch_size: int = None, shuffle=True,
                   sampler: Iterable = None, preprocess: bool = True,
@@ -139,18 +151,26 @@ class DataSet(torch_ds):
     def get_subset(self, indices: Iterable):
         return DataSet(self[indices][0], self[indices][1])
 
-    def register_preprocess(self, features_calls=None, labels_calls=None):
+    def register_preprocess(self,
+                            features_calls: Callable = None,
+                            labels_calls: Callable = None):
         """
         注册预处理方法，用于数据加载器对数据进行预处理
         :param features_calls: 需要对特征集调用的方法列表
         :param labels_calls: 需要对标签集调用的方法列表
         """
         if features_calls is None:
-            features_calls = []
+            features_calls = toolz.compose()
         if labels_calls is None:
-            labels_calls = []
-        self.fea_preprocesses += features_calls
-        self.lb_preprocesses += labels_calls
+            labels_calls = toolz.compose()
+        self.fea_preprocesses = toolz.compose(
+            features_calls, self.fea_preprocesses
+        )
+        self.lb_preprocesses = toolz.compose(
+            labels_calls, self.lb_preprocesses
+        )
+        # self.fea_preprocesses += features_calls
+        # self.lb_preprocesses += labels_calls
 
     def pop_preprocesses(self):
         """弹出所有的预处理程序。
@@ -163,11 +183,13 @@ class DataSet(torch_ds):
 
     def preprocess(self, desc='对数据集进行操作……'):
         """数据集对持有的特征集和标签集进行预处理，此为显式方法，会打印进度条"""
-        pbar = tqdm(
-            [], desc=desc, unit='步', position=0, mininterval=1,
-            ncols=80
-        )
-        self.apply(self.fea_preprocesses, self.lb_preprocesses, pbar)
+        # pbar = tqdm(
+        #     [], desc=desc, unit='步', position=0, mininterval=1,
+        #     ncols=80
+        # )
+        print('\r' + desc, flush=True, end='')
+        self.apply(self.fea_preprocesses, self.lb_preprocesses)
+        # self.apply(self.fea_preprocesses, self.lb_preprocesses, pbar)
 
     @property
     def feature_shape(self):
