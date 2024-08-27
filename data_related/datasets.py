@@ -75,8 +75,8 @@ class DataSet(torch_ds):
         self._labels = self._labels.to(device)
 
     def apply(self,
-              features_calls: List[Callable[[torch.Tensor], torch.Tensor]] or Callable = None,
-              labels_calls: List[Callable[[torch.Tensor], torch.Tensor]] or Callable = None,
+              features_calls: Callable = None,
+              labels_calls: Callable = None,
               pbar: tqdm = None):
         """对数据调用某种方法，可用作数据预处理。
 
@@ -115,12 +115,16 @@ class DataSet(torch_ds):
         # if pbar is not None:
         #     pbar.close()
         if isinstance(features_calls, Callable):
+            print('\r正在对特征集进行预处理……', end="", flush=True)
             self._features = features_calls(self._features)
+            print('\r特征集处理完毕', flush=True)
         else:
             raise ValueError('特征集调用请使用Callable对象，已经停止对list对象的支持！'
                              '多个Callable对象请使用toolz.compose()组合成流水线')
         if isinstance(labels_calls, Callable):
+            print('\r正在对标签集进行预处理……', end="", flush=True)
             self._labels = labels_calls(self._labels)
+            print('\r标签集处理完毕', flush=True)
         else:
             raise ValueError('标签集调用请使用Callable对象，已经停止对list对象的支持！'
                              '多个Callable对象请使用toolz.compose()组合成流水线')
@@ -187,7 +191,7 @@ class DataSet(torch_ds):
         #     [], desc=desc, unit='步', position=0, mininterval=1,
         #     ncols=80
         # )
-        print('\r' + desc, flush=True, end='')
+        print(desc)
         self.apply(self.fea_preprocesses, self.lb_preprocesses)
         # self.apply(self.fea_preprocesses, self.lb_preprocesses, pbar)
 
