@@ -107,7 +107,8 @@ class SelfDefinedDataSet:
         if not bulk_preprocess:
             self._set_preprocess(module)
         else:
-            self.__default_preprocesses()
+            self.lb_preprocesses = None
+            self.fea_preprocesses = None
         # 加载训练集
         if self._f_lazy:
             print('对于训练集，实行懒加载特征数据集')
@@ -203,8 +204,11 @@ class SelfDefinedDataSet:
             f'训练集的特征集和标签集长度{len(self._train_f)}&{len(self._train_l)}不一致'
         assert len(self._test_f) == len(self._test_l), \
             f'测试集的特征集和标签集长度{len(self._test_f)}&{len(self._test_l)}不一致'
-        print(f'训练集长度为{len(self._train_f)}')
-        print(f'测试集长度为{len(self._test_f)}')
+        print("******数据集读取完毕******")
+        print(f'数据集名称为{which}')
+        print(f'数据集切片大小为{data_portion}')
+        print(f'训练集长度为{len(self._train_f)}, 测试集长度为{len(self._test_f)}')
+        print("************************")
         # 获取特征集、标签集及其索引集的预处理程序
         if bulk_preprocess:
             self._set_preprocess(module)
@@ -446,12 +450,13 @@ class SelfDefinedDataSet:
         """默认数据集预处理程序。
         注意：此程序均为本地程序，不可被序列化（pickling）！
 
-        需要实现四个列表的填充：
+        类可定制化的预处理程序，需要以单个样本需要实现四个列表的填充：
         1. self.lbIndex_preprocesses：标签索引集预处理程序列表
         2. self.feaIndex_preprocesses：特征索引集预处理程序列表
         3. self.lb_preprocesses：标签集预处理程序列表
         4. self.fea_preprocesses：特征集预处理程序列表
         其中未指定本数据集为懒加载时，索引集预处理程序不会执行。
+        请以数据集的角度（bulk_preprocessing）实现！
 
         若要定制其他网络的预处理程序，请定义函数：
         def {the_name_of_your_net}_preprocesses()
