@@ -1,3 +1,4 @@
+import time
 from typing import Iterable, Callable, List
 
 import dill
@@ -115,16 +116,18 @@ class DataSet(torch_ds):
         # if pbar is not None:
         #     pbar.close()
         if isinstance(features_calls, Callable):
-            print('\r正在对特征集进行预处理……', end="", flush=True)
+            print('\r特征集预处理中……', end="", flush=True)
+            start_time = time.perf_counter()
             self._features = features_calls(self._features)
-            print('\r特征集处理完毕', flush=True)
+            print(f'\r特征集预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
         else:
             raise ValueError('特征集调用请使用Callable对象，已经停止对list对象的支持！'
                              '多个Callable对象请使用toolz.compose()组合成流水线')
         if isinstance(labels_calls, Callable):
-            print('\r正在对标签集进行预处理……', end="", flush=True)
+            print('\r标签集预处理中……', end="", flush=True)
+            start_time = time.perf_counter()
             self._labels = labels_calls(self._labels)
-            print('\r标签集处理完毕', flush=True)
+            print(f'\r标签集预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
         else:
             raise ValueError('标签集调用请使用Callable对象，已经停止对list对象的支持！'
                              '多个Callable对象请使用toolz.compose()组合成流水线')
