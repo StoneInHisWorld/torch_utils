@@ -1,6 +1,5 @@
-import functools
 import random
-from typing import Tuple, Iterable, Callable, List
+from typing import Tuple, List
 
 import PIL.Image
 import numpy as np
@@ -93,7 +92,7 @@ def crop_img(img: Image, required_shape, loc: str or Tuple[int, int]) -> Image:
     return img.crop(loc)
 
 
-def read_img(path: str, mode: str = 'L', *preprocesses: Iterable[Callable]):
+def read_img(path: str, mode: str = 'L'):
     """
     读取图片
     :param path: 图片所在路径
@@ -103,22 +102,6 @@ def read_img(path: str, mode: str = 'L', *preprocesses: Iterable[Callable]):
     img_modes = ['L', 'RGB', '1']
     assert mode in img_modes, f'不支持的图像模式{mode}！'
     img = IMAGE.open(path).convert(mode)
-    # img = IMAGE.open(path)
-    # preprocesses = (*preprocesses, (Image.convert, (mode,), {}))
-    # preprocesses = (*preprocesses, functools.partial(Image.convert, mode=mode))
-    # for preprocess in preprocesses:
-    #     # func, args, kwargs = preprocess
-    #     # img = func(img, *args, **kwargs)
-    #     img = preprocess(img)
-    # img = np.array(img)
-    # # 复原出通道。1表示样本数量维
-    # if mode == 'L' or mode == '1':
-    #     img_channels = 1
-    # elif mode == 'RGB':
-    #     img_channels = 3
-    # else:
-    #     img_channels = -1
-    # img = img.reshape((img_channels, *img.shape[:2]))
     return img
 
 
@@ -223,12 +206,10 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
 
     rets = []
     with tqdm(
-            # total=min(len(groups_of_imgs_labels_list), len(footnotes)),
             zip(groups_of_imgs_labels_list, footnotes), total=len(groups_of_imgs_labels_list),
             unit='张', position=0, desc=f"正在拼装图片中……",
             mininterval=1, leave=True, ncols=80
     ) as pbar:
-        # for imgs_and_labels, comment in zip(groups_of_imgs_labels_list, footnotes):
         for imgs_and_labels, foot_note in pbar:
             ret = _concat_imgs(foot_note, *imgs_and_labels)
             if required_shape is not None:
