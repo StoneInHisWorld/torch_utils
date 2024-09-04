@@ -4,6 +4,7 @@ import time
 import numpy as np
 import pandas as pd
 import matplotlib
+import pandas.errors
 
 matplotlib.use('Agg')
 
@@ -25,6 +26,8 @@ def write_log(path: str, **kwargs):
             file_data = pd.read_csv(path, encoding='utf-8')
         except FileNotFoundError:
             file_data = pd.DataFrame([])
+        except pandas.errors.EmptyDataError:
+            raise FileExistsError(f'{path}文件为空，pandas不允许读取空文件，请删除该文件！')
         except PermissionError:
             for i in range(10):
                 print(f'\r文件{path}被占用，已等待{wait}秒。请立即关闭此文件，在整10秒处会再次尝试获取文件读取权限。',
