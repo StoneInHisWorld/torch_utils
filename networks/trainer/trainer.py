@@ -92,7 +92,7 @@ class Trainer:
             else:
                 raise ValueError(f"无法识别的数据迭代器，其提供的长度为{len(data_iter)}")
             # 判断是否要进行多线程训练
-            if ptools.is_multiprocessing(n_workers):
+            if not ptools.is_multiprocessing(n_workers):
                 # 不启用多线程训练
                 if valid_iter is not None:
                     # 进行训练和验证
