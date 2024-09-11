@@ -4,22 +4,23 @@ from torch import nn
 img_modes = ['L', '1']
 
 
-def calculate_pcc(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    """
+def calculate_pcc(y_hat: torch.Tensor, y: torch.Tensor, epsilon=torch.tensor(1e-6)) -> torch.Tensor:
+    r"""
     计算PCC值，公式为：
     .. math::
         \mathrm{pcc}(\hat{y}, y) = cov(\hat{y}, y) / ( \mathrm{\sigma_{\hat{y}}} \mathrm{\sigma_{y}})
     :param y_hat: 计算对象1
     :param y: 计算对象2
+    :param epsilon: 防止分母为0的最小量
     :return: 两张图片的PCC值
     """
-    mean_x, mean_y = [t.mean(dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
-    std_x, std_y = [t.std(dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
-    conv_xy = ((y_hat - mean_x) * (y - mean_y)).sum(dim=list(range(1, len(y.shape))), keepdim=True) / (
+    mean_x, mean_y = [t.mean(dim=list(range(2, len(t.shape))), keepdim=True) for t in [y_hat, y]]
+    std_x, std_y = [t.std(dim=list(range(2, len(t.shape))), keepdim=True) for t in [y_hat, y]]
+    conv_xy = ((y_hat - mean_x) * (y - mean_y)).sum(dim=list(range(2, len(y.shape)))) / (
             y.shape[-1] * y.shape[-2] - 1
     )
     denominator = std_x * std_y
-    return conv_xy / denominator
+    return conv_xy / denominator.squeeze() + epsilon
 
 
 class PCCLoss(nn.Module):
@@ -48,7 +49,8 @@ class PCC(nn.Module):
         super().__init__()
 
     def forward(self, y_hat: torch.Tensor, y: torch.Tensor):
-        result = calculate_pcc(y_hat, y).squeeze()
+        result = calculate_pcc(y_hat, y)
+        result = result.mean(dim=list(range(1, len(result.shape))))
         if self.reduction == 'mean':
             return result.mean()
         elif self.reduction == 'sum':
