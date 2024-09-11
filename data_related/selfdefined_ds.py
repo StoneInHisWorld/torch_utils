@@ -320,11 +320,14 @@ class SelfDefinedDataSet:
         pass
 
     @abstractmethod
-    def read_fea_fn(self, index: Iterable and Sized,
-                    n_worker: int = 1, pbar=None) -> Iterable:
+    def read_fea_fn(self,
+                    indexes: Iterable and Sized,
+                    n_worker: int = 1, pbar: tqdm = None,
+                    preprocesses: Callable = None
+                    ) -> Iterable:
         """加载特征集数据批所用方法
 
-        :param index: 加载特征集数据批所用索引
+        :param indexes: 加载特征集数据批所用索引
         :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
         :param pbar: 加载特征集时所用的进度条
         :return: 读取到的特征集数据批
@@ -332,11 +335,14 @@ class SelfDefinedDataSet:
         pass
 
     @abstractmethod
-    def read_lb_fn(self, index: Iterable and Sized,
-                   n_worker: int = 1, pbar=None) -> Iterable:
+    def read_lb_fn(self,
+                   indexes: Iterable and Sized,
+                   n_worker: int = 1, pbar: tqdm = None,
+                   preprocesses: Callable = None
+                   ) -> Iterable:
         """加载标签集数据批所用方法
 
-        :param index: 加载标签集数据批所用索引
+        :param indexes: 加载标签集数据批所用索引
         :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
         :param pbar: 加载标签集时所用的进度条
         :return: 读取到的标签集数据批
