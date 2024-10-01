@@ -1,12 +1,10 @@
 from typing import List, Iterable
 
+import numpy as np
 import torch
 import torchvision
 from PIL import Image as IMAGE
 from PIL.Image import Image
-
-import numpy as np
-
 
 img_modes = ['L', 'RGB', '1']
 
@@ -29,7 +27,13 @@ def tensor_to_img(ts: torch.Tensor, mode: str = 'RGB') -> List[Image]:
             ret.append(__ts_to_BiLevelImg(t))
     else:
         for t in ts:
-            ret.append(torchvision.transforms.ToPILImage(mode)(t))
+            # c, l, w = t.shape
+            # ret.append(
+            #     PIL.Image.fromarray(t.numpy(), mode)
+            # )
+            # PIL图片要求数据格式为uint8，否则其他格式的张量会出现偏色的问题
+            t = t.type(torch.uint8)
+            ret.append(torchvision.transforms.ToPILImage()(t))
     return ret
 
 

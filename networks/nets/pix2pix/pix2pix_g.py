@@ -233,11 +233,11 @@ class Pix2Pix_G(BasicNN):
         :param kernel_size: 卷积层使用的感受野大小
         :param bn_momen: 批量标准化层的动量超参数
         """
-        supported = ['u256', 'r9']
+        supported = ['u256', 'r9', 'u128']
         if version == 'u256':
             model = UNet256Genarator(*args, **kwargs)
             kwargs['required_shape'] = (256, 256)
-        if version == 'u128':
+        elif version == 'u128':
             model = UNet128Genarator(*args, **kwargs)
             kwargs['required_shape'] = (128, 128)
         elif version == 'r9':

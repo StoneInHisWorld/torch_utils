@@ -15,14 +15,15 @@ class TheNameOfYourDS(SelfDefinedDataSet):
     """TODO：自定义数据集"""
 
     def _check_path(self, root: str, which: str) -> None:
-        """检查数据集路径是否正确，否则直接中断程序。
+        """检查数据集路径是否正确，并生成特征集和标签集路径。
         TODO：此处编写数据集路径检查逻辑
-
+        需要为self._train_fd, self._train_ld, self._test_fd, self._test_ld赋值
         :param root: 数据集所在根目录。
         :param which: 数据集名字。
         :return: None
         """
-        ...
+        self._train_fd, self._train_ld = ..., ...
+        self._test_fd, self._test_ld = ..., ...
 
     @staticmethod
     def _get_fea_index(features, root) -> None:

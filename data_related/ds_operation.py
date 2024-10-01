@@ -137,10 +137,16 @@ def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
     :param epsilon: 防止分母为0的无穷小量。
     :return: 标准化的数据
     """
-    mean, std = [
-        func(data, dim=list(range(1, len(data.shape))), keepdim=True)
-        for func in [torch.mean, torch.std]
-    ]
+    try:
+        mean, std = [
+            func(data, dim=list(range(2, len(data.shape))), keepdim=True)
+            for func in [torch.mean, torch.std]
+        ]
+    except RuntimeError as e:
+        if 'Input dtype must be either a floating point or complex dtype.' in e.args[0]:
+            raise ValueError(f"标准化需要输入的数据为浮点数或者是复数，然而输入的数据类型为：{data.dtype}")
+        else:
+            raise e
     std += epsilon
     if len(data.shape) == 4:
         return F.normalize(data, mean, std)
