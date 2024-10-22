@@ -54,7 +54,7 @@ def resize_img(image: Image, required_shape: Tuple[int, int], interpolation='nea
     if dw < 0 or dh < 0:
         i_h = random.randint(0, -dh) if dh < 0 else 0
         i_w = random.randint(0, -dw) if dw < 0 else 0
-        image.crop((i_w, i_w, i_w + new_w, i_h + new_h))
+        image = image.crop((i_w, i_h, i_w + w, i_h + h))
     return image
 
 
