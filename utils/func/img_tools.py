@@ -11,9 +11,11 @@ from utils.func.pytools import check_para
 
 
 def resize_img(image: Image, required_shape: Tuple[int, int], interpolation='nearest') -> Image:
-    """
-    重塑图片。
-    先将图片等比例放大到最大（放缩到最小）满足required_shape的尺寸，再对图片随机取部分或填充黑边以适配所需形状
+    """重塑图片
+
+    在不改变图片的比例的情况下进行图片重塑。
+    先将图片等比例放大到最大（放缩到最小）满足required_shape的某个维度，再对图片随机取部分或填充黑边以适配所需形状
+    :param interpolation: 指定图片resize的插值方法
     :param image: 待编辑图片
     :param required_shape: 所需形状
     :return: 重塑完成的图片。
@@ -50,6 +52,7 @@ def resize_img(image: Image, required_shape: Tuple[int, int], interpolation='nea
     if dw > 0 or dh > 0:
         back_ground = IMAGE.new(image.mode, (w, h), 0)
         back_ground.paste(image)
+        image = back_ground
     # 若需求图片大小较小，则随机取部分
     if dw < 0 or dh < 0:
         i_h = random.randint(0, -dh) if dh < 0 else 0
