@@ -3,18 +3,9 @@ import json
 import pandas as pd
 import torch
 
+from config.init_cfg import init_log, init_settings, init_hps
 from utils.experiment import Experiment
 from utils.func import pytools
-
-
-def init_log(path):
-    """日志初始化方法
-    日志初始化只会增加一个条目，该条目里只有“exp_no==1”的信息
-    :param path:
-    :return:
-    """
-    with open(path, 'w', encoding='utf-8') as log:
-        log.write("exp_no\n1\n")
 
 
 class ControlPanel:
@@ -37,8 +28,10 @@ class ControlPanel:
         :param net_path: 网络文件存储路径
         """
         # 路径检查以及路径提取
-        pytools.check_path(hp_cfg_path)
-        pytools.check_path(runtime_cfg_path)
+        if hp_cfg_path is not None:
+            pytools.check_path(hp_cfg_path, init_hps)
+        if runtime_cfg_path is not None:
+            pytools.check_path(runtime_cfg_path, init_settings)
         if log_path is not None:
             pytools.check_path(log_path, init_log)
         if net_path is not None:
