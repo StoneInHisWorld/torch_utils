@@ -7,12 +7,23 @@ from networks.layers.identity import Identity
 
 
 class Pix2Pix_D(BasicNN):
+    """适用于图片翻译、转换任务的学习模型pix2pix的分辨器模块"""
+
     input_size = (256, 256)
 
-    def __init__(self, input_nc, ndf, net_type='basic',
-                 n_layers_D=3, norm_type='batch',
+    def __init__(self, input_nc, ndf,
+                 net_type='basic', n_layers_D=3, norm_type='batch',
                  **kwargs):
-        """适用于图片翻译、转换任务的学习模型pix2pix的分辨器模块。
+        """适用于图片翻译、转换任务的学习模型pix2pix的分辨器模块
+
+        提供三种类型的分辨器:
+        [basic]: 原始的pix2pix论文中提到的`PatchGAN`分辨器，能够分辨70x70交叠块的真假。
+        相较于全图分辨器，块级分辨器的架构的参数更少，能在全卷积形式中应用于任意形状的图片
+        [n_layers]: 该模式可通过`n_layers_D`指定分辨器卷积层数量。
+        [pixel]: 1x1 PixelGAN分辨器能分辨像素的真假。对于空间信息无提升效果，但建议使用更高的色域。
+
+        可选三种类型的标准化层：batch | instance | none
+        分辨器通过`init_net`进行初始化，并使用`LeakyReLU`进行非线性操作。
 
         参考：
 
@@ -20,23 +31,11 @@ class Pix2Pix_D(BasicNN):
 
         [2] Phillip Isola, Jun-Yan Zhu, Tinghui Zhou and Alexei A. Efros.
         Image-to-Image Translation with Conditional Adversarial Networks[J]. CVF, 2017. 1125, 1134
-
-        提供三种类型的分辨器:
-
-        [basic]: 原始的pix2pix论文中提到的`PatchGAN`分辨器，能够分辨70x70交叠块的真假。
-        相较于全图分辨器，块级分辨器的架构的参数更少，能在全卷积形式中应用于任意形状的图片
-
-        [n_layers]: 该模式可通过`n_layers_D`指定分辨器卷积层数量。
-
-        [pixel]: 1x1 PixelGAN分辨器能分辨像素的真假。对于空间信息无提升效果，但建议使用更高的色域。
-
-        分辨器通过`init_net`进行初始化，并使用`LeakyReLU`进行非线性操作。
         :param input_nc: 输入图片的通道数
         :param ndf: 第一卷积层的过滤层数
         :param net_type: 结构名称 -- basic | n_layers | pixel
         :param n_layers_D: 分辨器中的卷积层数，仅当`netD == 'n_layers'`时有效
         :param norm_type: 标准化层的类型
-
         :return: 返回分辨器
         """
         norm_layer = self.__get_norm_layer(type=norm_type)
