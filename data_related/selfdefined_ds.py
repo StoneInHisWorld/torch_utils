@@ -25,10 +25,7 @@ class SelfDefinedDataSet:
     f_req_sha = (256, 256)
     l_req_sha = (256, 256)
 
-    def __init__(self,
-                 where: str, module: type, control_panel: dict,
-                 shuffle=True
-                 ):
+    def __init__(self, where: str, module: type, control_panel: dict):
         """自定义DAO数据集
         负责按照用户指定的方式读取数据集的索引以及数据本身，并提供评价指标、数据预处理方法、结果包装方法。
         读取数据集的索引体现在_get_fea_index(), _get_lb_index()方法中，在此之前需要调用_check_path()检查数据集路径。
@@ -40,13 +37,12 @@ class SelfDefinedDataSet:
 
         :param where: 数据集所处路径
         :param module: 实验涉及数据集类型。数据集会根据实验所用模型来自动指定数据预处理程序。
-        :param shuffle: 在划分数据集前是否打乱数据
         """
         # 从运行动态参数中获取参数
         n_workers = control_panel['n_workers']
-        lazy = control_panel['lazy']
         data_portion = control_panel['data_portion']
         bulk_preprocess = control_panel['bulk_preprocess']
+        shuffle = control_panel['shuffle']
         # 判断图片指定形状
         # self.f_required_shape = required_shape
         # self.l_required_shape = required_shape
@@ -55,7 +51,7 @@ class SelfDefinedDataSet:
         # 判断数据集懒加载程度
         # self._f_lazy = f_lazy
         # self._l_lazy = l_lazy
-        self._f_lazy = self._l_lazy = lazy
+        self._f_lazy = self._l_lazy = control_panel['lazy']
         # 进行训练数据路径检查
         self._train_fd = None
         self._train_ld = None
@@ -128,13 +124,10 @@ class SelfDefinedDataSet:
 
     @abstractmethod
     def _check_path(self, root: str, which: str) -> None:
-        """
-        检查数据集路径是否正确，否则直接中断程序。
-        本数据集要求目录结构为（请在代码中查看）：
+        """检查数据集路径是否正确，否则直接中断程序。
 
         :param root: 数据集源目录。
         :param which: 数据集批次名
-        :return: None
         """
         pass
 
@@ -210,13 +203,13 @@ class SelfDefinedDataSet:
                     ))
 
         threadpool = []
-        completed = False
         if fea_index_or_d:
-            if self.fea_preprocesses:
-                n_request = len(fea_index_or_d)
-            else:
-                n_request = 1
-            fea_reader = next(self._get_fea_reader(n_request))
+            # if self.fea_preprocesses:
+            #     n_request = len(fea_index_or_d)
+            # else:
+            #     n_request = 1
+            # fea_reader = next(self._get_fea_reader(n_request))
+            fea_reader = next(self._get_fea_reader())
             read_fea_thread = Thread(
                 __read_impl,
                 fea_reader, fea_index_or_d, self.fea_preprocesses,
@@ -225,11 +218,12 @@ class SelfDefinedDataSet:
             read_fea_thread.start()
             threadpool.append(read_fea_thread)
         if lb_index_or_d:
-            if self.lb_preprocesses:
-                n_request = len(fea_index_or_d)
-            else:
-                n_request = 1
-            lb_reader = next(self._get_lb_reader(n_request))
+            # if self.lb_preprocesses:
+            #     n_request = len(fea_index_or_d)
+            # else:
+            #     n_request = 1
+            # lb_reader = next(self._get_lb_reader(n_request))
+            lb_reader = next(self._get_lb_reader())
             read_lb_thread = Thread(
                 __read_impl,
                 lb_reader, lb_index_or_d, self.lb_preprocesses,
@@ -246,55 +240,49 @@ class SelfDefinedDataSet:
         ]
 
     @abstractmethod
-    def _get_fea_reader(self, n_request) -> Generator:
+    def _get_fea_reader(self) -> Generator:
         """根据根目录下的特征集索引进行存储访问的数据读取器
 
         读取器只需要读取单个索引值。
-        为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，调用本函数时会传递访问次数n_request。
-        用户需要提供对数据集n_request次访问权限，通过yield的方式返回。编程示例如下：
+        为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，请通过yield的方式返回读取器。编程示例如下：
 
         ```
-        def _get_fea_reader(self, n_request):
+        def _get_fea_reader(self):
             # 获取.tar数据集资源
             tfile = tarfile.open(self.tarfile_name, 'r')
             # 提供数据读取器
-            for _ in range(n_request):
-                yield toolz.compose(*reversed([
-                    tfile.extractfile,
-                    functools.partial(read_img, mode=self.fea_mode),
-                ]))
+            yield toolz.compose(*reversed([
+                tfile.extractfile,
+                functools.partial(read_img, mode=self.fea_mode),
+            ]))
             # 进行资源回收
             tfile.close()
         ```
 
-        :param n_request: 数据请求次数。当批量预处理时，该值为1，否则该值为将要读取的索引数。
         :return: 数据读取器生成器
         """
         pass
 
     @abstractmethod
-    def _get_lb_reader(self, n_request) -> Generator:
+    def _get_lb_reader(self) -> Generator:
         """根据根目录下的标签集索引进行存储访问的数据读取器
 
         读取器只需要读取单个索引值。
-        为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，调用本函数时会传递访问次数n_request。
-        用户需要提供对数据集n_request次访问权限，通过yield的方式返回。编程示例如下：
+        为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，请通过yield的方式返回读取器。编程示例如下：
 
         ```
-        def _get_lb_reader(self, n_request):
+        def _get_lb_reader(self):
             # 获取.tar数据集资源
             tfile = tarfile.open(self.tarfile_name, 'r')
             # 提供数据读取器
-            for _ in range(n_request):
-                yield toolz.compose(*reversed([
-                    tfile.extractfile,
-                    functools.partial(read_img, mode=self.lb_mode),
-                ]))
+            yield toolz.compose(*reversed([
+                tfile.extractfile,
+                functools.partial(read_img, mode=self.fea_mode),
+            ]))
             # 进行资源回收
             tfile.close()
         ```
 
-        :param n_request: 数据请求次数。当批量预处理时，该值为1，否则该值为将要读取的索引数。
         :return: 数据读取器生成器
         """
         pass
@@ -302,55 +290,68 @@ class SelfDefinedDataSet:
     @staticmethod
     @abstractmethod
     def _get_fea_index(features, root) -> None:
-        """
-        读取根目录下的特征集索引
-        :return: None
+        """读取根目录下的特征集索引
+
+        :param features: 空列表对象
+            请将所有的索引append()到本列表中
+        :param root: 数据集根目录
         """
         pass
 
     @staticmethod
     @abstractmethod
     def _get_lb_index(labels, root) -> None:
-        """
-        读取根目录下的标签集索引
-        :return: None
+        """读取根目录下的标签集索引
+
+        :param labels: 空列表对象
+            请将所有的索引append()到本列表中
+        :param root: 数据集根目录
         """
         pass
 
-    @abstractmethod
+    # @abstractmethod
+    # # def read_fea_fn(self,
+    # #                 indexes: Iterable and Sized,
+    # #                 n_worker: int = 1, pbar: tqdm = None,
+    # #                 preprocesses: Callable = None
+    # #                 ) -> Iterable:
     # def read_fea_fn(self,
     #                 indexes: Iterable and Sized,
-    #                 n_worker: int = 1, pbar: tqdm = None,
+    #                 n_worker: int = 1, mute: bool = True,
     #                 preprocesses: Callable = None
     #                 ) -> Iterable:
-    def read_fea_fn(self,
-                    indexes: Iterable and Sized,
-                    n_worker: int = 1, mute: bool = True,
-                    preprocesses: Callable = None
-                    ) -> Iterable:
-        """加载特征集数据批所用方法
-
-        :param indexes: 加载特征集数据批所用索引
-        :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
-        :param pbar: 加载特征集时所用的进度条
-        :return: 读取到的特征集数据批
-        """
-        pass
-
-    @abstractmethod
-    def read_lb_fn(self,
-                   indexes: Iterable and Sized,
-                   n_worker: int = 1, pbar: tqdm = None,
-                   preprocesses: Callable = None
-                   ) -> Iterable:
-        """加载标签集数据批所用方法
-
-        :param indexes: 加载标签集数据批所用索引
-        :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
-        :param pbar: 加载标签集时所用的进度条
-        :return: 读取到的标签集数据批
-        """
-        pass
+    #     """加载特征集数据批所用方法
+    #
+    #     :param indexes: 加载特征集数据批所用索引
+    #     :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
+    #     :param mute: 是否静默读取
+    #     :param preprocesses: 预处理方法
+    #         若指定了预处理方法，则
+    #     :return:
+    #     """
+    #     """
+    #
+    #     :param indexes:
+    #     :param n_worker:
+    #     :param pbar: 加载特征集时所用的进度条
+    #     :return: 读取到的特征集数据批
+    #     """
+    #     pass
+    #
+    # @abstractmethod
+    # def read_lb_fn(self,
+    #                indexes: Iterable and Sized,
+    #                n_worker: int = 1, pbar: tqdm = None,
+    #                preprocesses: Callable = None
+    #                ) -> Iterable:
+    #     """加载标签集数据批所用方法
+    #
+    #     :param indexes: 加载标签集数据批所用索引
+    #     :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
+    #     :param pbar: 加载标签集时所用的进度条
+    #     :return: 读取到的标签集数据批
+    #     """
+    #     pass
 
     @staticmethod
     @abstractmethod
@@ -438,23 +439,27 @@ class SelfDefinedDataSet:
         return train_ds, test_ds
 
     def _set_wrap_fn(self, module: type):
+        """根据处理模型的类型，自动设置结果包装方法
+        此函数会对self.wrap_fn进行赋值
+
+        :param module: 用于处理本数据集的模型类型
+        """
         if hasattr(self, f'{module.__name__}_wrap_fn'):
             self.wrap_fn = getattr(self, f'{module.__name__}_wrap_fn')
         else:
             self.wrap_fn = self.default_wrap_fn
 
     def _set_preprocess(self, module: type):
-        """
-        根据处理模型的类型，自动指定预处理程序
+        """根据处理模型的类型，自动指定预处理程序
+        此函数会对self.module_preprocesses进行赋值，若没有编写对应模型的预处理方法，则直接赋值为空函数。
+
         :param module: 用于处理本数据集的模型类型
-        :return: None
         """
         if hasattr(self, f'{module.__name__}_preprocesses'):
             exec(f'self.{module.__name__}_preprocesses()')
         else:
             self.__default_preprocesses()
 
-    # @abstractmethod
     def __default_preprocesses(self):
         """默认数据集预处理程序。
         注意：此程序均为本地程序，不可被序列化（pickling）！
@@ -482,6 +487,15 @@ class SelfDefinedDataSet:
                         labels: torch.Tensor,
                         footnotes: list
                         ) -> Any:
+        """默认结果包装方法
+        将输入、预测、标签张量转换成图片，并拼接配上脚注。
+
+        :param inputs: 输入张量
+        :param predictions: 预测张量
+        :param labels: 标签张量
+        :param footnotes: 脚注
+        :return: 包装完成的结果图
+        """
         inp_s = tstools.tensor_to_img(inputs, self.fea_mode)
         pre_s = tstools.tensor_to_img(predictions, self.lb_mode)
         lb_s = tstools.tensor_to_img(labels, self.lb_mode)
@@ -499,4 +513,7 @@ class SelfDefinedDataSet:
         return ret
 
     def __len__(self):
-        return len(self._train_f)
+        """数据集长度
+        :return: 训练集长度，测试集长度
+        """
+        return len(self._train_f), len(self._test_f)
