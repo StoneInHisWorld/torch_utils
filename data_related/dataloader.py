@@ -9,22 +9,29 @@ from data_related.datasets import LazyDataSet
 
 
 class DataLoader(DLoader):
+    """普通数据加载器"""
 
-    def __init__(self, dataset, transit_fn,
-                 batch_size=1, transit_kwargs=None,
-                 bkgGen=True, max_prefetch=3,
-                 *args, **kwargs):
-        if transit_kwargs is None:
-            transit_kwargs = {}
+    def __init__(self, dataset, transit_fn, transit_kwargs,
+                 batch_size=1, bkg_gen=True, max_prefetch=3,
+                 **kwargs):
+        """普通数据加载器
+
+        :param dataset: 将要转化为加载器的数据集对象
+        :param transit_fn: 数据批次迁移方法。
+            在__iter__()方法中，每次从内存取出数据后，都会调用transit_fn对数据批次进行迁移操作。
+        :param transit_kwargs: 数据供给传输函数的关键字参数。
+            调用transit_fn时，一并输入到transit_fn中的关键字参数
+        :param batch_size: 数据批次大小
+        :param bkg_gen: 是否采用BackgroundGenerator
+            BackgroundGenerator可利用多线程机制提前取出数据批
+        :param max_prefetch: BackgroundGenerator提前取出的数据批数目
+        :param kwargs: pytorch.utils.data.DataLoader的额外参数
+        """
         self.transit_kwargs = transit_kwargs
         self.transit_fn = dill.dumps(transit_fn)
-        self.bkg_gen = bkgGen
+        self.bkg_gen = bkg_gen
         self.max_prefetch = max_prefetch
-        # kwargs['pin_memory'] = pin_memory
-        super().__init__(
-            dataset, batch_size,
-            *args, **kwargs
-        )
+        super().__init__(dataset, batch_size, **kwargs)
 
     def __iter__(self):
         transit_fn = dill.loads(self.transit_fn)
