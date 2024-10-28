@@ -25,10 +25,7 @@ class SelfDefinedDataSet:
     f_req_sha = (256, 256)
     l_req_sha = (256, 256)
 
-    def __init__(self,
-                 where: str, module: type, control_panel: dict,
-                 shuffle=True
-                 ):
+    def __init__(self, where: str, module: type, control_panel: dict):
         """自定义DAO数据集
         负责按照用户指定的方式读取数据集的索引以及数据本身，并提供评价指标、数据预处理方法、结果包装方法。
         读取数据集的索引体现在_get_fea_index(), _get_lb_index()方法中，在此之前需要调用_check_path()检查数据集路径。
@@ -40,12 +37,12 @@ class SelfDefinedDataSet:
 
         :param where: 数据集所处路径
         :param module: 实验涉及数据集类型。数据集会根据实验所用模型来自动指定数据预处理程序。
-        :param shuffle: 在划分数据集前是否打乱数据
         """
         # 从运行动态参数中获取参数
         n_workers = control_panel['n_workers']
         data_portion = control_panel['data_portion']
         bulk_preprocess = control_panel['bulk_preprocess']
+        shuffle = control_panel['shuffle']
         # 判断图片指定形状
         # self.f_required_shape = required_shape
         # self.l_required_shape = required_shape
