@@ -19,5 +19,6 @@ dependencies:
       - scikit-image
       - scipy
       # 请在https://pytorch.org/get-started/locally/中找到需要的pytorch版本
+      # - torch
       - torchsummary
       - opencv-python
