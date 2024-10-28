@@ -38,7 +38,7 @@ criterion_a = DataSet.get_criterion_a()
 print('数据预处理中……')
 _, test_ds = data.to_dataset()
 # TODO：在此处定义数据供给器参数
-data_iter = dso.to_loader(test_ds, transit_fn, ...)
+data_iter = dso.to_loader(test_ds, ..., transit_fn)
 
 for exp_no in read_queue:
     hp = ltools.get_logData(log_path, exp_no)

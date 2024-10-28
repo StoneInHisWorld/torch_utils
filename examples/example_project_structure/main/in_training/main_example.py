@@ -58,7 +58,7 @@ if __name__ == '__main__':
             data_iter_generator = (
                 [
                     # TODO：在此处定义训练数据供给器参数
-                    dso.to_loader(train_ds, transit_fn, ...)
+                    dso.to_loader(train_ds, ..., transit_fn)
                     for sampler in sampler_group
                 ]
                 # TODO: 设置数据集分割参数
@@ -66,7 +66,7 @@ if __name__ == '__main__':
             )  # 将抽取器遍历，构造加载器
             # 获取数据迭代器并注册数据预处理函数
             # TODO：在此处定义测试数据供给器参数
-            test_iter = dso.to_loader(test_ds, transit_fn, ...)
+            test_iter = dso.to_loader(test_ds, ..., transit_fn)
             # TODO：设置网络构建参数，按照网络的初始化参数进行指定
             net_init_kwargs = {...}
             net_init_args = (...,)
