@@ -171,7 +171,7 @@ class Trainer:
             with tqdm(predictions, unit='张', position=0, desc=f"正在保存结果……",
                       mininterval=1, leave=True, ncols=80) as pbar:
                 for i, res in enumerate(pbar):
-                    res.save(os.path.join(save_path, f'{i}.jpg'))
+                    res.save(os.path.join(save_path, f'{i}.png'), format='PNG', dpi=(400, 400), compress_level=0)
         return predictions
 
     @prepare('train')
