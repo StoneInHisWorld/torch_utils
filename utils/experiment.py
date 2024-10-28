@@ -7,6 +7,41 @@ import utils.func.log_tools as ltools
 from utils.func import pytools
 
 
+def _print_result(history, test_log):
+    """输出训练日志
+    将训练日志输出，如果有验证日志和测试日志则一并输出到命令行
+
+    :param history: 训练（和验证）日志的历史记录对象
+    :param test_log: 测试日志信息
+    :return: 训练（和验证）日志聚合的日志信息
+    """
+    log_msg = {}
+    if len(history) <= 0:
+        raise ValueError('历史记录对象为空！')
+    # 输出训练部分的数据
+    train_history = filter(lambda h: h[0].startswith('train_'), history)
+    valid_history = list(filter(lambda h: h[0].startswith('valid_'), history))
+    for name, log in train_history:
+        # 输出训练信息，并记录
+        print(f"{name.replace('train_', '训练')} = {log[-1]:.5f},", end=' ')
+        log_msg[name] = log[-1]
+    # 输出验证部分的数据
+    if len(valid_history) > 0:
+        print('\b\b')
+    for name, log in valid_history:
+        # 输出验证信息，并记录
+        print(f"{name.replace('valid_', '验证')} = {log[-1]:.5f},", end=' ')
+        log_msg[name] = log[-1]
+    # 输出测试部分的数据
+    print('\b\b')
+    if test_log is not None:
+        for k, v in test_log.items():
+            print(f"{k.replace('test_', '测试')} = {v:.5f},", end=' ')
+        print('\b\b')
+    log_msg.update(test_log)
+    return log_msg
+
+
 class Experiment:
     """实验对象负责神经网络训练的相关周边操作，计时、显存监控、日志编写、网络持久化、历史趋势图绘制及保存"""
 
@@ -101,7 +136,9 @@ class Experiment:
         # 保存训练生成的网络
         self.__save_net()
 
-    def register_result(self, net, history, test_log=None, **plot_kwargs) -> None:
+    def register_result(self,
+                        net, history,
+                        test_log=None, **plot_kwargs) -> None:
         """根据训练历史记录进行输出，并进行日志参数的记录。
         在神经网络训练完成后，需要调用本函数将结果注册到超参数控制台。
         :param net: 训练完成的网络对象
@@ -111,14 +148,18 @@ class Experiment:
         """
         self.__net = net
         # 绘制历史趋势图
-        log_msg = self.__print_result(history, test_log)
+        log_msg = _print_result(history, test_log)
         with warnings.catch_warnings():
             # 忽视空图图例警告
             warnings.simplefilter('ignore', category=UserWarning)
             self.__plot_history(history, **plot_kwargs)
         # 编辑日志条目
         self.add_logMsg(
-            True, **log_msg, data_portion=self.__runtime_cfg['data_portion']
+            True, **log_msg,
+            data_portion=self.__runtime_cfg['data_portion'],
+            which_dataset=self.__runtime_cfg['which_dataset'],
+            f_req_sha=self.__runtime_cfg['f_req_sha'],
+            l_req_sha=self.__runtime_cfg['l_req_sha'],
         )
         if self.device != torch.device('cpu') and self.__runtime_cfg["cuda_memrecord"]:
             self.add_logMsg(
@@ -127,33 +168,6 @@ class Experiment:
                 max_GPUmemory_reserved=torch.cuda.max_memory_reserved(self.device) / (1024 ** 3),
             )
             torch.cuda.reset_peak_memory_stats(self.device)
-
-    def __print_result(self, history, test_log):
-        log_msg = {}
-        if len(history) <= 0:
-            raise ValueError('历史记录对象为空！')
-        # 输出训练部分的数据
-        train_history = filter(lambda h: h[0].startswith('train_'), history)
-        valid_history = list(filter(lambda h: h[0].startswith('valid_'), history))
-        for name, log in train_history:
-            # 输出训练信息，并记录
-            print(f"{name.replace('train_', '训练')} = {log[-1]:.5f},", end=' ')
-            log_msg[name] = log[-1]
-        # 输出验证部分的数据
-        if len(valid_history) > 0:
-            print('\b\b')
-        for name, log in valid_history:
-            # 输出验证信息，并记录
-            print(f"{name.replace('valid_', '验证')} = {log[-1]:.5f},", end=' ')
-            log_msg[name] = log[-1]
-        # 输出测试部分的数据
-        print('\b\b')
-        if test_log is not None:
-            for k, v in test_log.items():
-                print(f"{k.replace('test_', '测试')} = {v:.5f},", end=' ')
-            print('\b\b')
-        log_msg.update(test_log)
-        return log_msg
 
     def add_logMsg(self, mute=True, **kwargs):
         """增加日志条目信息

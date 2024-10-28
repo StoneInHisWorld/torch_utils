@@ -57,6 +57,7 @@ def plot_history(history,
                  savefig_as=None, accumulative=False,
                  max_nrows=3, figsize=(7, 7.5)):
     """绘制训练历史变化趋势图
+
     :param history: 训练历史数据
     :param mute: 绘制完毕后是否立即展示成果图
     :param title: 绘制图标题
@@ -67,11 +68,13 @@ def plot_history(history,
     :return: None
     """
     # 获取子图标题以计算趋势图行列数
-    subplots_titles = list(set([
+    history = sorted(history)
+    subplots_titles = sorted(list(set([
         label.replace('train_', "").replace('valid_', '').upper()
         for label, _ in history
-    ]))
+    ])))
     n_cols = int(np.ceil(len(subplots_titles) / max_nrows))
+    # 设置整张图片的属性
     fig, axes = plt.subplots(
         min(max_nrows, len(subplots_titles)), n_cols,
         sharex='col', figsize=(7, 7.5)
@@ -99,10 +102,12 @@ def plot_history(history,
             log = np.array(log)
             for i in range(len(log[0])):
                 axes[index].plot(range(1, len(log) + 1), log[:, i], label=label + f'_{i}')
+    # 设置图片的注解部分
     if title:
         fig.suptitle(title)
     for ax in axes:
         ax.legend()
+    # 保存图片
     if savefig_as:
         if not os.path.exists(os.path.split(savefig_as)[0]):
             os.makedirs(os.path.split(savefig_as)[0])

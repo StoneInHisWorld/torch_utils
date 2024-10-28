@@ -11,25 +11,27 @@ from utils.func.pytools import check_para
 
 
 def resize_img(image: Image, required_shape: Tuple[int, int], interpolation='nearest') -> Image:
-    """
-    重塑图片。
-    先将图片等比例放大到最大（放缩到最小）满足required_shape的尺寸，再对图片随机取部分或填充黑边以适配所需形状
+    """重塑图片
+
+    在不改变图片的比例的情况下进行图片重塑。如改变图片比例不影响任务，请使用PIL.Image.Image.resize()方法提升效率。
+    先将图片等比例放大到最大（放缩到最小）满足required_shape的某个维度，再对图片随机取部分或填充黑边以适配所需形状
+    :param interpolation: 指定图片resize的插值方法
     :param image: 待编辑图片
-    :param required_shape: 所需形状
+    :param required_shape: 所需形状，(宽度，高度)
     :return: 重塑完成的图片。
     """
     # 实现将图片进行随机裁剪以达到目标shape的功能
-    ih, iw = image.size
-    h, w = required_shape
+    iw, ih = image.size
+    w, h = required_shape
 
     # 长边放缩比例
-    scale = max(w / iw, h / ih)
+    scale = max(h / ih, w / iw)
     # 计算新图片shape
-    new_w = int(iw * scale)
     new_h = int(ih * scale)
+    new_w = int(iw * scale)
     # 计算图片缺失shape
-    dw = w - new_w
     dh = h - new_h
+    dw = w - new_w
 
     # 等比例缩放数据
     def __get_interpolation():
@@ -45,34 +47,37 @@ def resize_img(image: Image, required_shape: Tuple[int, int], interpolation='nea
         elif interpolation == 'lanczos':
             return PIL.Image.LANCZOS
 
-    image = image.resize((new_h, new_w), __get_interpolation())
+    image = image.resize((new_w, new_h), __get_interpolation())
     # 若需求图片大小较大，则进行填充
-    if dw > 0 or dh > 0:
-        back_ground = IMAGE.new(image.mode, (w, h), 0)
+    if dh > 0 or dw > 0:
+        back_ground = IMAGE.new(image.mode, (h, w), 0)
         back_ground.paste(image)
+        image = back_ground
     # 若需求图片大小较小，则随机取部分
-    if dw < 0 or dh < 0:
-        i_h = random.randint(0, -dh) if dh < 0 else 0
+    if dh < 0 or dw < 0:
         i_w = random.randint(0, -dw) if dw < 0 else 0
-        image.crop((i_w, i_w, i_w + new_w, i_h + new_h))
+        i_h = random.randint(0, -dh) if dh < 0 else 0
+        image = image.crop((i_w, i_h, i_w + h, i_h + w))
     return image
 
 
 def crop_img(img: Image, required_shape, loc: str or Tuple[int, int]) -> Image:
-    """
-    按照指定位置裁剪图片
+    """按照指定位置裁剪图片
+
     :param img: 即将进行裁剪的图片
     :param required_shape: 需要保留的尺寸
-    :param loc: 裁剪的位置。可以指定为“lt, lb, rt, rb, c”的其中一种，或者指定为二元组指示裁剪区域的左上角坐标
+    :param loc: 裁剪的位置。
+        可以指定为“lt, lb, rt, rb, c”的其中一种
+        或者指定为二元组指示裁剪区域的左上角坐标(x, y)
     :return: 裁剪完成的图片
     """
     img_size = img.size
     iw, ih = img_size
     rw, rh = required_shape
     assert rh <= ih and rw <= iw, (
-        f'裁剪尺寸{required_shape}需要小于图片尺寸{img_size}！'
+        f'裁剪尺寸{required_shape}不能超出图片尺寸{img_size}！'
     )
-    if type(loc) == str:
+    if isinstance(loc, str):
         if loc == 'lt':
             loc = (0, 0, 0 + rw, 0 + rh)
         elif loc == 'lb':
@@ -85,7 +90,7 @@ def crop_img(img: Image, required_shape, loc: str or Tuple[int, int]) -> Image:
             loc = (iw // 2 - rw // 2, ih // 2 - rh // 2, iw // 2 + rw // 2, ih // 2 + rh // 2)
         else:
             raise Exception(f'不支持的裁剪位置{loc}！')
-    elif type(loc) == Tuple and len(loc) == 2:
+    elif isinstance(loc, tuple) and len(loc) == 2:
         loc = (loc[0], loc[1], loc[0] + rw, loc[1] + rh)
     else:
         raise Exception(f'无法识别的裁剪位置参数{loc}')
@@ -319,8 +324,9 @@ def mean_LI_of_holes(images: np.ndarray,
 def get_mean_LI_of_holes(images: np.ndarray,
                          hole_poses: List[Tuple[int, int]],
                          hole_sizes: List[int]):
-    """计算图片序列中挖孔的平均光强
-    :param images: 三维图片序列，维度信息（通道数，长度，宽度）
+    """计算图片序列中，每个指定挖孔区域的平均光强
+
+    :param images: 三维图片序列，每张图片要求维度信息为（通道数，长度，宽度）
     :param hole_poses: 每张图片的挖孔位置序列，该位置序列会应用到所有图片的计算中。
     :param hole_sizes: 每个挖孔位置的挖孔大小，要求len(hole_sizes) == len(hole_poses)。
     :return: 光强序列，序列中的每个元素为挖孔所得光强序列。
