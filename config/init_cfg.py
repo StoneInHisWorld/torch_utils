@@ -27,6 +27,7 @@ def init_settings(path):
         "save_net": "state",
         "device": "cpu",
         "lazy": False,
+        "shuffle": True,
         "n_workers": 1,
         "pin_memory": False,
         "cuda_memrecord": False,
@@ -37,7 +38,10 @@ def init_settings(path):
         "with_hook": False,
         "hook_mute": True,
         "bulk_preprocess": True,
-        "with_checkpoint": False
+        "with_checkpoint": False,
+        "f_req_sha": (256, 256),
+        "l_req_sha": (256, 256),
+        "which_dataset": ""
     }
 
     with open(path, 'w', encoding='utf-8') as f:
