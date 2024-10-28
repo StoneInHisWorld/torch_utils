@@ -50,38 +50,58 @@ def split_data(dataset: DataSet or LazyDataSet, hps, train=0.8, shuffle=True):
         raise ValueError(f'不正确的k值={k}，k值应该大于0，且为整数！')
 
 
-def to_loader(dataset: DataSet or LazyDataSet, transit_fn,
-              batch_size: int = 1, shuffle=True, sampler: Iterable = None,
-              max_prefetch=3, bkgGen=True, **kwargs):
-    """根据数据集类型转化为数据集加载器。生成预处理前，会将预处理程序清除。
-    尚未完成懒加载数据集的代码编辑。
-    :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler，根据shuffle==True or False 提供乱序/顺序下标.
-    :param dataset: 转化为加载器的数据集。
-    :param batch_size: 每次供给的数据量。默认为整个数据集
-    :param shuffle: 是否打乱
-    :param kwargs: Dataloader额外参数
-    :return: 加载器对象
-    """
-    if sampler is not None:
-        shuffle = None
-    # pin_memory = kwargs['pin_memory'] if 'pin_memory' in kwargs.keys() else False
-    if type(dataset) == LazyDataSet:
-        # raise NotImplementedError('懒加载尚未完成编写！')
-        # 懒加载需要保存有数据集预处理方法
-        # dataset.pop_preprocesses()
+def default_transit_fn(batch, **kwargs):
+    """默认数据供给传输函数，本函数不进行任何操作。
+    DataLoader每次从内存取出数据后，都会调用本函数对批次进行预处理。
+    数据传输函数用于进行数据批量的设备迁移等操作。
 
-        return LazyDataLoader(
-            dataset, transit_fn, batch_size,
-            shuffle=shuffle, sampler=sampler,  # 请注意，LazyDataSet提供的校正方法是针对索引集的，需要另外指定数据校正方法
-            **kwargs
-        )
-    elif type(dataset) == DataSet:
+    :param batch: 需要预处理的数据批
+    :param kwargs: 预处理所用关键字参数
+    :return: 数据批次
+    """
+    return batch
+
+
+def to_loader(dataset: DataSet or LazyDataSet,
+              batch_size: int = 1,
+              transit_fn=None, transit_kwargs=None,
+              bkg_gen=True, max_prefetch=3,
+              **kwargs):
+    """根据数据集类型转化为数据集加载器。
+    为了适配多进程处理，Dataset对象在转化为DataLoader对象前，会删除所携带的预处理方法。
+
+    :param dataset: 将要转换成数据集加载器的数据集
+    :param transit_fn: 数据供给传输函数，用于进行数据批量的设备迁移等操作。
+        DataLoader每次从内存取出数据后，都会调用transit_fn对数据批次进行迁移操作。
+        方法签名要求为def transit_fn(batch, **kwargs) -> batch:  。
+        没有指定迁移方法时会指定默认迁移方法，不进行任何操作
+    :param transit_kwargs: 数据供给传输函数的关键字参数。
+        调用transit_fn时，一并输入到transit_fn中的关键字参数
+    :param batch_size: 数据批次大小
+    :param bkg_gen: 是否采用BackgroundGenerator
+        BackgroundGenerator可利用多线程机制提前取出数据批
+    :param max_prefetch: BackgroundGenerator提前取出的数据批数目
+    :param kwargs: pytorch.utils.data.DataLoader的额外参数
+    :return: 数据集加载器
+    """
+    if transit_fn is None:
+        transit_fn = default_transit_fn
+    if transit_kwargs is None:
+        transit_kwargs = {}
+    if isinstance(dataset, LazyDataSet):
+        raise NotImplementedError('懒加载尚未完成编写！')
+        # # 懒加载需要保存有数据集预处理方法
+        # return LazyDataLoader(
+        #     dataset, transit_fn, batch_size,
+        #     shuffle=shuffle, sampler=sampler,  # 请注意，LazyDataSet提供的校正方法是针对索引集的，需要另外指定数据校正方法
+        #     **kwargs
+        # )
+    elif isinstance(dataset, DataSet):
         dataset.pop_preprocesses()
         return data_related.dataloader.DataLoader(
-            dataset, transit_fn, batch_size,
-            max_prefetch=max_prefetch, bkgGen=bkgGen,
-            shuffle=shuffle, collate_fn=dataset.collate_fn,
-            sampler=sampler, **kwargs
+            dataset, transit_fn, transit_kwargs, batch_size,
+            max_prefetch=max_prefetch, bkg_gen=bkg_gen,
+            collate_fn=dataset.collate_fn, **kwargs
         )
 
 
