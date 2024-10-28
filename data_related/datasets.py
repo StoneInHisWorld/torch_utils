@@ -77,44 +77,17 @@ class DataSet(torch_ds):
 
     def apply(self,
               features_calls: Callable = None,
-              labels_calls: Callable = None,
-              pbar: tqdm = None):
-        """对数据调用某种方法，可用作数据预处理。
+              labels_calls: Callable = None):
+        """对数据调用某种方法。
+        可用作数据预处理。
 
-        :param features_calls: 需要对特征集调用的方法列表
-        :param labels_calls: 需要对标签集调用的方法列表
-        :param pbar: 用于通知的进度条，指定为None则静默进行
+        :param features_calls: 特征集预处理程序
+        :param labels_calls: 标签集预处理程序
         """
         if features_calls is None:
             features_calls = toolz.compose()
         if labels_calls is None:
             labels_calls = toolz.compose()
-        # if pbar is not None:
-        #     pbar.reset(len(features_calls) + len(labels_calls))
-
-        # def pbar_update(n):
-        #     """进度条更新方法"""
-        #     if pbar is not None:
-        #         pbar.update(n)
-
-        # def fea_apply():
-        #     for call in features_calls:
-        #         self._features = call(self._features)
-        #         pbar_update(1)
-        #
-        # def lb_apply():
-        #     for call in labels_calls:
-        #         self._labels = call(self._labels)
-        #         pbar_update(1)
-
-        # tools.multi_process(
-        #     2, True, '',
-        #     (fea_apply, (), {}),
-        #     (lb_apply, (), {})
-        # )
-
-        # if pbar is not None:
-        #     pbar.close()
         if isinstance(features_calls, Callable):
             print('\r特征集预处理中……', end="", flush=True)
             start_time = time.perf_counter()
@@ -135,8 +108,8 @@ class DataSet(torch_ds):
     def to_loader(self, batch_size: int = None, shuffle=True,
                   sampler: Iterable = None, preprocess: bool = True,
                   **kwargs) -> DataLoader:
-        """
-        生成普通数据集的加载器，生成加载器前，会将所有预处理方法抛弃。
+        """生成普通数据集的加载器。
+        生成加载器前，会将所有预处理方法抛弃。
         :param preprocess: 是否进行预处理
         :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
         :param batch_size: 每次供给的数据量。默认为整个数据集
@@ -155,8 +128,8 @@ class DataSet(torch_ds):
             self, batch_size, shuffle=shuffle, collate_fn=self.collate_fn, sampler=sampler, **kwargs
         )
 
-    def get_subset(self, indices: Iterable):
-        return DataSet(self[indices][0], self[indices][1])
+    # def get_subset(self, indices: Iterable):
+    #     return DataSet(self[indices][0], self[indices][1])
 
     def register_preprocess(self,
                             features_calls: Callable = None,
@@ -276,9 +249,7 @@ class LazyDataSet(DataSet):
             [], desc=desc, unit='步', position=0, mininterval=1,
             ncols=80
         ) if not mute else None
-        self.apply(
-            self.feaIndex_preprocess, self.lbIndex_preprocess, pbar=pbar
-        )
+        self.apply(self.feaIndex_preprocess, self.lbIndex_preprocess)
 
     def to(self, device: torch.device) -> None:
         """

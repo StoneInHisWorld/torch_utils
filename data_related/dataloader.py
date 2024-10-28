@@ -107,6 +107,7 @@ class LazyDataLoader:
                     fea_indexes, lb_indexes,
                     n_workers=self.__kwargs.pop('num_workers', 2), mute=True
                 )
+                # 对读取到的数据进行预处理
                 fea_s, lb_s = ptools.multi_process(
                     2, True, '',
                     (self.__fea_preprocess, (fea_s,), {}),
@@ -123,10 +124,9 @@ class LazyDataLoader:
             self.__transit_fn(batch, **self.transit_kwargs)
             for batch in read_fn()
         )
+        # 判断是否使用BackgroundGenerator加速
         if self.bkg_gen:
-            return BackgroundGenerator(
-                unwrapped_generator, self.max_prefetch
-            )
+            return BackgroundGenerator(unwrapped_generator, self.max_prefetch)
         else:
             return unwrapped_generator
         # for fea_indexes, lb_indexes in self.__index_loader:
@@ -142,22 +142,21 @@ class LazyDataLoader:
         #         yield X, y
 
     def __len__(self):
-        """
-        返回懒加载数据集的总长度，计算公式为传入数据集长度整除批量大小
-        :return:
+        """懒加载数据集的总长度
+        计算公式为传入数据集长度整除批量大小
+        :return: 长度值
         """
         return self.__len
 
-    def register_preprocess(self, features_calls=None, labels_calls=None):
-        """
-        注册预处理方法，用于数据加载器对数据进行预处理
-        :param features_calls: 需要对特征集调用的方法列表
-        :param labels_calls: 需要对标签集调用的方法列表
-        :return: None
-        """
-        if features_calls is None:
-            features_calls = []
-        if labels_calls is None:
-            labels_calls = []
-        self.__fea_preprocesses += features_calls
-        self.__lb_preprocesses += labels_calls
+    # def register_preprocess(self, features_calls=None, labels_calls=None):
+    #     """
+    #     注册预处理方法，用于数据加载器对数据进行预处理
+    #     :param features_calls: 需要对特征集调用的方法列表
+    #     :param labels_calls: 需要对标签集调用的方法列表
+    #     """
+    #     if features_calls is None:
+    #         features_calls = []
+    #     if labels_calls is None:
+    #         labels_calls = []
+    #     self.__fea_preprocesses += features_calls
+    #     self.__lb_preprocesses += labels_calls
