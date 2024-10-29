@@ -176,12 +176,30 @@ def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
         raise Exception(f'不支持的数据形状{data.shape}！')
 
 
-def denormalize(data: torch.Tensor, mean, std) -> torch.Tensor:
+def denormalize(data: torch.Tensor, mean=None, std=None, range=None) -> torch.Tensor:
     """进行数据反标准化
 
-    :param data: 需要进行标准化的数据。
+    当mean与std均有指定时进行反标准化，计算方法为：
+    data * std + mean
+    当mean与std均为None时进行数据区间的反归一化，计算方法为：
+    ((data - d_min) * range / (d_max - d_min)) + low
+    :param data: 需要进行标准化的数据
     :param mean: 反标准化所用均值
     :param std: 反标准化所用标准差
-    :return: 反标准化的数据
+    :param range: 反归一化后，数据分布的区间。
+    :return: 反标准化后的数据
     """
-    return data * std + mean
+    # 如果指定了均值和方差
+    if mean is not None and std is not None:
+        return data * std + mean
+    # 如果指定了数据区间但没指定均值和方差
+    elif range is not None:
+        low, high = range
+        range = high - low
+        d_min = data.view(len(data), -1).min(1)[0]
+        d_min = d_min.expand(*reversed(data.shape)).T
+        d_max = data.view(len(data), -1).max(1)[0]
+        d_max = d_max.expand(*reversed(data.shape)).T
+        return ((data - d_min) * range / (d_max - d_min)) + low
+    else:
+        raise ValueError("反标准化需要指定均值和方差，或者指定数据区间")
