@@ -219,19 +219,17 @@ class ResNetGenerator(nn.Sequential):
 class Pix2Pix_G(BasicNN):
 
     def __init__(self, version='u256', *args, **kwargs):
-        """
-        适用于图片翻译、转换任务的学习模型。
-
+        """适用于图片翻译、转换任务的学习模型。
         参考：
 
         [1] 王志远. 基于深度学习的散斑光场信息恢复[D]. 厦门：华侨大学，2023
 
         [2] Phillip Isola, Jun-Yan Zhu, Tinghui Zhou and Alexei A. Efros. Image-to-Image Translation with Conditional Adversarial Networks[J]. CVF, 2017. 1125, 1134
-        :param input_channel: 输入数据通道，一般是图片通道数。
-        :param out_channel: 输出特征通道数，一般是图片通道数。
-        :param base_channel: 决定网络复杂度的基础通道数，需为大于0的整数。数值越高决定提取的特征维度越高。
-        :param kernel_size: 卷积层使用的感受野大小
-        :param bn_momen: 批量标准化层的动量超参数
+        :param version: 指定pix2pix生成器版本的字符串。
+            支持['u256', 'r9', 'u128']，要求的图片大小分别为[(256, 256), (256, 256), (128, 128)]
+        :param args: 参见各个生成器的位置参数
+            包括UNet256Generator、UNet128Generator、ResNetGenerator
+        :param kwargs: 参见各个生成器的关键字参数
         """
         supported = ['u256', 'r9', 'u128']
         if version == 'u256':

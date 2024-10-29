@@ -35,8 +35,9 @@ class SelfDefinedDataSet:
         结果包装方法通过AdoptedModelName_wrap_fn()提供，请将AdoptedModelName替换为本次训练使用的模型类名
         上述所有方法均需要用户自定义。
 
-        :param where: 数据集所处路径
-        :param module: 实验涉及数据集类型。数据集会根据实验所用模型来自动指定数据预处理程序。
+        :param where: 数据集所处目录
+        :param module: 实验涉及数据集类型。数据集会根据实验所用模型来自动指定数据预处理程序以及结果包装程序。
+        :param control_panel: 当前实验所属控制面板
         """
         # 从运行动态参数中获取参数
         n_workers = control_panel['n_workers']
