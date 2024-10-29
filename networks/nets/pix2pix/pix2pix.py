@@ -33,8 +33,9 @@ class Pix2Pix(BasicNN):
 
         分辨器目标函数为 :math:`\ell_D = 0.5 D_read + 0.5 D_fake`
 
+        目前可指定的损失函数包括：pcc | cGAN
+
         训练过程中输出四个目标值，分别为G_GAN、G_L1、D_real、D_fake：
-        目前支持的损失函数包括：pcc | cGAN
 
         - :math:`G_GAN`：生成器的GAN损失
         - :math:`G_{L1}`：生成器的L1损失
