@@ -196,10 +196,14 @@ def denormalize(data: torch.Tensor, mean=None, std=None, range=None) -> torch.Te
     elif range is not None:
         low, high = range
         range = high - low
+        # 获取最小值并扩充成源数据维度
         d_min = data.view(len(data), -1).min(1)[0]
-        d_min = d_min.expand(*reversed(data.shape)).T
+        d_min = d_min.expand(*reversed(data.shape))
+        d_min = d_min.permute(*torch.arange(d_min.ndim - 1, -1, -1))
+        # 获取最大值并扩充成源数据维度
         d_max = data.view(len(data), -1).max(1)[0]
-        d_max = d_max.expand(*reversed(data.shape)).T
+        d_max = d_max.expand(*reversed(data.shape))
+        d_max = d_max.permute(*torch.arange(d_min.ndim - 1, -1, -1))
         return ((data - d_min) * range / (d_max - d_min)) + low
     else:
         raise ValueError("反标准化需要指定均值和方差，或者指定数据区间")
