@@ -3,8 +3,10 @@ import warnings
 
 import torch
 
-import utils.func.log_tools as ltools
-from utils.func import pytools
+# import utils.func.log_tools as ltools
+# from utils.func import pytools
+from .func import log_tools as ltools
+from .func import pytools as ptools
 
 
 def _print_result(history, test_log):
@@ -205,7 +207,7 @@ class Experiment:
             print('训练器对象未得到训练网络对象，因此不予保存网络！')
             return
         save_net = self.__runtime_cfg['save_net']
-        if not pytools.check_para('save_net', save_net, self.sn_range):
+        if not ptools.check_para('save_net', save_net, self.sn_range):
             warnings.warn(
                 '请检查setting.json中参数save_net设置是否正确，本次不予保存模型！',
                 UserWarning
@@ -231,7 +233,7 @@ class Experiment:
         # 检查参数设置
         cfg_range = ['plot', 'save', 'no']
         cfg = self.__runtime_cfg['plot_history']
-        if not pytools.check_para('plot_history', cfg, cfg_range):
+        if not ptools.check_para('plot_history', cfg, cfg_range):
             warnings.warn(
                 '请检查setting.json中参数plot_history设置是否正确，本次不予绘制历史趋势图！',
                 UserWarning

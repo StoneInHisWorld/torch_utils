@@ -1,14 +1,14 @@
 from typing import List
 
 import torch
-import utils.func.torch_tools as ttools
+from utils import ttools
 
 from torch import nn
 
 from networks.basic_nn import BasicNN
-from networks.layers.inception import Inception_v1, Inception_v2A, Inception_v2B, Inception_v2C, Inception_v3A, \
+from layers.inception import Inception_v1, Inception_v2A, Inception_v2B, Inception_v2C, Inception_v3A, \
     Inception_v3B, Inception_v3C
-from networks.layers.multi_output import MultiOutputLayer
+from layers.multi_output import MultiOutputLayer
 
 
 class GoogLeNet(BasicNN):

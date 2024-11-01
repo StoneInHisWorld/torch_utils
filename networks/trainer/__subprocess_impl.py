@@ -5,7 +5,7 @@ import dill
 from torch.multiprocessing import SimpleQueue as PQueue, Event as PEvent
 
 from utils.accumulator import Accumulator
-from utils.decorators import prepare
+from networks.decorators import prepare
 from utils.func.pytools import get_computer_name
 from utils.history import History
 

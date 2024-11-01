@@ -1,7 +1,7 @@
 from torch import nn
 
 from networks.basic_nn import BasicNN
-from networks.layers.multi_output import MultiOutputLayer
+from layers.multi_output import MultiOutputLayer
 
 
 class WZYNetEssay(BasicNN):

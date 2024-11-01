@@ -7,13 +7,13 @@ from torch.multiprocessing import Process
 from torch.multiprocessing import SimpleQueue as PQueue
 from tqdm import tqdm
 
-from networks.basic_nn import BasicNN
+from networks import BasicNN
 from networks.trainer.__hook_impl import hook
 from networks.trainer.__profiler_impl import profiling_impl
 from networks.trainer.__subprocess_impl import data_iter_impl, train_impl, eval_impl, vlog_impl, \
     tlog_impl
 from utils.accumulator import Accumulator
-from utils.decorators import prepare
+from networks.decorators import prepare
 from utils.func import pytools as ptools
 # from utils.func.pytools import get_computer_name, is_multiprocessing
 from utils.history import History

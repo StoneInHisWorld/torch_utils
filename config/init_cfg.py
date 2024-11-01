@@ -41,7 +41,9 @@ def init_settings(path):
         "with_checkpoint": False,
         "f_req_sha": (256, 256),
         "l_req_sha": (256, 256),
-        "which_dataset": ""
+        "which_dataset": ".",
+        "log_root": "./log",
+        "dataset_root": "."
     }
 
     with open(path, 'w', encoding='utf-8') as f:

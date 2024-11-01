@@ -4,7 +4,7 @@ from typing import Tuple
 from torch import nn
 
 from networks.basic_nn import BasicNN
-from networks.layers.multi_output import MultiOutputLayer, linear_output
+from layers.multi_output import MultiOutputLayer, linear_output
 
 VGG_11 = (
     (1, 64), (1, 128), (2, 256), (2, 512), (2, 512)

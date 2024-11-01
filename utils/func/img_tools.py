@@ -354,6 +354,7 @@ def blend(required_shapes: List, group_of_values: List,
           group_of_n_rows: List, group_of_n_cols: List, mode='L',
           dtype=np.float32) -> list[np.ndarray]:
     """按照给定大小以及给定颜料值生成一组晕染图
+
     :param required_shapes: 晕染图组中，每一张晕染图的大小
     :param group_of_values: 每一张晕染图中填充的颜料值，要求颜料块的数量和颜料值一致，即n_rows * n_cols == len(values)
     :param group_of_n_rows: 每一张晕染图中颜料的行数

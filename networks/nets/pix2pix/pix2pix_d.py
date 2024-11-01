@@ -3,7 +3,7 @@ import functools
 from torch import nn
 
 from networks.basic_nn import BasicNN
-from networks.layers.identity import Identity
+from layers.identity import Identity
 
 
 class Pix2Pix_D(BasicNN):

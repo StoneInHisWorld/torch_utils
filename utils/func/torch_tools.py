@@ -4,9 +4,9 @@ import torch
 from torch import cuda, nn as nn
 from torch.nn import init as init
 
-from networks.layers import GANLoss
-from networks.layers import PCCLoss
-from networks.layers import SSIMLoss
+from layers import GANLoss
+from layers import PCCLoss
+from layers import SSIMLoss
 
 loss_es = ["l1", "entro", "mse", "huber", "ssim", "pcc", 'gan']
 init_funcs = ["normal", "xavier", "zero", "state", 'constant', 'trunc_norm']
@@ -141,8 +141,6 @@ def init_wb(func_str: str = "xavier", **kwargs):
     elif func_str == 'trunc_norm':
         mean, std = kwargs.pop('mean', 0), kwargs.pop('std', 1)
         a, b = kwargs.pop('a', 0), kwargs.pop('b', 1)
-        # w_init = lambda m: init.trunc_normal_(m, )
-        # b_init = init.zeros_
         w_init = functools.partial(init.trunc_normal_, mean=mean, std=std, a=a, b=b)
         b_init = init.zeros_
     elif func_str == 'skip':

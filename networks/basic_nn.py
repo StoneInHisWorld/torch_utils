@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch.utils import checkpoint
 
-from utils.func import torch_tools as ttools
+from utils import ttools
 
 
 class BasicNN(nn.Sequential):
