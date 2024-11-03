@@ -26,4 +26,6 @@ class Thread(BuiltinThread):
             raise self.exc
 
     def get_result(self):
+        if self.exc is not None:
+            raise self.exc
         return self.result
