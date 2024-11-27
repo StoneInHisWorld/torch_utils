@@ -155,14 +155,21 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
         mode = 'RGB'
         color = (255, 255, 255)
         text_color = (0, 0, 0)
-    elif 'L' in modes:
-        mode = 'L'
+    elif 'F' in modes or 'L' in modes or '1' in modes:
+        if 'F' in modes:
+            mode = 'F'
+        elif 'L' in modes:
+            mode = 'L'
+        else:
+            mode = '1'
         color = 255
         text_color = 0
+    else:
+        raise NotImplementedError(f'暂未识别的图片模式组合{modes}，无法进行背景板颜色定义以及返图模式推断')
 
-    def _concat_imgs(footnotes: str = "",
-                     *imgs_and_labels: Tuple[Image, str]
-                     ) -> Image:
+    def _impl(footnotes: str = "",
+              *imgs_and_labels: Tuple[Image, str]
+              ) -> Image:
         """拼接图片和标签，再添加脚注形成单张图片"""
         # 计算绘图窗格大小
         if img_size:
@@ -216,7 +223,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
             mininterval=1, leave=True, ncols=80
     ) as pbar:
         for imgs_and_labels, foot_note in pbar:
-            ret = _concat_imgs(foot_note, *imgs_and_labels)
+            ret = _impl(foot_note, *imgs_and_labels)
             if required_shape is not None:
                 ret = ret.resize(required_shape)
             rets.append(ret)
