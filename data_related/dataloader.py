@@ -108,7 +108,7 @@ class LazyDataLoader:
                     n_workers=self.__kwargs.pop('num_workers', 2), mute=True
                 )
                 # 对读取到的数据进行预处理
-                fea_s, lb_s = ptools.multi_process(
+                fea_s, lb_s = ptools.multithreading_pool(
                     2, True, '',
                     (self.__fea_preprocess, (fea_s,), {}),
                     (self.__lb_preprocess, (lb_s,), {})

@@ -40,18 +40,14 @@ class SelfDefinedDataSet:
         """
         # 从运行动态参数中获取参数
         where = control_panel['dataset_root']
-        n_workers = control_panel['n_workers']
+        self.n_workers = control_panel['n_workers']
         data_portion = control_panel['data_portion']
         self.bulk_preprocess = control_panel['bulk_preprocess']
         shuffle = control_panel['shuffle']
         # 判断图片指定形状
-        # self.f_required_shape = required_shape
-        # self.l_required_shape = required_shape
         self.f_req_sha = tuple(control_panel['f_req_sha'])
         self.l_req_sha = tuple(control_panel['l_req_sha'])
         # 判断数据集懒加载程度
-        # self._f_lazy = f_lazy
-        # self._l_lazy = l_lazy
         self._f_lazy = self._l_lazy = control_panel['lazy']
         # 进行训练集数据路径检查
         self._train_fd = None
@@ -62,7 +58,7 @@ class SelfDefinedDataSet:
         self._check_path(where, which)
         # 设置预处理程序
         if not self.bulk_preprocess:
-            print(f'已选择单例预处理，将会在数据读取后立即进行预处理')
+            print(f'已选择单例预处理，将会在数据读取后立即进行预处理。本数据集将不会存储原始数据！')
             self._set_preprocess(module)
         else:
             self.lb_preprocesses = None
@@ -104,7 +100,7 @@ class SelfDefinedDataSet:
             print('对于测试集，实行懒加载标签数据集')
         else:
             indexes = (*indexes, self._test_l)
-        self._test_f, self._test_l = self.read_fn(*indexes, n_workers)
+        self._test_f, self._test_l = self.read_fn(*indexes, self.n_workers)
         # 加载结果报告
         assert len(self._test_f) == len(self._test_l), \
             f'测试集的特征集和标签集长度{len(self._test_f)}&{len(self._test_l)}不一致'
@@ -121,6 +117,7 @@ class SelfDefinedDataSet:
             print('已选择批量预处理，将在调用to_dataset()时进行预处理')
             self._set_preprocess(module)
         else:
+            # 整理读取和预处理过后的数据，并清空预处理程序
             self._train_f = torch.vstack(self._train_f)
             self._train_l = torch.vstack(self._train_l)
             self._test_f = torch.vstack(self._test_f)
@@ -317,50 +314,6 @@ class SelfDefinedDataSet:
         """
         pass
 
-    # @abstractmethod
-    # # def read_fea_fn(self,
-    # #                 indexes: Iterable and Sized,
-    # #                 n_worker: int = 1, pbar: tqdm = None,
-    # #                 preprocesses: Callable = None
-    # #                 ) -> Iterable:
-    # def read_fea_fn(self,
-    #                 indexes: Iterable and Sized,
-    #                 n_worker: int = 1, mute: bool = True,
-    #                 preprocesses: Callable = None
-    #                 ) -> Iterable:
-    #     """加载特征集数据批所用方法
-    #
-    #     :param indexes: 加载特征集数据批所用索引
-    #     :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
-    #     :param mute: 是否静默读取
-    #     :param preprocesses: 预处理方法
-    #         若指定了预处理方法，则
-    #     :return:
-    #     """
-    #     """
-    #
-    #     :param indexes:
-    #     :param n_worker:
-    #     :param pbar: 加载特征集时所用的进度条
-    #     :return: 读取到的特征集数据批
-    #     """
-    #     pass
-    #
-    # @abstractmethod
-    # def read_lb_fn(self,
-    #                indexes: Iterable and Sized,
-    #                n_worker: int = 1, pbar: tqdm = None,
-    #                preprocesses: Callable = None
-    #                ) -> Iterable:
-    #     """加载标签集数据批所用方法
-    #
-    #     :param indexes: 加载标签集数据批所用索引
-    #     :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
-    #     :param pbar: 加载标签集时所用的进度条
-    #     :return: 读取到的标签集数据批
-    #     """
-    #     pass
-
     @staticmethod
     @abstractmethod
     def get_criterion_a() -> List[
@@ -375,38 +328,7 @@ class SelfDefinedDataSet:
         """
         pass
 
-    # @staticmethod
-    # @abstractmethod
-    # def wrap_fn(inputs: torch.Tensor,
-    #             predictions: torch.Tensor,
-    #             labels: torch.Tensor,
-    #             metric_s: torch.Tensor,
-    #             loss_es: torch.Tensor,
-    #             comments: List[str]
-    #             ):
-    #     """输出结果打包函数
-    #
-    #     :param inputs: 预测所用到的输入批次数据
-    #     :param predictions: 预测批次结果
-    #     :param labels: 预测批次标签数据
-    #     :param metric_s: 预测批次评价指标计算结果
-    #     :param loss_es: 预测批次损失值计算结果
-    #     :param comments: 预测批次每张结果输出图片附带注解
-    #     :return: 打包结果
-    #     """
-    #     pass
-
-    # @staticmethod
-    # @abstractmethod
-    # def save_fn(result, root: str) -> None:
-    #     """输出结果存储函数
-    #
-    #     :param result: 输出结果图片批次
-    #     :param root: 输出结果存储路径
-    #     """
-    #     pass
-
-    def to_dataset(self) -> Tuple[LazyDataSet, LazyDataSet] or Tuple[DataSet, DataSet]:
+    def to_dataset(self, n_workers=None) -> Tuple[LazyDataSet, LazyDataSet] or Tuple[DataSet, DataSet]:
         """
         根据自身模式，转换为合适的数据集，并对数据集进行预处理函数注册和执行。
         对于懒加载数据集，需要提供read_fn()，签名须为：

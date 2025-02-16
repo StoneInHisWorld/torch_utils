@@ -261,6 +261,31 @@ def add_mask(images: List[np.ndarray], mask: np.ndarray) -> np.ndarray:
     # IMAGE.fromarray(ret[0].reshape((256, 256))).show()  # 查看掩膜图片的语句
 
 
+def extract_holes(images: np.ndarray,
+                  hole_poses: List[Tuple[int, int]],
+                  hole_sizes: List[int]) -> list:
+    """
+    根据孔径大小和位置提取图片孔径内容
+    :param images: 图片序列。
+    :param hole_poses: 孔径位置，即方形孔径的左上角坐标。
+    :param hole_sizes: 孔径大小，需为整数列表，内含孔径边长。目前只支持方形孔径。
+    :return: 挖出的孔径列表。
+    """
+    # 检查越界问题
+    assert np.max(np.array(hole_poses)[:, 0]) < images.shape[
+        -2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
+    assert np.max(np.array(hole_poses)[:, 1]) < images.shape[
+        -1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
+    hole_sizes = np.array(hole_sizes)
+    images = np.array(images)
+    # 挖孔
+    holes = [[] for _ in range(len(images))]
+    for (x, y), size in zip(hole_poses, hole_sizes.flatten()):
+        for i, image in enumerate(images[:, :, x: x + size, y: y + size]):
+            holes[i].append(image)
+    return holes
+
+
 def extract_and_cat_holes(images: np.ndarray,
                           hole_poses: List[Tuple[int, int]],
                           hole_sizes: List[int],
@@ -268,7 +293,7 @@ def extract_and_cat_holes(images: np.ndarray,
                           required_shape=None) -> np.ndarray:
     """
     根据孔径大小和位置提取图片孔径内容，并将所有孔径粘连到一起，形成孔径聚合图片。
-    :param required_shape:
+    :param required_shape: 指定返回的图片大小
     :param images: 图片序列。
     :param hole_poses: 孔径位置，即方形孔径的左上角坐标。
     :param hole_sizes: 孔径大小，需为整数列表，内含孔径边长。目前只支持方形孔径。

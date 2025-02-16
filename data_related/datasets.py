@@ -1,14 +1,12 @@
 import time
-from typing import Iterable, Callable, List
+from typing import Iterable, Callable
 
-import dill
 import toolz.functoolz
 import torch
-from torch.multiprocessing import Queue
 from torch.utils.data import Dataset as torch_ds, DataLoader
 from tqdm import tqdm
 
-import utils.func.pytools as tools
+from utils.func.pytools import multithreading_map
 
 
 # def fea_apply(result_pipe, features, features_calls, pbar_Q: Queue):
@@ -77,7 +75,8 @@ class DataSet(torch_ds):
 
     def apply(self,
               features_calls: Callable = None,
-              labels_calls: Callable = None):
+              labels_calls: Callable = None,
+              n_workers=1):
         """对数据调用某种方法。
         可用作数据预处理。
 
@@ -88,22 +87,67 @@ class DataSet(torch_ds):
             features_calls = toolz.compose()
         if labels_calls is None:
             labels_calls = toolz.compose()
-        if isinstance(features_calls, Callable):
-            print('\r特征集预处理中……', end="", flush=True)
-            start_time = time.perf_counter()
-            self._features = features_calls(self._features)
-            print(f'\r特征集预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
+
+        # if isinstance(features_calls, Callable):
+        #     print('\r特征集预处理中……', end="", flush=True)
+        #     start_time = time.perf_counter()
+        #     self._features = features_calls(self._features)
+        #     print(f'\r特征集预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
+        # else:
+        #     raise ValueError('特征集调用请使用Callable对象，已经停止对list对象的支持！'
+        #                      '多个Callable对象请使用toolz.compose()组合成流水线')
+        # if isinstance(labels_calls, Callable):
+        #     print('\r标签集预处理中……', end="", flush=True)
+        #     start_time = time.perf_counter()
+        #     self._labels = labels_calls(self._labels)
+        #     print(f'\r标签集预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
+        # else:
+        #     raise ValueError('标签集调用请使用Callable对象，已经停止对list对象的支持！'
+        #                      '多个Callable对象请使用toolz.compose()组合成流水线')
+
+        if n_workers > 1:
+            # try:
+            #     with Pool(2) as pool:
+            #         ret1 = pool.apply_async(self.__apply_impl, features_calls, self._features, '特征集')
+            #         ret2 = pool.apply_async(self.__apply_impl, labels_calls, self._labels, '标签集')
+            #         results = (ret1.get(), ret2.get())
+            # except (TypeError, AttributeError) as e:
+            #     # 如果遇到不能pickle的对象，尝试多线程
+            #     print(f'多进程处理出错{e}，尝试使用多线程')
+            #     # results = list(map(lambda args: multithreading_pool(n_workers, False, *args), zip(
+            #     #     ['特征集预处理中……', '标签集预处理中……'],
+            #     #     [(features_calls, (self._features, ), {}), (labels_calls, (self._labels, ), {})]
+            #     # )))
+            #     results = list(map(lambda args: multithreading_pool(n_workers, False, *args), zip(
+            #         ['特征集预处理中……', '标签集预处理中……'],
+            #         [(features_calls, (self._features, ), {}), (labels_calls, (self._labels, ), {})]
+            #     )))
+                # iterable_multi_process(self._features, features_calls, False, n_worker, )
+                # iterable_multi_process(self._features, features_calls, False, n_worker, )
+                # fea_thread = Thread(features_calls, self._features)
+                # lb_thread = Thread(labels_calls, self._labels)
+            results = [torch.stack(ls) for ls in map(lambda args: multithreading_map(*args), [
+                [self._features, features_calls, False, n_workers, '特征集预处理中……'],
+                [self._labels, labels_calls, False, n_workers, '标签集预处理中……']
+            ])]
         else:
-            raise ValueError('特征集调用请使用Callable对象，已经停止对list对象的支持！'
-                             '多个Callable对象请使用toolz.compose()组合成流水线')
-        if isinstance(labels_calls, Callable):
-            print('\r标签集预处理中……', end="", flush=True)
+            results = list(map(lambda args: self.__apply_impl(*args), zip(
+                [features_calls, labels_calls], [self._features, self._labels], ['特征集', '标签集']
+            )))
+
+        self._features, self._labels = results
+
+    def __apply_impl(self, *args):
+        calls, data, which_data = args
+        if isinstance(calls, Callable):
+            print(f'\r{which_data}预处理中……', end="", flush=True)
             start_time = time.perf_counter()
-            self._labels = labels_calls(self._labels)
-            print(f'\r标签集预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
+            result = calls(data)
+            print(f'\r{which_data}预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
         else:
-            raise ValueError('标签集调用请使用Callable对象，已经停止对list对象的支持！'
+            raise ValueError(f'{which_data}调用请使用Callable对象，已经停止对list对象的支持！'
                              '多个Callable对象请使用toolz.compose()组合成流水线')
+        return result
 
     def to_loader(self, batch_size: int = None, shuffle=True,
                   sampler: Iterable = None, preprocess: bool = True,
@@ -161,14 +205,16 @@ class DataSet(torch_ds):
         except AttributeError:
             return
 
-    def preprocess(self, desc='对数据集进行操作……'):
+    def preprocess(self,
+                   desc='对数据集进行操作……',
+                   n_workers=1):
         """数据集对持有的特征集和标签集进行预处理，此为显式方法，会打印进度条"""
         # pbar = tqdm(
         #     [], desc=desc, unit='步', position=0, mininterval=1,
         #     ncols=80
         # )
-        print(desc)
-        self.apply(self.fea_preprocesses, self.lb_preprocesses)
+        # print(desc)
+        self.apply(self.fea_preprocesses, self.lb_preprocesses, n_workers)
         # self.apply(self.fea_preprocesses, self.lb_preprocesses, pbar)
 
     @property

@@ -68,8 +68,8 @@ def check_para(name, value, val_range) -> bool:
         return False
 
 
-def multi_process(n_workers: int = 8, mute: bool = True, desc: str = '',
-                  *tasks: Tuple[Callable, Tuple, dict]) -> Iterable:
+def multithreading_pool(n_workers: int = 8, mute: bool = True, desc: str = '',
+                        *tasks: Tuple[Callable, Tuple, dict]) -> Iterable:
     results = []
     processors = []
     if mute:
@@ -118,14 +118,14 @@ def multi_process(n_workers: int = 8, mute: bool = True, desc: str = '',
     return results
 
 
-def iterable_multi_process(data: Iterable and Sized, task: Callable,
-                           mute: bool = True, n_workers: int = 8, desc: str = '',
-                           *args, **kwargs):
+def multithreading_map(data: Iterable and Sized, task: Callable,
+                       mute: bool = True, n_workers: int = 8, desc: str = '',
+                       *args, **kwargs):
     data_l = len(data)
     batch_l = math.ceil(data_l / n_workers)
     data = [data[i: min(i + batch_l, data_l)] for i in range(0, data_l, batch_l)]
     ret = []
-    for res in multi_process(
+    for res in multithreading_pool(
             n_workers, mute, desc, *[
                 (task, (d, *args), kwargs)
                 for d in data
