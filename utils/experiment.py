@@ -90,7 +90,7 @@ class Experiment:
         print(f'data_portion: {self.__runtime_cfg["data_portion"]}')
         print(
             '\r-----------------输入Ctrl+C即可终止本组超参数实验'
-            '-----------------'
+            '--------------------'
         )
         device = torch.device(self.__runtime_cfg['device'])
         cuda_memrecord = self.__runtime_cfg['cuda_memrecord']
