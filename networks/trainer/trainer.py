@@ -76,7 +76,7 @@ class Trainer:
         n_workers = self.runtime_cfg['n_workers']
         n_epochs = self.hps['epochs']
         k = self.hps['k']
-        print(f'本次训练位于设备{self.runtime_cfg["device"]}上')
+        print(f'\r本次训练位于设备{self.runtime_cfg["device"]}上', flush=True)
         # 判断是否是k折训练
         if k > 1:
             pbar_len = k * n_epochs
