@@ -114,6 +114,7 @@ def k_fold_split(dataset: DataSet or LazyDataSet, k: int = 10, shuffle: bool = T
     :return: DataLoader生成器，每次生成（训练集下标供给器，验证集下标生成器），生成k次
     """
     assert k > 1, f'k折验证需要k值大于1，而不是{k}'
+    print(f'\r正在进行{k}折数据集分割……', flush=True)
     data_len = len(dataset)
     fold_size = len(dataset) // k
     total_ranger = np.random.randint(0, data_len, (data_len,)) if shuffle else np.arange(data_len)
