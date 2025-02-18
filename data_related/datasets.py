@@ -205,9 +205,7 @@ class DataSet(torch_ds):
         except AttributeError:
             return
 
-    def preprocess(self,
-                   desc='对数据集进行操作……',
-                   n_workers=1):
+    def preprocess(self, n_workers=1):
         """数据集对持有的特征集和标签集进行预处理，此为显式方法，会打印进度条"""
         # pbar = tqdm(
         #     [], desc=desc, unit='步', position=0, mininterval=1,
