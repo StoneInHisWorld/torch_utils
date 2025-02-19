@@ -160,7 +160,7 @@ def init_wb(func_str: str = "xavier", **kwargs):
             for m in module_s:
                 _init_impl(m)
             return
-        elif isinstance(module_s, nn.BatchNorm2d):
+        elif isinstance(module_s, nn.modules.batchnorm._NormBase):
             # 使用"全0法"初始化批次标准化层的权重和偏置量会导致计算结果均为0，因此将被跳过！
             # 泽维尔初始化不支持低于二维的张量初始化，因此将被跳过！
             if func_str == 'xavier' or func_str == 'zero':
