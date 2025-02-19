@@ -212,7 +212,7 @@ class BasicNN(nn.Sequential):
                 raise ValueError('选择预训练好的参数初始化网络，需要使用where关键词提供参数或者模型的路径！')
             except FileNotFoundError:
                 if where.endswith('.ptsd'):
-                    raise FileNotFoundError(f'找不到网络参数文件{where}！')
+                    raise FileNotFoundError(f'找不到网络参数文件{where}，将转为搜寻.ptm文件！')
                 elif where.endswith('.ptm'):
                     raise FileNotFoundError(f'找不到网络文件{where}！')
 

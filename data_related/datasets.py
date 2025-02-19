@@ -127,8 +127,8 @@ class DataSet(torch_ds):
                 # fea_thread = Thread(features_calls, self._features)
                 # lb_thread = Thread(labels_calls, self._labels)
             results = [torch.stack(ls) for ls in map(lambda args: multithreading_map(*args), [
-                [self._features, features_calls, False, n_workers, '特征集预处理中……'],
-                [self._labels, labels_calls, False, n_workers, '标签集预处理中……']
+                [self._features, features_calls, False, n_workers, '\r特征集预处理中……'],
+                [self._labels, labels_calls, False, n_workers, '\r标签集预处理中……']
             ])]
         else:
             results = list(map(lambda args: self.__apply_impl(*args), zip(

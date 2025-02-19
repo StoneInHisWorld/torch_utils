@@ -116,8 +116,12 @@ class net_builder:
             net = net_class(*n_init_args, **n_init_kwargs)
         except FileNotFoundError:
             # 处理预训练网络加载
+            # 去掉.ptsd
             where = n_init_kwargs['init_kwargs']['where'][:-5]
-            net = torch.load(where + '.ptm')
+            try:
+                net = torch.load(where + '.ptm')
+            except FileNotFoundError:
+                raise FileNotFoundError(f'找不到网络持久化文件{where + ".ptm"}')
         if not mute:
             print(f'\r构造{net_class.__name__}完成')
             self.__list_net(net, trainer)
