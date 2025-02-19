@@ -1,5 +1,5 @@
 import json
-
+import pandas as pd
 
 def init_log(path):
     """日志初始化方法
@@ -7,8 +7,10 @@ def init_log(path):
 
     :param path: 日志所需存储路径
     """
-    with open(path, 'w', encoding='utf-8') as log:
-        log.write("exp_no\n1\n")
+    log = pd.DataFrame({'exp_no': []})
+    log.to_csv(path, encoding='utf-8', index=False)
+    # with open(path, 'w', encoding='utf-8') as log:
+    #     log.write("exp_no\n1\n")
 
 
 def init_settings(path):
