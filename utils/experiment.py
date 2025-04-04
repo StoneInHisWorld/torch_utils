@@ -1,10 +1,9 @@
 import time
+from datetime import datetime
 import warnings
 
 import torch
 
-# import utils.func.log_tools as ltools
-# from utils.func import pytools
 from .func import log_tools as ltools
 from .func import pytools as ptools
 
@@ -130,7 +129,8 @@ class Experiment:
         # 记录时间信息
         time_span = time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start))
         self.__hp.update({
-            'exp_no': self.__exp_no, "duration": time_span, "dataset": self.datasource.__name__
+            'exp_no': self.__exp_no, "duration": time_span, "dataset": self.datasource.__name__,
+            'time_stamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
         if self.__lp is not None:
             # 指定了日志路径，则进行日志记录
