@@ -138,6 +138,10 @@ def get_logData(log_path, exp_no) -> dict:
             raise KeyError(f'日志不存在{exp_no}项，请检查日志文件或重新选择查看的实验标号！')
         except FileNotFoundError:
             raise FileNotFoundError(f'无法找到{log_path}文件，请检查日志文件路径是否输入正确！')
+        except UnicodeDecodeError as e:
+            raise Exception(
+                f'日志{e.encoding}解码失败，日志{e.start - e.end}处的{e.object}为非{e.encoding}编码的内容'
+            )
         except ValueError:
             raise ValueError('日志中出现了重复项，无法正常读取，请排除日志中实验编号重复的项！')
         except PermissionError:
