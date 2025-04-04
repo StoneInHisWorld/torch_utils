@@ -5,11 +5,8 @@ import pandas as pd
 import torch
 
 from config.init_cfg import init_log, init_settings, init_hps
-# from utils.experiment import Experiment
-# from utils.func import pytools
 from .experiment import Experiment
 from .func import pytools as ptools
-# from utils import Experiment, ptools
 
 
 class ControlPanel:
@@ -97,6 +94,8 @@ class ControlPanel:
                 yield self.__cur_exp
                 # 读取运行动态参数
                 self.__read_runtime_cfg()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 # 更新实验编号
                 self.exp_no += 1
 
