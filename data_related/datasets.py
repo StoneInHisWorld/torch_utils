@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import time
 from typing import Iterable, Callable
 
@@ -105,7 +106,8 @@ class DataSet(torch_ds):
         #     raise ValueError('标签集调用请使用Callable对象，已经停止对list对象的支持！'
         #                      '多个Callable对象请使用toolz.compose()组合成流水线')
 
-        if n_workers > 1:
+        # start_time = time.perf_counter()
+        # if n_workers > 1:
             # try:
             #     with Pool(2) as pool:
             #         ret1 = pool.apply_async(self.__apply_impl, features_calls, self._features, '特征集')
@@ -122,32 +124,50 @@ class DataSet(torch_ds):
             #         ['特征集预处理中……', '标签集预处理中……'],
             #         [(features_calls, (self._features, ), {}), (labels_calls, (self._labels, ), {})]
             #     )))
-                # iterable_multi_process(self._features, features_calls, False, n_worker, )
-                # iterable_multi_process(self._features, features_calls, False, n_worker, )
-                # fea_thread = Thread(features_calls, self._features)
-                # lb_thread = Thread(labels_calls, self._labels)
-            results = [torch.stack(ls) for ls in map(lambda args: multithreading_map(*args), [
-                [self._features, features_calls, False, n_workers, '\r特征集预处理中……'],
-                [self._labels, labels_calls, False, n_workers, '\r标签集预处理中……']
-            ])]
-        else:
-            results = list(map(lambda args: self.__apply_impl(*args), zip(
-                [features_calls, labels_calls], [self._features, self._labels], ['特征集', '标签集']
-            )))
+            # iterable_multi_process(self._features, features_calls, False, n_worker, )
+            # iterable_multi_process(self._features, features_calls, False, n_worker, )
+            # fea_thread = Thread(features_calls, self._features)
+            # lb_thread = Thread(labels_calls, self._labels)
 
-        self._features, self._labels = results
-
-    def __apply_impl(self, *args):
-        calls, data, which_data = args
-        if isinstance(calls, Callable):
-            print(f'\r{which_data}预处理中……', end="", flush=True)
-            start_time = time.perf_counter()
-            result = calls(data)
-            print(f'\r{which_data}预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
+            # results = [torch.stack(ls) for ls in map(lambda args: multithreading_map(*args), [
+            #     [self._features, features_calls, False, n_workers, '\r特征集预处理中……'],
+            #     [self._labels, labels_calls, False, n_workers, '\r标签集预处理中……']
+            # ])]
+        #     # 进行多线程预处理
+        #     with ThreadPoolExecutor(n_workers) as pool:
+        #         fea_ret = pool.map(features_calls, self._features)
+        #         lb_ret = pool.map(labels_calls, self._labels)
+        # else:
+        #     fea_ret = map(features_calls, self._features)
+        #     lb_ret = map(labels_calls, self._labels)
+        # results = [
+        #     torch.stack(list(tqdm(task, total=length, position=0, leave=True,
+        #                           desc=f"\r正在对{which}进行预处理……", unit="个")))
+        #     for task, length, which in zip(
+        #         [fea_ret, lb_ret], [len(self._features), len(self._labels)], ['特征集', '标签集']
+        #     )
+        # ]
+        if n_workers > 1:
+            with ThreadPoolExecutor(n_workers) as pool:
+                f_ret = pool.submit(features_calls, self._features)
+                l_ret = pool.submit(labels_calls, self._labels)
+            self._features, self._labels = f_ret.result(), l_ret.result()
         else:
-            raise ValueError(f'{which_data}调用请使用Callable对象，已经停止对list对象的支持！'
-                             '多个Callable对象请使用toolz.compose()组合成流水线')
-        return result
+            self._features, self._labels = features_calls(self._features), labels_calls(self._labels)
+        # print(f'\r预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
+        # self._features, self._labels = results
+
+    # def __apply_impl(self, *args):
+    #     calls, data, which_data = args
+    #     if isinstance(calls, Callable):
+    #         print(f'\r{which_data}预处理中……', end="", flush=True)
+    #         start_time = time.perf_counter()
+    #         result = calls(data)
+    #         print(f'\r{which_data}预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
+    #     else:
+    #         raise ValueError(f'{which_data}调用请使用Callable对象，已经停止对list对象的支持！'
+    #                          '多个Callable对象请使用toolz.compose()组合成流水线')
+    #     return result
 
     def to_loader(self, batch_size: int = None, shuffle=True,
                   sampler: Iterable = None, preprocess: bool = True,
@@ -212,7 +232,9 @@ class DataSet(torch_ds):
         #     ncols=80
         # )
         # print(desc)
+        start_time = time.perf_counter()
         self.apply(self.fea_preprocesses, self.lb_preprocesses, n_workers)
+        print(f'\r预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
         # self.apply(self.fea_preprocesses, self.lb_preprocesses, pbar)
 
     @property
