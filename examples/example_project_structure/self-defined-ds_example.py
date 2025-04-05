@@ -1,69 +1,104 @@
+import functools
 import sys
-from typing import Iterable, Any, Sized
+from typing import Any, Generator
 
+import toolz
 import torch
-from PIL.Image import Image
 
 sys.path.append('where/you/put/torch_utils')
 
 from data_related.selfdefined_ds import SelfDefinedDataSet
 
+
 """此文件用于定义存储接触数据集，读取源数据"""
 
 
+# TODO：自定义数据集
 class TheNameOfYourDS(SelfDefinedDataSet):
-    """TODO：自定义数据集"""
 
-    def _check_path(self, root: str, which: str) -> None:
-        """检查数据集路径是否正确，并生成特征集和标签集路径。
-        TODO：此处编写数据集路径检查逻辑
-        需要为self._train_fd, self._train_ld, self._test_fd, self._test_ld赋值
+    # TODO： 此处编写数据集路径检查逻辑
+    def _check_path(self, root: str, which: str) -> [str, str, str, str]:
+        """检查数据集路径是否正确，并生成和返回特征集和标签集路径
+
         :param root: 数据集所在根目录。
         :param which: 数据集名字。
-        :return: None
+        :return: 训练特征集目录，训练标签集目录，测试特征集目录，测试标签集目录
         """
-        self._train_fd, self._train_ld = ..., ...
-        self._test_fd, self._test_ld = ..., ...
+        train_fd = ...
+        train_ld = ...
+        test_fd = ...
+        test_ld = ...
+        return train_fd, train_ld, test_fd, test_ld
 
-    @staticmethod
-    def _get_fea_index(features, root) -> None:
+    def _get_fea_index(self, root) -> list:
         """读取特征集索引
+        本函数需要通过root来判断读取的是训练集还是测试集，同时root中需要传递数据集的存放位置
 
-        :param features: 存储特征索引指针
         :param root: 特征集路径
-        :return: None
+        :return: 特征索引集
         """
-        ...
+        fea_indices = []
+        return fea_indices
 
-    @staticmethod
-    def _get_lb_index(labels, root) -> None:
-        """读取压缩包中的标签集索引
+    def _get_lb_index(self, root) -> list:
+        """读取标签集索引
+        本函数需要通过root来判断读取的是训练集还是测试集，同时root中需要传递数据集的存放位置
 
-        :param labels: 存储标签索引指针
         :param root: 标签集路径
-        :return: None
+        :return: 标签索引集
         """
-        ...
+        lb_indices = []
+        return lb_indices
 
-    @staticmethod
-    def read_fea_fn(indexes: Iterable and Sized, n_worker: int = 1) -> Iterable:
-        """加载特征集数据所用方法
+    def _get_fea_reader(self) -> Generator:
+        """根据根目录下的特征集索引进行存储访问的数据读取器
 
-        :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
-        :param indexes: 加载特征集数据所用索引
-        :return: 读取到的特征集数据
+        读取器为可调用对象，参数为单个索引值，如：fea = reader(index)
+        为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，请通过yield的方式返回读取器。编程示例如下：
+
+        ```
+        def _get_fea_reader(self):
+            # 获取.tar数据集资源
+            tfile = tarfile.open(self.tarfile_name, 'r')
+            # 提供数据读取器
+            yield toolz.compose(*reversed([
+                tfile.extractfile,
+                functools.partial(read_img, mode=self.fea_mode),
+            ]))
+            # 进行资源回收
+            tfile.close()
+        ```
+
+        :return: 数据读取器生成器
         """
-        ...
+        reader = functools.partial()
+        yield reader
+        del reader
 
-    @staticmethod
-    def read_lb_fn(indexes: Iterable and Sized, n_worker: int = 1) -> Iterable:
-        """加载标签集数据批所用方法
+    def _get_lb_reader(self) -> Generator:
+        """根据根目录下的标签集索引进行存储访问的数据读取器
 
-        :param n_worker: 使用的处理机数目，若>1，则开启多线程处理
-        :param indexes: 加载标签集数据所用索引
-        :return: 读取到的标签集数据
+        读取器为可调用对象，参数为单个索引值，如：lb = reader(index)
+        为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，请通过yield的方式返回读取器。编程示例如下：
+
+        ```
+        def _get_lb_reader(self):
+            # 获取.tar数据集资源
+            tfile = tarfile.open(self.tarfile_name, 'r')
+            # 提供数据读取器
+            yield toolz.compose(*reversed([
+                tfile.extractfile,
+                functools.partial(read_img, mode=self.fea_mode),
+            ]))
+            # 进行资源回收
+            tfile.close()
+        ```
+
+        :return: 数据读取器生成器
         """
-        ...
+        reader = functools.partial()
+        yield reader
+        del reader
 
     @staticmethod
     def get_criterion_a():
@@ -71,7 +106,7 @@ class TheNameOfYourDS(SelfDefinedDataSet):
 
         :return: 评价指标计算函数列表
         """
-        return [...]
+        return [torch.nn.MSELoss()]
 
     @staticmethod
     def wrap_fn(inputs: torch.Tensor,
@@ -93,18 +128,9 @@ class TheNameOfYourDS(SelfDefinedDataSet):
         """
         ...
 
-    @staticmethod
-    def save_fn(result: Iterable[Image], root: str) -> None:
-        """输出结果存储函数
-
-        :param result: 输出结果图片批次
-        :param root: 输出结果存储路径
-        """
-        ...
-
-    def __default_preprocesses(self):
-        """默认数据集预处理程序。
-        注意：此程序均为本地程序，不可被序列化（pickling）！
+    def TheNameOfYourModel_preprocesses(self) -> None:
+        """数据集预处理程序，请在方法名中替换对应模型的类名，
+        在使用该模型进行训练时，SelfDefinedDataSet.set_preprocess()会将调用本函数，从而完成预处理程序的赋值
 
         需要实现四个列表的填充：
         1. self.lbIndex_preprocesses：标签索引集预处理程序列表
@@ -115,4 +141,14 @@ class TheNameOfYourDS(SelfDefinedDataSet):
 
         :return: None
         """
-        ...
+        # 设置数据索引集预处理程序
+        # 每个预处理程序都需要能同时处理单个数据或者数据集，以便适应单例预处理和批量预处理
+        self.feaIndex_preprocesses = toolz.compose(*reversed([
+        ]))
+        self.lbIndex_preprocesses = toolz.compose(*reversed([
+        ]))
+        # 设置数据集预处理程序
+        self.fea_preprocesses = toolz.compose(*reversed([
+        ]))
+        self.lb_preprocesses = toolz.compose(*reversed([
+        ]))
