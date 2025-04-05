@@ -338,24 +338,24 @@ def extract_and_cat_holes(images: np.ndarray,
     return whiteboards
 
 
-def mean_LI_of_holes(images: np.ndarray,
-                     hole_poses: List[Tuple[int, int]],
-                     hole_sizes: List[int]):
-    # 检查越界问题
-    assert np.max(np.array(hole_poses)[:, 0]) < images.shape[
-        -2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
-    assert np.max(np.array(hole_poses)[:, 1]) < images.shape[
-        -1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
-    for (x, y), size in zip(hole_poses, hole_sizes):
-        images[:, :, x: x + size, y: y + size] = np.mean(
-            images[:, :, x: x + size, y: y + size], axis=(2, 3), keepdims=True
-        )
-    return images
+# def mean_LI_of_holes(images: np.ndarray,
+#                      hole_poses: List[Tuple[int, int]],
+#                      hole_sizes: List[int]):
+#     # 检查越界问题
+#     assert np.max(np.array(hole_poses)[:, 0]) < images.shape[
+#         -2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
+#     assert np.max(np.array(hole_poses)[:, 1]) < images.shape[
+#         -1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
+#     for (x, y), size in zip(hole_poses, hole_sizes):
+#         images[:, :, x: x + size, y: y + size] = np.mean(
+#             images[:, :, x: x + size, y: y + size], axis=(2, 3), keepdims=True
+#         )
+#     return images
 
 
 def get_mean_LI_of_holes(images: np.ndarray,
                          hole_poses: List[Tuple[int, int]],
-                         hole_sizes: List[int]):
+                         hole_sizes: List[int] or List[Tuple[int, int]]):
     """计算图片序列中，每个指定挖孔区域的平均光强
 
     :param images: 三维图片序列，每张图片要求维度信息为（通道数，长度，宽度）
@@ -363,6 +363,7 @@ def get_mean_LI_of_holes(images: np.ndarray,
     :param hole_sizes: 每个挖孔位置的挖孔大小，要求len(hole_sizes) == len(hole_poses)。
     :return: 光强序列，序列中的每个元素为挖孔所得光强序列。
     """
+    assert isinstance(images, np.ndarray), f'输入的图片序列必须为numpy数组！'
     # 检查越界问题
     assert np.max(np.array(hole_poses)[:, 0]) < images.shape[
         -2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
@@ -370,16 +371,44 @@ def get_mean_LI_of_holes(images: np.ndarray,
         -1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
     assert len(hole_poses) == len(hole_sizes), \
         f'挖孔位置需要和挖孔大小一一对应，提供了{len(hole_poses)}个位置但只收到了{len(hole_sizes)}个大小要求。'
-    mean_LIs_groups = []
-    if len(images.shape) <= 3:
-        # 如果只有一张图片
-        images = [images]
-    for image in images:
+
+    def __dig_holes(image):
+        """挖孔函数"""
         mean_LIs = []
-        for (x, y), size in zip(hole_poses, hole_sizes):
-            mean_LIs.append(np.mean(image[:, x: x + size, y: y + size]))
-        mean_LIs_groups.append(mean_LIs)
-    return mean_LIs_groups
+        if len(image.shape) <= 2:
+            # 图片缺少通道维
+            for (x, y), size in zip(hole_poses, hole_sizes):
+                if hasattr(size, '__iter__'):
+                    # 指定了孔径的长宽
+                    mean_LIs.append(np.mean(image[x: x + size[0], y: y + size[1]]))
+                else:
+                    # 指定了孔径的边长
+                    mean_LIs.append(np.mean(image[x: x + size, y: y + size]))
+        elif len(image.shape) == 3:
+            # 图片有通道维度
+            for (x, y), size in zip(hole_poses, hole_sizes):
+                if hasattr(size, '__iter__'):
+                    # 指定了孔径的长宽
+                    mean_LIs.append(np.mean(image[:, x: x + size[0], y: y + size[1]]))
+                else:
+                    # 指定了孔径的边长
+                    mean_LIs.append(np.mean(image[:, x: x + size, y: y + size]))
+        else:
+            raise NotImplementedError(f'暂未支持的图片维度{images.shape}，请检查图片数据！')
+        return mean_LIs
+
+    # for image in images:
+    #     # mean_LIs = []
+    #     # for (x, y), size in zip(hole_poses, hole_sizes):
+    #     #     if hasattr(size, '__iter__'):
+    #     #         # 指定了孔径的长宽
+    #     #         mean_LIs.append(np.mean(image[:, x: x + size[0], y: y + size[1]]))
+    #     #     else:
+    #     #         # 指定了孔径的边长
+    #     #         mean_LIs.append(np.mean(image[:, x: x + size, y: y + size]))
+    #     # mean_LIs_groups.append(mean_LIs)
+    #     mean_LIs_groups.append(__dig_holes(image))
+    return [__dig_holes(image) for image in images]
 
 
 def blend(required_shapes: List, group_of_values: List,
