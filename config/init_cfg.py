@@ -9,8 +9,6 @@ def init_log(path):
     """
     log = pd.DataFrame({'exp_no': []})
     log.to_csv(path, encoding='utf-8', index=False)
-    # with open(path, 'w', encoding='utf-8') as log:
-    #     log.write("exp_no\n1\n")
 
 
 def init_settings(path):
@@ -20,7 +18,7 @@ def init_settings(path):
     :param path: 配置文件存储路径
     """
     default_settings = {
-        "data_portion": 1,
+        "data_portion": 0.1,
         "train_portion": 0.8,
         "random_seed": 42,
         "plot_mute": True,
@@ -30,7 +28,7 @@ def init_settings(path):
         "device": "cpu",
         "lazy": False,
         "shuffle": True,
-        "n_workers": 1,
+        "n_workers": 4,
         "pin_memory": False,
         "cuda_memrecord": False,
         "prefetch_factor": 2,
@@ -43,9 +41,9 @@ def init_settings(path):
         "with_checkpoint": False,
         "f_req_sha": (256, 256),
         "l_req_sha": (256, 256),
-        "which_dataset": ".",
-        "log_root": "./log",
-        "dataset_root": "."
+        "which_dataset": "which dataset?",
+        "log_root": "../../log",
+        "dataset_root": "where you put your datasets"
     }
 
     with open(path, 'w', encoding='utf-8') as f:
