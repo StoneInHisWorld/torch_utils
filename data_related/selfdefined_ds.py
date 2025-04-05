@@ -1,21 +1,19 @@
 import functools
-import multiprocessing
-import time
 from abc import abstractmethod
-from typing import Iterable, Tuple, Sized, List, Callable, Any, Generator
+from concurrent.futures import ThreadPoolExecutor
+from typing import Iterable, Sized, List, Callable, Any, Generator
 
 import toolz
 import torch
 from tqdm import tqdm
 
-from utils import itools, tstools, ControlPanel
 from data_related.datasets import LazyDataSet, DataSet
 from data_related.ds_operation import data_slicer
+from utils import itools, tstools, ControlPanel
 from utils.thread import Thread
 
 
 class SelfDefinedDataSet:
-
     # 数据基本信息
     fea_channel = 1
     lb_channel = 1
@@ -62,10 +60,6 @@ class SelfDefinedDataSet:
         # 加载训练集
         self.is_train = is_train
         # 进行数据集路径检查
-        # self._train_fd = None
-        # self._train_ld = None
-        # self._test_fd = None
-        # self._test_ld = None
         directories = self._check_path(where, which)
         indexes = ()
         if is_train:
@@ -77,7 +71,7 @@ class SelfDefinedDataSet:
             if self._f_lazy:
                 print('对于训练集，实行懒加载特征数据集')
             else:
-                indexes = (self._train_f, )
+                indexes = (self._train_f,)
             if self._l_lazy:
                 print('对于训练集，实行懒加载标签数据集')
             else:
@@ -88,20 +82,20 @@ class SelfDefinedDataSet:
         # 加载测试集
         print(f"{self.__class__.__name__}正在获取测试索引……")
         self._test_f, self._test_l = [fn(d) for fn, d in zip([self._get_fea_index, self._get_lb_index], directories)]
-        # self._test_f, self._test_l = self._get_fea_index(self._test_fd), self._get_lb_index(self._test_ld)
         self._test_f, self._test_l = data_slicer(data_portion, shuffle, self._test_f, self._test_l)
         indexes = ()
         if self._f_lazy:
             print('对于测试集，实行懒加载特征数据集')
         else:
-            indexes = (self._test_f, )
+            indexes = (self._test_f,)
         if self._l_lazy:
             print('对于测试集，实行懒加载标签数据集')
         else:
             indexes = (*indexes, self._test_l)
             self._test_f, self._test_l = self.read_fn(*indexes, self.n_workers)
         # 加载结果报告
-        assert len(self._test_f) == len(self._test_l), f'测试集的特征集和标签集长度{len(self._test_f)}&{len(self._test_l)}不一致'
+        assert len(self._test_f) == len(
+            self._test_l), f'测试集的特征集和标签集长度{len(self._test_f)}&{len(self._test_l)}不一致'
         print("\n************数据集读取完毕*******************")
         print(f'数据集名称为{which}')
         print(f'数据集切片大小为{data_portion}')
@@ -123,10 +117,9 @@ class SelfDefinedDataSet:
             self.__default_preprocesses()
         # 获取结果包装程序
         self._set_wrap_fn(module)
-        # del self._train_fd, self._train_ld, self._test_fd, self._test_ld
 
     @abstractmethod
-    def _check_path(self, root: str, which: str) -> list[str]:
+    def _check_path(self, root: str, which: str) -> [str, str, str, str]:
         """检查数据集路径是否正确，否则直接中断程序。
 
         :param root: 数据集源目录。
@@ -150,29 +143,6 @@ class SelfDefinedDataSet:
         :param mute: 是否进行静默加载
         :return: 特征数据批，标签数据批
         """
-        # fea_pbar = tqdm(
-        #     total=len(fea_index_or_d), unit='张', position=0,
-        #     desc=f"读取特征集图片中……", mininterval=1, leave=True, ncols=80
-        # ) if not mute else None
-        # read_fea_thread = Thread(
-        #     self.read_fea_fn, fea_index_or_d, n_workers // 2, fea_pbar
-        # )
-        # read_fea_thread.start()
-        # lb_pbar = tqdm(
-        #     total=len(lb_index_or_d), unit='张', position=0,
-        #     desc=f"读取标签集图片中……", mininterval=1, leave=True, ncols=80
-        # ) if not mute else None
-        # read_lb_thread = Thread(
-        #     self.read_lb_fn, lb_index_or_d, n_workers // 2, lb_pbar
-        # )
-        # read_lb_thread.start()
-        # if read_fea_thread.is_alive():
-        #     read_fea_thread.join()
-        # if read_lb_thread.is_alive():
-        #     read_lb_thread.join()
-        # fea_index_or_d = read_fea_thread.get_result()
-        # lb_index_or_d = read_lb_thread.get_result()
-        # return fea_index_or_d, lb_index_or_d
 
         def __read_impl(reader, indexes, preprocesses, n_workers, mute,
                         which='特征集'):
@@ -183,67 +153,83 @@ class SelfDefinedDataSet:
                 )
                 # 将索引转化为压缩包内容，并升维以适应数据集级预处理程序
                 indexes = [[index] for index in indexes]
-            if int(n_workers) > 1:
-                # 多进程读取
-                with multiprocessing.Pool(n_workers) as p:
-                    ret = p.map_async(reader, indexes)
-                    start_time = time.perf_counter()
-                    p.close()
-                    i = 0
-                    if not mute:
-                        while not ret.ready():
-                            print(f'\r{which}读取中，进行了{i}秒……', end='', flush=True)
-                            time.sleep(1)
-                            i += 1
-                        print(f'\r{which}读取完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
-                    return ret.get()
-            else:
-                # 单进程读取
-                if mute:
-                    return list(map(reader, indexes))
+            # 进行多线程读取
+            with ThreadPoolExecutor(n_workers) as pool:
+                ret = pool.map(reader, indexes)
+                if not mute:
+                    return list(tqdm(ret, total=len(indexes), position=0, leave=True,
+                                     desc=f"\r正在读取{which}……", unit="个"))
                 else:
-                    return list(tqdm(
-                        map(reader, indexes), total=len(indexes),
-                        unit='张', desc=f'读取{which}图片中……', position=0,
-                        mininterval=1, leave=True, ncols=80
-                    ))
+                    return list(ret)
+
+            # if int(n_workers) > 1:
+            #     # 多进程读取
+            #     with multiprocessing.Pool(n_workers) as p:
+            #         ret = p.map_async(reader, indexes)
+            #         start_time = time.perf_counter()
+            #         p.close()
+            #         i = 0
+            #         if not mute:
+            #             while not ret.ready():
+            #                 print(f'\r{which}读取中，进行了{i}秒……', end='', flush=True)
+            #                 time.sleep(1)
+            #                 i += 1
+            #             print(f'\r{which}读取完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
+            #         return ret.get()
+            # else:
+            #     # 单进程读取
+            #     if mute:
+            #         return list(map(reader, indexes))
+            #     else:
+            #         return list(tqdm(
+            #             map(reader, indexes), total=len(indexes),
+            #             unit='张', desc=f'读取{which}图片中……', position=0,
+            #             mininterval=1, leave=True, ncols=80
+            #         ))
 
         threadpool = []
+        ret = []
+        # 读取特征集
         if fea_index_or_d:
-            # if self.fea_preprocesses:
-            #     n_request = len(fea_index_or_d)
-            # else:
-            #     n_request = 1
-            # fea_reader = next(self._get_fea_reader(n_request))
             fea_reader = next(self._get_fea_reader())
-            read_fea_thread = Thread(
-                __read_impl,
-                fea_reader, fea_index_or_d, self.fea_preprocesses,
-                n_workers // 2, mute
-            )
-            read_fea_thread.start()
-            threadpool.append(read_fea_thread)
+            # 用户只提供单个处理机进行读取
+            if n_workers // 2 < 1:
+                ret.append(
+                    __read_impl(fea_reader, fea_index_or_d, self.fea_preprocesses,
+                                1, mute, "特征集")
+                )
+            # 用户提供多个处理机进行读取
+            else:
+                read_fea_thread = Thread(
+                    __read_impl,
+                    fea_reader, fea_index_or_d, self.fea_preprocesses,
+                    n_workers // 2, mute
+                )
+                read_fea_thread.start()
+                threadpool.append(read_fea_thread)
+        # 读取标签集
         if lb_index_or_d:
-            # if self.lb_preprocesses:
-            #     n_request = len(fea_index_or_d)
-            # else:
-            #     n_request = 1
-            # lb_reader = next(self._get_lb_reader(n_request))
             lb_reader = next(self._get_lb_reader())
-            read_lb_thread = Thread(
-                __read_impl,
-                lb_reader, lb_index_or_d, self.lb_preprocesses,
-                n_workers // 2, mute, "标签集"
-            )
-            read_lb_thread.start()
-            threadpool.append(read_lb_thread)
+            # 用户只提供单个处理机进行读取
+            if n_workers // 2 < 1:
+                ret.append(
+                    __read_impl(lb_reader, lb_index_or_d, self.lb_preprocesses,
+                                1, mute, "标签集")
+                )
+            # 用户提供多个处理机进行读取
+            else:
+                read_lb_thread = Thread(
+                    __read_impl,
+                    lb_reader, lb_index_or_d, self.lb_preprocesses,
+                    n_workers // 2, mute, "标签集"
+                )
+                read_lb_thread.start()
+                threadpool.append(read_lb_thread)
         for thread in threadpool:
             if thread.is_alive():
                 thread.join()
-        return [
-            None if not fea_index_or_d else read_fea_thread.get_result(),
-            None if not lb_index_or_d else read_lb_thread.get_result(),
-        ]
+            ret.append(thread.get_result())
+        return ret
 
     @abstractmethod
     def _get_fea_reader(self) -> Generator:
@@ -293,9 +279,8 @@ class SelfDefinedDataSet:
         """
         pass
 
-    @staticmethod
     @abstractmethod
-    def _get_fea_index(root) -> list:
+    def _get_fea_index(self, root) -> list:
         """读取根目录下的特征集索引
 
         :param root: 数据集根目录
@@ -303,9 +288,8 @@ class SelfDefinedDataSet:
         """
         pass
 
-    @staticmethod
     @abstractmethod
-    def _get_lb_index(root) -> list:
+    def _get_lb_index(self, root) -> list:
         """读取根目录下的标签集索引
 
         :param root: 数据集根目录
@@ -385,7 +369,7 @@ class SelfDefinedDataSet:
         if self.bulk_preprocess:
             for ds, desc in zip(gen_datasets, [train_preprocess_desc, test_preprocess_desc]):
                 print(desc, flush=True)
-                ds.preprocess()
+                ds.preprocess(n_workers=self.n_workers)
             # if self.is_train:
             #     train_ds.preprocess(train_preprocess_desc)
             # test_ds.preprocess(test_preprocess_desc)
@@ -417,7 +401,7 @@ class SelfDefinedDataSet:
         else:
             self.__default_preprocesses()
 
-    def __default_preprocesses(self):
+    def __default_preprocesses(self) -> None:
         """默认数据集预处理程序。
         注意：此程序均为本地程序，不可被序列化（pickling）！
 
@@ -469,8 +453,19 @@ class SelfDefinedDataSet:
         )
         return ret
 
-    def __len__(self):
+    @property
+    def train_len(self):
         """数据集长度
         :return: 训练集长度，测试集长度
         """
-        return len(self._train_f), len(self._test_f)
+        if self.is_train:
+            return len(self._train_f)
+        else:
+            return 0
+
+    @property
+    def test_len(self):
+        """数据集长度
+        :return: 测试集长度
+        """
+        return len(self._test_f)
