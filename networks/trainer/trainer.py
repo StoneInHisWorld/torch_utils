@@ -103,7 +103,7 @@ class Trainer:
                     train_fn, train_args = self.__train, (train_iter,)
             else:
                 # 启用多进程训练
-                train_fn, train_args = self.__train_with_subprocesses, (train_iter, valid_iter)
+                train_fn, train_args = self.__train_with_multithreading, (train_iter, valid_iter)
         # 设置进度条
         pbar = tqdm(
             total=pbar_len, unit='批', position=0,
@@ -276,6 +276,7 @@ class Trainer:
         lr_names = net.lr_names
         history = History(*(criteria_names + loss_names + lr_names))
         # 世代迭代主循环
+
         for epoch in range(n_epochs):
             pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中……')
             history.add(
@@ -344,7 +345,7 @@ class Trainer:
             # 计算训练批次数
             pbar.total = k * n_epochs * (len(train_iter) + len(valid_iter))
             if ptools.is_multiprocessing(n_workers):
-                history = self.__train_with_subprocesses(train_iter, valid_iter)
+                history = self.__train_with_multithreading(train_iter, valid_iter)
             else:
                 history = self.__train_and_valid(train_iter, valid_iter)
             if k_fold_history is None:
@@ -419,23 +420,18 @@ class Trainer:
         i = 0
         for i, computer in enumerate(criterion_a):
             log['valid_' + ptools.get_computer_name(computer)] = metric[i] / metric[-1]
-            # try:
-            #     log['valid_' + computer.__name__] = metric[i] / metric[-1]
-            # except AttributeError:
-            #     log['valid_' + computer.__class__.__name__] = metric[i] / metric[-1]
         i += 1
         for j, loss_name in enumerate(l_names):
             log['valid_' + loss_name] = metric[i + j] / metric[-1]
         return log
 
-    def __train_with_subprocesses(self, train_iter, valid_iter=None) -> History:
+    def __train_with_multithreading(self, train_iter, valid_iter=None) -> History:
         """多进程训练实现
         :param train_iter: 训练数据迭代器
         :param valid_iter: 验证数据迭代器
         :param pbar: 进度条
         :return: 训练历史记录
         """
-        raise NotImplementedError('多线程运行提供的历史记录会有缺失，在修复之前请不要使用！')
         # 提取训练器参数
         pbar = self.pbar
         n_epochs = self.hps['epochs']
@@ -523,95 +519,6 @@ class Trainer:
             raise RuntimeError('历史记录对象丢失！')
         return history
 
-    # def __train_with_subprocesses(self, train_iter, valid_iter=None) -> History:
-    #     """多进程训练实现
-    #     :param train_iter: 训练数据迭代器
-    #     :param valid_iter: 验证数据迭代器
-    #     :param pbar: 进度条
-    #     :return: 训练历史记录
-    #     """
-    #     # 提取训练器参数
-    #     pbar = self.pbar
-    #     net = self.module
-    #     criterion_a = self.criterion_a
-    #     n_epochs = self.hps['epochs']
-    #     # optimizer_s = net.optimizer_s
-    #     # scheduler_s = net.scheduler_s
-    #     # 损失项
-    #     loss_names = [f'train_{item}' for item in net.loss_names]
-    #     # 评价项
-    #     criteria_names = [f'train_{get_computer_name(criterion)}' for criterion in criterion_a]
-    #     # 学习率项
-    #     lr_names = net.lr_names
-    #     # # 设置历史记录对象
-    #     # history = History(*(criteria_names + loss_names + lr_names))
-    #     history = None
-    #     # torch.ops.torch_use_cuda_dsa(True)
-    #
-    #     pbar.set_description('\r正在创建队列和事件对象……')
-    #     # 使用进程池处理训练进程和记录进程
-    #     pbar_Q = PQueue()
-    #     log_Q = PQueue()
-    #     data_Q = PQueue()
-    #     data_end_env = PEvent()
-    #     # 将无法pickle的对象进行特殊序列化
-    #     pbar.set_description('\r正在进行特殊序列化……')
-    #     train_iter = dill.dumps(train_iter)
-    #     del self.pbar
-    #     # 生成子进程
-    #     # print(multiprocessing.get_start_method())
-    #     # multiprocessing.set_start_method('forkserver')
-    #     data_subprocess = Process(
-    #         target=data_iter_subpro_impl,
-    #         args=(n_epochs, train_iter, data_Q, data_end_env)
-    #     )
-    #     train_subprocess = Process(
-    #         target=train_subprocess_impl,
-    #         args=(self, pbar_Q, log_Q, data_Q, data_end_env)
-    #     )
-    #     if valid_iter is not None:
-    #         valid_iter = dill.dumps(valid_iter)
-    #         log_subprocess = Process(
-    #             target=tv_log_subprocess_impl,
-    #             args=(self, valid_iter, log_Q, pbar_Q, data_end_env)
-    #         )
-    #     else:
-    #         raise NotImplementedError('暂未编写单训练过程')
-    #     process_pool = [data_subprocess, train_subprocess, log_subprocess]
-    #     # 实时监控各项任务的执行情况
-    #     try:
-    #         pbar.set_description('\r正在开启子进程……')
-    #         for p in process_pool:
-    #             p.start()
-    #         while True:
-    #             item = pbar_Q.get()
-    #             if item is None:
-    #                 break
-    #             elif isinstance(item, Exception):
-    #                 raise InterruptedError('训练过程中某处触发了异常，请根据上条Trackback信息进行排查！')
-    #             elif isinstance(item, int):
-    #                 pbar.update(item)
-    #             elif isinstance(item, str):
-    #                 pbar.set_description(item)
-    #             elif isinstance(item, History):
-    #                 history = item
-    #                 break
-    #             else:
-    #                 raise ValueError(f'不识别的信号{item}')
-    #         for p in process_pool:
-    #             p.join()
-    #     except Exception as e:
-    #         for p in process_pool:
-    #             if p.is_alive():
-    #                 p.terminate()
-    #         raise e
-    #     # pbar.close()
-    #     # print(f'进度条队列消耗完毕：{pbar_Q.empty()}')
-    #     self.pbar = pbar
-    #     if history is None:
-    #         raise RuntimeError('历史记录对象丢失！')
-    #     return history
-
     def train_with_profiler(self, data_iter, log_path):
         # 提取训练器参数
         k = self.hps['k']
@@ -635,89 +542,3 @@ class Trainer:
             desc=f'正在进行训练准备……', mininterval=1, ncols=100
         )
         profiling_impl(n_epochs, os, log_path, self, data_iter)
-
-    # def __deal_with_hook(self, net: Iterable[nn.Module]):
-    #     self.__last_forward_output, self.__last_backward_data = {}, {}
-    #     forward_handlers = []
-    #     backward_handlers = []
-    #
-    #     def __hook_forward_fn(module, input, output):
-    #         if self.hook_mute:
-    #             try:
-    #                 self.__last_forward_output.pop(module)
-    #             except Exception as _:
-    #                 pass
-    #         else:
-    #             print(f'{module.__class__.__name__}前传')
-    #             try:
-    #                 last_input, last_output = self.__last_forward_output.pop(module)
-    #             except Exception as _:
-    #                 pass
-    #             else:
-    #                 flag = True
-    #                 for li, i in zip(last_input, input):
-    #                     flag = torch.equal(li, i) and flag
-    #                 print(f'输入相等: {flag}')
-    #                 flag = True
-    #                 for lo, o in zip(last_output, output):
-    #                     flag = torch.equal(lo, o) and flag
-    #                 print(f'输出相等: {flag}')
-    #                 print('-' * 20)
-    #         # 记录模块的梯度
-    #         self.__last_forward_output[module] = input, output
-    #         return output
-    #
-    #     def __hook_backward_fn(module, grad_input, grad_output):
-    #         if self.hook_mute:
-    #             try:
-    #                 last_input, last_output = self.__last_backward_data.pop(module)
-    #             except Exception as _:
-    #                 pass
-    #             else:
-    #                 for li, i in zip(last_input, grad_input):
-    #                     if li is None or i is None:
-    #                         print(f'{module.__class__.__name__}反向传播中，{li}或{i}出现了None梯度')
-    #                 for lo, o in zip(last_output, grad_output):
-    #                     if lo is None or o is None:
-    #                         print(f'{lo}或{o}出现了None梯度')
-    #         else:
-    #             print(f'{module.__class__.__name__}反向传播')
-    #             try:
-    #                 last_input, last_output = self.__last_backward_data.pop(module)
-    #             except Exception as _:
-    #                 pass
-    #             else:
-    #                 flag = True
-    #                 for li, i in zip(last_input, grad_input):
-    #                     if li is None or i is None:
-    #                         print(f'{module.__class__.__name__}反向传播中，{li}或{i}出现了None梯度')
-    #                     else:
-    #                         flag = torch.equal(li, i) and flag
-    #                         print(f'输入梯度相等: {flag}')
-    #                 flag = True
-    #                 for lo, o in zip(last_output, grad_output):
-    #                     if lo is None or o is None:
-    #                         print(f'{lo}或{o}中出现了None梯度')
-    #                     else:
-    #                         flag = torch.equal(lo, o) and flag
-    #                         print(f'输出梯度相等：{flag}')
-    #                 print('-' * 20)
-    #         self.__last_backward_data[module] = grad_input, grad_output
-    #
-    #     for m in net:
-    #         forward_handlers.append(m.register_forward_hook(hook=__hook_forward_fn))
-    #         backward_handlers.append(m.register_full_backward_hook(hook=__hook_backward_fn))
-    #     return forward_handlers, backward_handlers
-    #
-    # def hook(self, func):
-    #     @wraps(func)
-    #     def wrapper(*args, **kwargs):
-    #         if self.with_hook:
-    #             self.__f_handles, self.__b_handles = self.__deal_with_hook(self.module)
-    #         ret = func(*args, **kwargs)
-    #         if self.with_hook:
-    #             for handle in self.__f_handles + self.__b_handles:
-    #                 handle.remove()
-    #         return ret
-    #
-    #     return wrapper

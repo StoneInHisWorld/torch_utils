@@ -4,10 +4,9 @@ from typing import Iterable, Sized
 import numpy as np
 import torch
 import torchvision.transforms.functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader as DLoader
 
-import data_related.dataloader
-from data_related.dataloader import LazyDataLoader
+from data_related.dataloader import DataLoader, LazyDataLoader
 from data_related.datasets import DataSet, LazyDataSet
 
 
@@ -29,7 +28,7 @@ def k1_split_data(dataset: DataSet or LazyDataSet,
     ranger = (r for r in np.split(np.arange(data_len), (train_len,)) if len(r) > 0)
     return (
         [
-            DataLoader(
+            DLoader(
                 r, shuffle=shuffle,
                 collate_fn=lambda d: d[0]  # 避免让数据升维。每次只抽取一个数字
             )
@@ -38,10 +37,8 @@ def k1_split_data(dataset: DataSet or LazyDataSet,
     )
 
 
-def split_data(dataset: DataSet or LazyDataSet, hps, train=0.8, shuffle=True):
+def split_data(dataset: DataSet or LazyDataSet, k, train=0.8, shuffle=True):
     # 提取超参数
-    k = hps['k']
-    # batch_size = hps['batch_size']
     if k == 1:
         return k1_split_data(dataset, train, shuffle)
     elif k > 1:
@@ -89,19 +86,17 @@ def to_loader(dataset: DataSet or LazyDataSet,
     if transit_kwargs is None:
         transit_kwargs = {}
     if isinstance(dataset, LazyDataSet):
-        raise NotImplementedError('懒加载尚未完成编写！')
-        # # 懒加载需要保存有数据集预处理方法
-        # return LazyDataLoader(
-        #     dataset, transit_fn, batch_size,
-        #     shuffle=shuffle, sampler=sampler,  # 请注意，LazyDataSet提供的校正方法是针对索引集的，需要另外指定数据校正方法
-        #     **kwargs
-        # )
+        # 懒加载需要保存有数据集预处理方法
+        return LazyDataLoader(
+            dataset, transit_fn, transit_kwargs, batch_size,
+            dataset.i_cfn, bkg_gen, max_prefetch,
+            collate_fn=dataset.collate_fn, **kwargs
+        )
     elif isinstance(dataset, DataSet):
         dataset.pop_preprocesses()
-        return data_related.dataloader.DataLoader(
+        return DataLoader(
             dataset, transit_fn, transit_kwargs, batch_size,
-            max_prefetch=max_prefetch, bkg_gen=bkg_gen,
-            collate_fn=dataset.collate_fn, **kwargs
+            bkg_gen, max_prefetch, collate_fn=dataset.collate_fn, **kwargs
         )
 
 
@@ -114,7 +109,7 @@ def k_fold_split(dataset: DataSet or LazyDataSet, k: int = 10, shuffle: bool = T
     :return: DataLoader生成器，每次生成（训练集下标供给器，验证集下标生成器），生成k次
     """
     assert k > 1, f'k折验证需要k值大于1，而不是{k}'
-    print(f'\r正在进行{k}折数据集分割……', flush=True)
+    # print(f'\r正在进行{k}折数据集分割……', flush=True)
     data_len = len(dataset)
     fold_size = len(dataset) // k
     total_ranger = np.random.randint(0, data_len, (data_len,)) if shuffle else np.arange(data_len)
@@ -126,7 +121,7 @@ def k_fold_split(dataset: DataSet or LazyDataSet, k: int = 10, shuffle: bool = T
         train_range = np.concatenate((train_range1, train_range2), axis=0)
         del train_range1, train_range2
         yield [
-            DataLoader(ranger, shuffle=True, collate_fn=lambda d: d[0])
+            DLoader(ranger, shuffle=True, collate_fn=lambda d: d[0])
             for ranger in (train_range, valid_range)
         ]
 
