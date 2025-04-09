@@ -86,7 +86,7 @@ class Experiment:
         # 打印本次训练超参数
         for k, v in self.__hp.items():
             print(k + ': ' + str(v))
-        print(f'data_portion: {self.__runtime_cfg["data_portion"]}')
+        print(f'data_portion: {self.__runtime_cfg["ds_kwargs"]["data_portion"]}')
         print(
             '\r-----------------输入Ctrl+C即可终止本组超参数实验'
             '--------------------'
@@ -158,10 +158,10 @@ class Experiment:
         # 编辑日志条目
         self.add_logMsg(
             True, **log_msg,
-            data_portion=self.__runtime_cfg['data_portion'],
-            which_dataset=self.__runtime_cfg['which_dataset'],
-            f_req_sha=self.__runtime_cfg['f_req_sha'],
-            l_req_sha=self.__runtime_cfg['l_req_sha'],
+            data_portion=self.__runtime_cfg["ds_kwargs"]['data_portion'],
+            which_dataset=self.__runtime_cfg["ds_kwargs"]['which_dataset'],
+            f_req_sha=self.__runtime_cfg["ds_kwargs"]['f_req_sha'],
+            l_req_sha=self.__runtime_cfg["ds_kwargs"]['l_req_sha'],
         )
         if self.device != torch.device('cpu') and self.__runtime_cfg["cuda_memrecord"]:
             self.add_logMsg(
