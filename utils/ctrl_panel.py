@@ -1,4 +1,5 @@
 import json
+import jsonref
 import os.path
 
 import pandas as pd
@@ -7,6 +8,20 @@ import torch
 from config.init_cfg import init_log, init_settings, init_hps
 from .experiment import Experiment
 from .func import pytools as ptools
+
+from jsonref import JsonRef
+
+def resolve_jsonref(obj):
+    """用于处理JsonRef对象"""
+    if isinstance(obj, JsonRef):
+        return resolve_jsonref(obj.__subject__)  # 解引用
+    elif isinstance(obj, dict):
+        return {k: resolve_jsonref(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [resolve_jsonref(item) for item in obj]
+    else:
+        return obj
+
 
 
 class ControlPanel:
@@ -111,7 +126,8 @@ class ControlPanel:
     def __read_runtime_cfg(self):
         """读取运行配置并更新或者赋值"""
         with open(self.__rcp, 'r', encoding='utf-8') as config:
-            config_dict = json.load(config)
+            config_dict = jsonref.load(config, merge_props=True)
+            config_dict = resolve_jsonref(config_dict)
             if hasattr(self, 'cfg_dict'):
                 # 更新运行动态参数
                 assert config_dict.keys() == self.cfg_dict.keys(), '在运行期间，不允许添加新的运行设置参数！'
