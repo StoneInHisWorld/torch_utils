@@ -1,4 +1,3 @@
-import functools
 import warnings
 from abc import abstractmethod
 from concurrent.futures import ThreadPoolExecutor
@@ -12,7 +11,6 @@ from data_related import ds_operation as dso
 from data_related.datasets import LazyDataSet, DataSet
 from data_related.ds_operation import data_slicer
 from utils import itools, tstools, ControlPanel
-from utils.thread import Thread
 
 
 def default_transit_fn(batch, **kwargs):
@@ -123,7 +121,7 @@ class SelfDefinedDataSet:
         print("******************************************")
         # 获取特征集、标签集及其索引集的预处理程序
         if self.bulk_preprocess:
-            print('已选择批量预处理，将在调用to_dataset()时进行预处理')
+            print('已选择批量预处理，将在转化为数据迭代器时进行预处理')
             self.set_preprocess(module)
         else:
             # 整理读取和预处理过后的数据，并清空预处理程序

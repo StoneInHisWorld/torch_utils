@@ -1,4 +1,5 @@
 import threading
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 import math
 
@@ -441,7 +442,13 @@ class LazyDataLoader:
                 ))
             while check_futures(futures) or not batch_Q.empty():
                 # 检查线程池中的任务是否被中断
-                yield batch_Q.get()
+                try:
+                    yield batch_Q.get(timeout=5)
+                except queue.Empty:
+                    warnings.warn("数据队列始终为空，正在等待数据加载……", RuntimeWarning)
+                    print("请检查数据加载和预处理是否能够正常运行！")
+                        # if not check_futures(futures):
+                        #     raise RuntimeError("数据迭代器意外中断！")
         # threadPool = [Thread(index_fetcher), Thread(batch_processor, bp_n_workers)]
         # for thread in threadPool:
         #     thread.daemon = True  # 设置为守护线程
