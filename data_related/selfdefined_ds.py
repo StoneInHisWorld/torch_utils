@@ -386,7 +386,6 @@ class SelfDefinedDataSet:
     #     gen_datasets = []
     #     fl_pairs = [(self._train_f, self._train_l), (self._test_f, self._test_l)] if self.is_train \
     #         else [(self._test_f, self._test_l)]
-    #     # TODO：这里的懒加载数据集生成方式不支持特征集或标签集的单独懒加载模式
     #     if self._f_lazy or self._l_lazy:
     #         # 生成懒加载数据集
     #         gen_datasets += [

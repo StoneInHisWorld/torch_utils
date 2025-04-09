@@ -254,7 +254,6 @@ class LazyDataLoader:
     # return self.__loader
     # transit_fn = dill.loads(self.transit_fn)
 
-    # TODO: 无法pickle预处理程序
     # def __read_impl(i_batch):
     #     fea_s, lb_s = self.__read_fn(*i_batch, n_workers=self.n_workers, mute=True)
     #     batch = self.__fea_preprocesses(fea_s), self.__lb_preprocesses(lb_s)
@@ -302,7 +301,6 @@ class LazyDataLoader:
     # else:
     #     return unwrapped_generator
     # for fea_indexes, l_i in self.__index_loader:
-    #     # TODO：试图用多线程改进效率
     #     fea_s, lb_s = self.__read_fn(fea_indexes, l_i)
     #     raw_ds = DataSet(fea_s, lb_s)
     #     # 进行预处理
