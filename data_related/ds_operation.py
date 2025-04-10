@@ -93,7 +93,10 @@ def to_loader(dataset: DataSet or LazyDataSet,
             collate_fn=dataset.collate_fn, **kwargs
         )
     elif isinstance(dataset, DataSet):
+        # 删除预处理方法，以便DataLoader的多进程加载
         dataset.pop_preprocesses()
+        # if hasattr(dataset, 'transformer')
+        # del dataset.transformer
         return DataLoader(
             dataset, transit_fn, transit_kwargs, batch_size,
             bkg_gen, max_prefetch, collate_fn=dataset.collate_fn, **kwargs
