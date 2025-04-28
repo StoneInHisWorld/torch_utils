@@ -53,16 +53,10 @@ class Trainer:
         self.module = None
         # 设置训练、验证、测试依赖参数
         self.input_size = input_size
-        # self.datasource = datasource
         self.hps = hps
         self.runtime_cfg = runtime_cfg
         self.criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
         self.pbar = None
-        # # 处理hook机制
-        # self.with_hook = with_hook
-        # self.hook_mute = hook_mute
-        # 转化为类装饰器
-        # self.train = self.hook(self.train)
 
     def train(self, data_iter) -> History:
         """训练公共接口。
