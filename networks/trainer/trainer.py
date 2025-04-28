@@ -1,5 +1,4 @@
 import os.path
-import time
 
 import dill
 import torch
@@ -9,14 +8,13 @@ from torch.multiprocessing import SimpleQueue as PQueue
 from tqdm import tqdm
 
 from networks import BasicNN
+from networks.decorators import prepare
 from networks.trainer.__hook_impl import hook
 from networks.trainer.__profiler_impl import profiling_impl
 from networks.trainer.__subprocess_impl import data_iter_impl, train_impl, eval_impl, vlog_impl, \
     tlog_impl
 from utils.accumulator import Accumulator
-from networks.decorators import prepare
 from utils.func import pytools as ptools
-# from utils.func.pytools import get_computer_name, is_multiprocessing
 from utils.history import History
 
 
@@ -39,9 +37,6 @@ class Trainer:
         :param hps: 超参数组合，用于获取其中的超参数进行训练
         :param runtime_cfg: 动态运行参数，用于获取其中的参数指导训练
         """
-        # # TODO: 进行默认值检查和填充
-        # if runtime_cfg is None:
-        #     runtime_cfg = {'print_net': False, 'with_checkpoint': False}
         if hps is None:
             hps = {}
         assert issubclass(module_class, BasicNN), f'模型类型{module_class}未知，请使用net包下实现的网络模型'

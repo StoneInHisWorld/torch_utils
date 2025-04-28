@@ -1,4 +1,3 @@
-import functools
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Callable
 
@@ -17,21 +16,6 @@ class StorageDataLoader:
         self.__l_reader = l_reader
         self.transformer = transformer
         self.__fw_reader, self.__lw_reader = self.__wrap_reader()
-        # # 如果需要进行预处理
-        # if f_calls:
-        #     self.__f_wreader = toolz.compose(
-        #         f_calls,
-        #         # functools.partial(map, reader)  # 将读取单个索引的读取器转换为针对列表的读取器
-        #         lambda d: [self.__f_reader(d)]
-        #     )
-        #     # 将索引转化为压缩包内容，并升维以适应数据集级预处理程序
-        #     # indexes = [[index] for index in indexes]
-        # else:
-        #     wrapped_reader = reader
-        # self.f_calls = f_calls
-        # self.l_calls = l_calls
-        # self.__fw_reader = self.__wrap_reader(self.__f_reader, f_calls)
-        # self.__lw_reader = self.__wrap_reader(self.__l_reader, l_calls)
         self.n_workers = n_workers
         self.mute = mute
 
@@ -73,17 +57,6 @@ class StorageDataLoader:
         with ThreadPoolExecutor(2) as pool:
             futures = [pool.submit(self.__st_fetch, *arg) for arg in args]
             return [f.result() for f in futures]
-            # if not self.mute:
-            #     rets = [tqdm(
-            #         pool.map(reader, indices), total=len(indices),
-            #         position=0, leave=True, desc=f"\r正在读取{which}……", unit="个"
-            #     ) for reader, indices, which in args]
-            # else:
-            #     rets = [
-            #         pool.map(reader, indices)
-            #         for reader, indices, _ in args
-            #     ]
-            # return [list(r) for r in rets]
 
     def __mt_fetch(self, *args):
         """多线程"""
@@ -99,27 +72,6 @@ class StorageDataLoader:
             else:
                 futures.append(xc.map(reader, indices))
         return [list(f) for f in futures]
-        # with ThreadPoolExecutor(self.n_workers) as pool:
-        #     if not self.mute:
-        #         rets = [tqdm(
-        #             pool.map(reader, indices), total=len(indices),
-        #             position=0, leave=True, desc=f"\r正在读取{which}……", unit="个"
-        #         ) for reader, indices, which in args]
-        #     else:
-        #         rets = [
-        #             pool.map(reader, indices)
-        #             for reader, indices, _ in args
-        #         ]
-        #     return [list(r) for r in rets]
-
-    # def __wrap_reader(self, reader, calls):
-    #     if calls:
-    #         return toolz.compose(
-    #             calls,
-    #             lambda d: [reader(d)]  # 将读取单个索引的读取器转换为针对列表的读取器
-    #         )
-    #     else:
-    #         return reader
 
     def __wrap_reader(self):
         assert hasattr(self, 'transformer'), '数据转换器还未定义'

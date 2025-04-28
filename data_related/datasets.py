@@ -56,25 +56,6 @@ class DataSet(torch_ds):
 
 class LazyDataSet(DataSet):
 
-    # def __init__(self,
-    #              features, labels, i_cfn,
-    #              read_fn, collate_fn=None):
-    #     """懒加载数据集，只存储数据的索引供LazyDataLoader使用
-    #     LazyDataLoader取该数据集中实际的数据内容时，会使用`read_fn`方法进行数据内容的读取。
-    #     :param features: 数据特征集
-    #     :param labels: 数据标签集
-    #     :param read_fn: 数据读取方法。
-    #         签名必须为：
-    #         read_fn(fea_index: Iterable[path], lb_index: Iterable[path]) -> Tuple[features: Iterable, labels: Iterable]
-    #         数据加载器会自动提供数据读取路径index
-    #     :param collate_fn: 数据验证方法，签名需为：签名为List[T] -> Any. DataLoader取出数据后，使用此方法对数据进行验证。
-    #     """
-    #     self.i_cfn = i_cfn
-    #     self.read_fn = read_fn
-    #     self.feaIndex_preprocess = toolz.compose()
-    #     self.lbIndex_preprocess = toolz.compose()
-    #     super().__init__(features, labels, collate_fn=collate_fn)
-
     def __init__(self, features, labels, i_cfn, reader,
                  transformer, collate_fn=None):
         """懒加载数据集，只存储数据的索引供LazyDataLoader使用

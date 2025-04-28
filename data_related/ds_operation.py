@@ -1,5 +1,5 @@
 import random
-from typing import Iterable, Sized
+from typing import Sized
 
 import numpy as np
 import torch

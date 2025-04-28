@@ -48,57 +48,6 @@ class DataLoader(DLoader):
 
 class LazyDataLoader:
 
-    # def __init__(self, index_ds: LazyDataSet,
-    #              transit_fn, transit_kwargs=None, batch_size=1,
-    #              i_cfn=None, bkgGen=True, max_prefetch=3,
-    #              **kwargs):
-    #     """数据懒加载器，适配懒加载数据集的数据加载器
-    #     每次供给时，调用索引数据集内含的读取数据方法，加载并供给索引对应的数据内容。
-    #     :param index_ds: 懒加载数据集
-    #     :param batch_size: 批量大小
-    #     :param max_load: 每次加载最大加载数量
-    #     :param kwargs: DataLoader()关键字参数
-    #     """
-    #     # 设置DataLoader基础参数
-    #     # self.__batch_size = batch_size
-    #     # 注：不可使用dataset的collate方法，因其为索引集的校验方法
-    #     self.collate_fn = kwargs.pop('collate_fn', lambda d: d)
-    #     if self.collate_fn is None:
-    #         self.collate_fn = lambda d: d
-    #     # sampler = kwargs['sampler']
-    #     # self.__len = math.ceil(len(sampler) / batch_size) if sampler \
-    #     #     else math.ceil(len(index_ds) / batch_size)
-    #     # self.__len = math.ceil(len(index_ds) / batch_size)
-    #     # 多线程处理参数
-    #     self.bkg_gen = bkgGen
-    #     self.max_prefetch = max_prefetch
-    #     # self.__kwargs = kwargs
-    #     self.n_workers = kwargs.pop('num_workers', 1)
-    #     if self.n_workers > 1:
-    #         self.prefetch_factor = kwargs.pop('prefetch_factor', 2)
-    #     # 设置数据转换函数
-    #     # self.transit_fn = dill.dumps(transit_fn)
-    #     self.transit_fn = transit_fn
-    #     self.transit_kwargs = transit_kwargs if transit_kwargs else {}
-    #     # 设置标签序列堆积函数
-    #     i_cfn = i_cfn if i_cfn is not None else lambda data: ([d[0] for d in data], [d[1] for d in data])
-    #     # 设置数据读取函数
-    #     self.__read_fn = index_ds.read_fn
-    #     # # 进行索引集预处理
-    #     self.__fea_preprocesses = index_ds.fea_preprocesses
-    #     self.__lb_preprocesses = index_ds.lb_preprocesses
-    #     # index_collate_fn = functools.partial(
-    #     #     lambda data: ([d[0] for d in data], [d[1] for d in data])
-    #     # )
-    #     # self.__index_dl = DLoader(
-    #     #     index_ds, batch_size, sampler=sampler,
-    #     #     num_workers=self.n_workers, collate_fn=i_cfn, **kwargs
-    #     # )
-    #     # self.__index_ds = index_ds
-    #     self.__index_dl = DLoader(
-    #         index_ds, batch_size, collate_fn=i_cfn, **kwargs
-    #     )
-
     def __init__(self, index_ds: LazyDataSet,
                  transit_fn, transit_kwargs=None, batch_size=1,
                  i_cfn=None, bkgGen=True, max_prefetch=3,
