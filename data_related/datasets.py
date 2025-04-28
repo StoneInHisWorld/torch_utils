@@ -1,28 +1,10 @@
 import time
-from concurrent.futures import ThreadPoolExecutor
 from typing import Iterable, Callable
 
-import toolz.functoolz
 from torch.utils.data import Dataset as torch_ds
 
 
 class DataSet(torch_ds):
-
-    # def __init__(self, features, labels,
-    #              collate_fn: Callable = None):
-    #     """
-    #     普通数据集，存储数据实际内容供DataLoader进行读取。
-    #     :param features: 数据特征集
-    #     :param labels: 数据标签集
-    #     :param collate_fn: 数据预处理方法。DataLoader取出数据后，使用此方法对数据进行预处理。
-    #     """
-    #     assert isinstance(features, Iterable) and isinstance(labels, Iterable)
-    #     assert len(features) == len(labels), f'特征集长度{len(features)}与标签集长度{len(labels)}不等！'
-    #     self._features = features
-    #     self._labels = labels
-    #     self.collate_fn = collate_fn
-    #     self.fea_preprocesses = toolz.compose()
-    #     self.lb_preprocesses = toolz.compose()
 
     def __init__(self, features, labels, transformer,
                  collate_fn: Callable = None):
@@ -45,177 +27,6 @@ class DataSet(torch_ds):
     def __len__(self):
         return len(self._features)
 
-    # def to(self, device: torch.device) -> None:
-    #     """
-    #     将数据迁移到device中
-    #     :param device: 迁移目标设备
-    #     :return: None
-    #     """
-    #     assert isinstance(self._features, torch.Tensor), \
-    #         f'数据集特征集数据未转换成张量，无法迁移到{device}中！请在数据读取步骤和预处理步骤将特征集转换成张量。'
-    #     assert isinstance(self._features, torch.Tensor), \
-    #         f'数据集标签集数据未转换成张量，无法迁移到{device}中！请在数据读取步骤和预处理步骤将标签集转换成张量。'
-    #     self._features = self._features.to(device)
-    #     self._labels = self._labels.to(device)
-
-    # def _apply(self, fea_calls: Callable = None, lb_calls: Callable = None,
-    #            n_workers=1):
-    #     """对数据调用某种方法。
-    #     可用作数据预处理。
-    #
-    #     :param fea_calls: 特征集预处理程序
-    #     :param lb_calls: 标签集预处理程序
-    #     :param n_workers: 指定调用的处理机数目，如果≥2则会开启两个线程分别处理特征集预处理和标签集预处理
-    #     """
-    #     if fea_calls is None:
-    #         fea_calls = toolz.compose()
-    #     if lb_calls is None:
-    #         lb_calls = toolz.compose()
-    #
-    #     # if isinstance(features_calls, Callable):
-    #     #     print('\r特征集预处理中……', end="", flush=True)
-    #     #     start_time = time.perf_counter()
-    #     #     self._features = features_calls(self._features)
-    #     #     print(f'\r特征集预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
-    #     # else:
-    #     #     raise ValueError('特征集调用请使用Callable对象，已经停止对list对象的支持！'
-    #     #                      '多个Callable对象请使用toolz.compose()组合成流水线')
-    #     # if isinstance(labels_calls, Callable):
-    #     #     print('\r标签集预处理中……', end="", flush=True)
-    #     #     start_time = time.perf_counter()
-    #     #     self._labels = labels_calls(self._labels)
-    #     #     print(f'\r标签集预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
-    #     # else:
-    #     #     raise ValueError('标签集调用请使用Callable对象，已经停止对list对象的支持！'
-    #     #                      '多个Callable对象请使用toolz.compose()组合成流水线')
-    #
-    #     # start_time = time.perf_counter()
-    #     # if n_workers > 1:
-    #         # try:
-    #         #     with Pool(2) as pool:
-    #         #         ret1 = pool.apply_async(self.__apply_impl, features_calls, self._features, '特征集')
-    #         #         ret2 = pool.apply_async(self.__apply_impl, labels_calls, self._labels, '标签集')
-    #         #         results = (ret1.get(), ret2.get())
-    #         # except (TypeError, AttributeError) as e:
-    #         #     # 如果遇到不能pickle的对象，尝试多线程
-    #         #     print(f'多进程处理出错{e}，尝试使用多线程')
-    #         #     # results = list(map(lambda args: multithreading_pool(n_workers, False, *args), zip(
-    #         #     #     ['特征集预处理中……', '标签集预处理中……'],
-    #         #     #     [(features_calls, (self._features, ), {}), (labels_calls, (self._labels, ), {})]
-    #         #     # )))
-    #         #     results = list(map(lambda args: multithreading_pool(n_workers, False, *args), zip(
-    #         #         ['特征集预处理中……', '标签集预处理中……'],
-    #         #         [(features_calls, (self._features, ), {}), (labels_calls, (self._labels, ), {})]
-    #         #     )))
-    #         # iterable_multi_process(self._features, features_calls, False, n_worker, )
-    #         # iterable_multi_process(self._features, features_calls, False, n_worker, )
-    #         # fea_thread = Thread(features_calls, self._features)
-    #         # lb_thread = Thread(labels_calls, self._labels)
-    #
-    #         # results = [torch.stack(ls) for ls in map(lambda args: multithreading_map(*args), [
-    #         #     [self._features, features_calls, False, n_workers, '\r特征集预处理中……'],
-    #         #     [self._labels, labels_calls, False, n_workers, '\r标签集预处理中……']
-    #         # ])]
-    #     #     # 进行多线程预处理
-    #     #     with ThreadPoolExecutor(n_workers) as pool:
-    #     #         fea_ret = pool.map(features_calls, self._features)
-    #     #         lb_ret = pool.map(labels_calls, self._labels)
-    #     # else:
-    #     #     fea_ret = map(features_calls, self._features)
-    #     #     lb_ret = map(labels_calls, self._labels)
-    #     # results = [
-    #     #     torch.stack(list(tqdm(task, total=length, position=0, leave=True,
-    #     #                           desc=f"\r正在对{which}进行预处理……", unit="个")))
-    #     #     for task, length, which in zip(
-    #     #         [fea_ret, lb_ret], [len(self._features), len(self._labels)], ['特征集', '标签集']
-    #     #     )
-    #     # ]
-    #     if n_workers > 1:
-    #         with ThreadPoolExecutor(n_workers) as pool:
-    #             f_ret = pool.submit(fea_calls, self._features)
-    #             l_ret = pool.submit(lb_calls, self._labels)
-    #         self._features, self._labels = f_ret.result(), l_ret.result()
-    #     else:
-    #         self._features, self._labels = fea_calls(self._features), lb_calls(self._labels)
-    #     # print(f'\r预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
-    #     # self._features, self._labels = results
-    #         #
-
-    # def _apply(self, fea_calls: Callable = None, lb_calls: Callable = None,
-    #            n_workers=1):
-    #     """对数据调用某种方法。
-    #     可用作数据预处理。
-    #
-    #     :param fea_calls: 特征集预处理程序
-    #     :param lb_calls: 标签集预处理程序
-    #     :param n_workers: 指定调用的处理机数目，如果≥2则会开启两个线程分别处理特征集预处理和标签集预处理
-    #     """
-    #     if fea_calls is None:
-    #         fea_calls = toolz.compose()
-    #     if lb_calls is None:
-    #         lb_calls = toolz.compose()
-    #
-    #     if n_workers > 1:
-    #         with ThreadPoolExecutor(n_workers) as pool:
-    #             f_ret = pool.submit(fea_calls, self._features)
-    #             l_ret = pool.submit(lb_calls, self._labels)
-    #         self._features, self._labels = f_ret.result(), l_ret.result()
-    #     else:
-    #         self._features, self._labels = fea_calls(self._features), lb_calls(self._labels)
-
-    # def __apply_impl(self, *args):
-    #     calls, data, which_data = args
-    #     if isinstance(calls, Callable):
-    #         print(f'\r{which_data}预处理中……', end="", flush=True)
-    #         start_time = time.perf_counter()
-    #         result = calls(data)
-    #         print(f'\r{which_data}预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
-    #     else:
-    #         raise ValueError(f'{which_data}调用请使用Callable对象，已经停止对list对象的支持！'
-    #                          '多个Callable对象请使用toolz.compose()组合成流水线')
-    #     return result
-    #
-    # def to_loader(self, batch_size: int = None, shuffle=True,
-    #               sampler: Iterable = None, preprocess: bool = True,
-    #               **kwargs) -> DataLoader:
-    #     """生成普通数据集的加载器。
-    #     生成加载器前，会将所有预处理方法抛弃。
-    #     :param preprocess: 是否进行预处理
-    #     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
-    #     :param batch_size: 每次供给的数据量。默认为整个数据集
-    #     :param shuffle: 是否打乱
-    #     :param kwargs: DataLoader额外参数
-    #     :return: 加载器对象
-    #     """
-    #     if sampler is not None:
-    #         shuffle = None
-    #     if not batch_size:
-    #         batch_size = self.feature_shape[0]
-    #     if preprocess:
-    #         self.preprocess()
-    #         self.pop_preprocesses()
-    #     return DataLoader(
-    #         self, batch_size, shuffle=shuffle, collate_fn=self.collate_fn, sampler=sampler, **kwargs
-    #     )
-
-    # def get_subset(self, indices: Iterable):
-    #     return DataSet(self[indices][0], self[indices][1])
-
-    # def register_preprocess(self, f_calls: Callable = None, l_calls: Callable = None):
-    #     """
-    #     注册预处理方法，用于数据加载器对数据进行预处理
-    #     :param f_calls: 需要对特征集调用的方法列表
-    #     :param l_calls: 需要对标签集调用的方法列表
-    #     """
-    #     if f_calls is not None:
-    #         self.fea_preprocesses = toolz.compose(
-    #             f_calls, self.fea_preprocesses
-    #         )
-    #     if l_calls is not None:
-    #         self.lb_preprocesses = toolz.compose(
-    #             l_calls, self.lb_preprocesses
-    #         )
-
     def pop_preprocesses(self):
         """弹出所有的预处理程序。
         此方法用于对Dataset的序列化，将所有预处理的本地化方法转移到内存中。
@@ -233,15 +44,6 @@ class DataSet(torch_ds):
         start_time = time.perf_counter()
         self._features, self._labels = self.transformer.transform_data(self._features, self._labels)
         print(f'\r预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
-
-    # def preprocess(self, n_workers=1):
-    #     """数据集对持有的特征集和标签集进行预处理
-    #
-    #     :param n_workers: 预处理能够使用的处理机数目
-    #     """
-    #     start_time = time.perf_counter()
-    #     self._apply(self.fea_preprocesses, self.lb_preprocesses, n_workers)
-    #     print(f'\r预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
 
     @property
     def feature_shape(self):
@@ -290,59 +92,6 @@ class LazyDataSet(DataSet):
         self.reader.mute = True
         super().__init__(features, labels, transformer, collate_fn)
 
-    #
-    # def to_loader(self,
-    #               batch_size: int = None, sampler: Iterable = None, shuffle=True,
-    #               mute=False, **kwargs) -> DataLoader:
-    #     """
-    #     注意：本函数只会生成普通数据加载器。
-    #     如生成懒数据加载器，则需要调用data_related.to_loader()
-    #     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler.
-    #     :param batch_size: 每次供给的数据量。默认为整个数据集
-    #     :param shuffle: 是否打乱
-    #     :param kwargs: DataLoader额外参数
-    #     :return: 加载器对象
-    #     """
-    #     self.preprocess(mute=mute)
-    #     return super().to_loader(
-    #         batch_size, shuffle, sampler, preprocess=False, **kwargs
-    #     )
-
-    # def register_preprocess(self, f_calls=None, l_calls=None,
-    #                         fi_calls=None, li_calls=None):
-    #     """
-    #     注册预处理方法，用于数据加载器对数据进行预处理
-    #     :param li_calls: 对于标签索引集的预处理方法
-    #     :param fi_calls: 对于特征索引集的预处理方法
-    #     :param f_calls: 需要对特征集调用的方法列表
-    #     :param l_calls: 需要对标签集调用的方法列表
-    #     :return: None
-    #     """
-    #     # if features_calls is None:
-    #     #     features_calls = toolz.compose()
-    #     # if labels_calls is None:
-    #     #     labels_calls = toolz.compose()
-    #     # self.fea_preprocesses = toolz.compose(
-    #     #     features_calls, self.fea_preprocesses
-    #     # )
-    #     # self.lb_preprocesses = toolz.compose(
-    #     #     labels_calls, self.lb_preprocesses
-    #     # )
-    #     if fi_calls is not None:
-    #         self.feaIndex_preprocess = toolz.compose(
-    #             fi_calls, self.feaIndex_preprocess
-    #         )
-    #     if li_calls is not None:
-    #         self.lbIndex_preprocess = toolz.compose(
-    #             li_calls, self.lbIndex_preprocess
-    #         )
-    #     super().register_preprocess(f_calls, l_calls)
-    #
-    # def pop_preprocesses(self):
-    #     """弹出预处理特征集、标签集及其索引集的方法"""
-    #     del self.feaIndex_preprocess, self.lbIndex_preprocess
-    #     super().pop_preprocesses()
-
     def preprocess(self):
         """数据集对持有的特征索引集和标签索引集进行预处理
 
@@ -351,33 +100,3 @@ class LazyDataSet(DataSet):
         start_time = time.perf_counter()
         self._features, self._labels = self.transformer.transform_indices(self._features, self._labels)
         print(f'\r索引集预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
-
-    # def preprocess(self, n_workers=1):
-    #     """数据集对持有的特征索引集和标签索引集进行预处理
-    #
-    #     :param n_workers: 预处理能够使用的处理机数目
-    #     """
-    #     start_time = time.perf_counter()
-    #     self._apply(self.feaIndex_preprocess, self.lbIndex_preprocess, n_workers)
-    #     print(f'\r索引集预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
-        # pbar = tqdm(
-        #     [], desc=desc, unit='步', position=0, mininterval=1,
-        #     ncols=80
-        # ) if not mute else None
-        # self.apply(self.feaIndex_preprocess, self.lbIndex_preprocess)
-
-    # def to(self, device: torch.device) -> None:
-    #     """
-    #     将数据迁移到device中
-    #     :param device: 迁移目标设备
-    #     :return: None
-    #     """
-    #     to = lambda fea: fea.to(device)
-    #     if isinstance(self._features, torch.Tensor):
-    #         self._features = self._features.to(device)
-    #     elif to not in self.fea_preprocesses:
-    #         self.fea_preprocesses += [to]
-    #     if isinstance(self._labels, torch.Tensor):
-    #         self._labels = self._labels.to(device)
-    #     elif to not in self.lb_preprocesses:
-    #         self.lb_preprocesses += [to]
