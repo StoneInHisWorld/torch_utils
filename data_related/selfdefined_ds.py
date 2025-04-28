@@ -311,11 +311,19 @@ class SelfDefinedDataSet:
 
     @abstractmethod
     def _get_transformer(self) -> DataTransformer:
-        pass
+        """返回执行数据预处理的数据转换器
+        需要根据访问的数据类型以及任务需求，自定义数据预处理程序
+        :return: 数据转换器
+        """
+        raise NotImplementedError(f"未实现函数")
 
     @abstractmethod
     def _get_reader(self) -> StorageDataLoader:
-        pass
+        """返回根据索引进行存储访问的数据读取器
+        该数据处理器为StorageDataLoader的子类
+        :return: 数据读取器
+        """
+        raise NotImplementedError(f"未实现函数")
 
     @property
     def train_len(self):
