@@ -5,6 +5,9 @@ from typing import Any, Generator
 import toolz
 import torch
 
+from examples.example_project_structure.self_defined_ds_reader import YourDS_Reader
+from examples.example_project_structure.self_defined_ds_transformer import YourDS_DataTransformer
+
 sys.path.append('where/you/put/torch_utils')
 
 from data_related.selfdefined_ds import SelfDefinedDataSet
@@ -50,55 +53,19 @@ class TheNameOfYourDS(SelfDefinedDataSet):
         lb_indices = []
         return lb_indices
 
-    def _get_fea_reader(self) -> Generator:
-        """根据根目录下的特征集索引进行存储访问的数据读取器
-
-        读取器为可调用对象，参数为单个索引值，如：fea = reader(index)
-        为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，请通过yield的方式返回读取器。编程示例如下：
-
-        ```
-        def _get_fea_reader(self):
-            # 获取.tar数据集资源
-            tfile = tarfile.open(self.tarfile_name, 'r')
-            # 提供数据读取器
-            yield toolz.compose(*reversed([
-                tfile.extractfile,
-                functools.partial(read_img, mode=self.fea_mode),
-            ]))
-            # 进行资源回收
-            tfile.close()
-        ```
-
-        :return: 数据读取器生成器
+    def _get_reader(self):
+        """返回根据索引进行存储访问的数据读取器
+        需要根据访问的数据类型，自定义数据读取器
+        :return: 数据读取器
         """
-        reader = functools.partial()
-        yield reader
-        del reader
+        return YourDS_Reader()
 
-    def _get_lb_reader(self) -> Generator:
-        """根据根目录下的标签集索引进行存储访问的数据读取器
-
-        读取器为可调用对象，参数为单个索引值，如：lb = reader(index)
-        为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，请通过yield的方式返回读取器。编程示例如下：
-
-        ```
-        def _get_lb_reader(self):
-            # 获取.tar数据集资源
-            tfile = tarfile.open(self.tarfile_name, 'r')
-            # 提供数据读取器
-            yield toolz.compose(*reversed([
-                tfile.extractfile,
-                functools.partial(read_img, mode=self.fea_mode),
-            ]))
-            # 进行资源回收
-            tfile.close()
-        ```
-
-        :return: 数据读取器生成器
+    def _get_transformer(self):
+        """返回执行数据预处理的数据转换器
+        需要根据访问的数据类型以及任务需求，自定义数据预处理程序
+        :return: 数据转换器
         """
-        reader = functools.partial()
-        yield reader
-        del reader
+        return YourDS_DataTransformer()
 
     @staticmethod
     def get_criterion_a():
@@ -126,29 +93,4 @@ class TheNameOfYourDS(SelfDefinedDataSet):
         :param comments: 预测批次每张结果输出图片附带注解
         :return: 打包结果
         """
-        ...
-
-    def TheNameOfYourModel_preprocesses(self) -> None:
-        """数据集预处理程序，请在方法名中替换对应模型的类名，
-        在使用该模型进行训练时，SelfDefinedDataSet.set_preprocess()会将调用本函数，从而完成预处理程序的赋值
-
-        需要实现四个列表的填充：
-        1. self.lbIndex_preprocesses：标签索引集预处理程序列表
-        2. self.feaIndex_preprocesses：特征索引集预处理程序列表
-        3. self.lb_preprocesses：标签集预处理程序列表
-        4. self.fea_preprocesses：特征集预处理程序列表
-        其中索引集预处理程序若未指定本数据集为懒加载，则不会执行。
-
-        :return: None
-        """
-        # 设置数据索引集预处理程序
-        # 每个预处理程序都需要能同时处理单个数据或者数据集，以便适应单例预处理和批量预处理
-        self.feaIndex_preprocesses = toolz.compose(*reversed([
-        ]))
-        self.lbIndex_preprocesses = toolz.compose(*reversed([
-        ]))
-        # 设置数据集预处理程序
-        self.fea_preprocesses = toolz.compose(*reversed([
-        ]))
-        self.lb_preprocesses = toolz.compose(*reversed([
-        ]))
+        raise NotImplementedError("未实现的函数")
