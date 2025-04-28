@@ -1,55 +1,13 @@
 import random
-from typing import Iterable, Sized
+from typing import Sized
 
 import numpy as np
 import torch
 import torchvision.transforms.functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader as DLoader
 
-import data_related.dataloader
-from data_related.dataloader import LazyDataLoader
+from data_related.dataloader import DataLoader, LazyDataLoader
 from data_related.datasets import DataSet, LazyDataSet
-
-
-#
-# def split_real_data(features: torch.Tensor, labels: torch.Tensor, train, test, valid=.0,
-#                     shuffle=True, requires_id=False):
-#     """
-#     分割数据集为训练集、测试集、验证集（可选）
-#     :param requires_id: 是否在数据每条样本前贴上ID
-#     :param shuffle: 是否打乱数据集
-#     :param labels: 标签集
-#     :param features: 特征集
-#     :param train: 训练集比例
-#     :param test: 测试集比例
-#     :param valid: 验证集比例
-#     :return: （训练特征集，训练标签集），（验证特征集，验证标签集），（测试特征集，测试标签集）
-#     """
-#     warnings.warn('分割真实数据集由于涉及对大量数据的操作，很容易发生内存溢出，因此建议不要使用本函数！'
-#                   '请使用split_data()以获得索引切分，节省计算量以及内存使用', DeprecationWarning)
-#     assert train + test + valid == 1.0, '训练集、测试集、验证集比例之和须为1'
-#     data_len = features.shape[0]
-#     train_len = int(data_len * train)
-#     valid_len = int(data_len * valid)
-#     test_len = int(data_len * test)
-#     # 将高维特征数据打上id
-#     if requires_id:
-#         features_ids = torch.tensor([
-#             np.ones((1, features.shape[2:])) * i
-#             for i in range(data_len)
-#         ])
-#         features = torch.cat((features_ids, features), 1)
-#         del features_ids
-#     # 数据集打乱
-#     if shuffle:
-#         index = torch.randint(0, data_len, (data_len,))
-#         features = features[index]
-#         labels = labels[index]
-#     # 数据集分割
-#     train_fea, valid_fea, test_fea = features.split((train_len, valid_len, test_len))
-#     train_labels, valid_labels, test_labels = labels.split((train_len, valid_len, test_len))
-#     return (train_fea, train_labels), (valid_fea, valid_labels), \
-#         (test_fea, test_labels)
 
 
 def k1_split_data(dataset: DataSet or LazyDataSet,
@@ -70,7 +28,7 @@ def k1_split_data(dataset: DataSet or LazyDataSet,
     ranger = (r for r in np.split(np.arange(data_len), (train_len,)) if len(r) > 0)
     return (
         [
-            DataLoader(
+            DLoader(
                 r, shuffle=shuffle,
                 collate_fn=lambda d: d[0]  # 避免让数据升维。每次只抽取一个数字
             )
@@ -79,13 +37,8 @@ def k1_split_data(dataset: DataSet or LazyDataSet,
     )
 
 
-# def split_data(dataset: DataSet or LazyDataSet,
-#                train=0.8, k=1, shuffle=True):
-def split_data(dataset: DataSet or LazyDataSet, hps,
-               train=0.8, shuffle=True):
+def split_data(dataset: DataSet or LazyDataSet, k, train=0.8, shuffle=True):
     # 提取超参数
-    k = hps['k']
-    # batch_size = hps['batch_size']
     if k == 1:
         return k1_split_data(dataset, train, shuffle)
     elif k > 1:
@@ -94,71 +47,59 @@ def split_data(dataset: DataSet or LazyDataSet, hps,
         raise ValueError(f'不正确的k值={k}，k值应该大于0，且为整数！')
 
 
-# def to_loader(dataset: DataSet or LazyDataSet, batch_size: int = None, shuffle=True,
-#               sampler: Iterable = None, max_load: int = 10000,
-#               **kwargs):
-#     """
-#     根据数据集类型转化为数据集加载器。生成预处理前，会将预处理程序清除。
-#     :param max_load: 懒数据集加载器的最大加载量，当使用DataSet时，该参数无效
-#     :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler，根据shuffle==True or False 提供乱序/顺序下标.
-#     :param dataset: 转化为加载器的数据集。
-#     :param batch_size: 每次供给的数据量。默认为整个数据集
-#     :param shuffle: 是否打乱
-#     :param kwargs: Dataloader额外参数
-#     :return: 加载器对象
-#     """
-#     if sampler is not None:
-#         shuffle = None
-#     if not batch_size:
-#         batch_size = dataset.feature_shape[0]
-#     dataset.pop_preprocesses()
-#     if type(dataset) == LazyDataSet:
-#         return LazyDataLoader(
-#             dataset, batch_size,
-#             max_load=max_load, shuffle=shuffle, collate_fn=dataset.collate_fn,
-#             sampler=sampler,
-#             **kwargs
-#         )
-#     elif type(dataset) == DataSet:
-#         return DataLoader(
-#             dataset, batch_size,
-#             shuffle=shuffle, collate_fn=dataset.collate_fn, sampler=sampler,
-#             **kwargs
-#         )
+def default_transit_fn(batch, **kwargs):
+    """默认数据供给传输函数，本函数不进行任何操作。
+    DataLoader每次从内存取出数据后，都会调用本函数对批次进行预处理。
+    数据传输函数用于进行数据批量的设备迁移等操作。
 
-
-def to_loader(dataset: DataSet or LazyDataSet, transit_fn,
-              batch_size: int = 1, shuffle=True, sampler: Iterable = None,
-              max_prefetch=3, bkgGen=True, **kwargs):
-    """根据数据集类型转化为数据集加载器。生成预处理前，会将预处理程序清除。
-    尚未完成懒加载数据集的代码编辑。
-    :param sampler: 实现了__len__()的可迭代对象，用于供给下标。若不指定，则使用默认sampler，根据shuffle==True or False 提供乱序/顺序下标.
-    :param dataset: 转化为加载器的数据集。
-    :param batch_size: 每次供给的数据量。默认为整个数据集
-    :param shuffle: 是否打乱
-    :param kwargs: Dataloader额外参数
-    :return: 加载器对象
+    :param batch: 需要预处理的数据批
+    :param kwargs: 预处理所用关键字参数
+    :return: 数据批次
     """
-    if sampler is not None:
-        shuffle = None
-    # pin_memory = kwargs['pin_memory'] if 'pin_memory' in kwargs.keys() else False
-    if type(dataset) == LazyDataSet:
-        # raise NotImplementedError('懒加载尚未完成编写！')
-        # 懒加载需要保存有数据集预处理方法
-        # dataset.pop_preprocesses()
+    return batch
 
+
+def to_loader(dataset: DataSet or LazyDataSet,
+              batch_size: int = 1,
+              transit_fn=None, transit_kwargs=None,
+              bkg_gen=True, max_prefetch=3,
+              **kwargs):
+    """根据数据集类型转化为数据集加载器。
+    为了适配多进程处理，Dataset对象在转化为DataLoader对象前，会删除所携带的预处理方法。
+
+    :param dataset: 将要转换成数据集加载器的数据集
+    :param transit_fn: 数据供给传输函数，用于进行数据批量的设备迁移等操作。
+        DataLoader每次从内存取出数据后，都会调用transit_fn对数据批次进行迁移操作。
+        方法签名要求为def transit_fn(batch, **kwargs) -> batch:  。
+        没有指定迁移方法时会指定默认迁移方法，不进行任何操作
+    :param transit_kwargs: 数据供给传输函数的关键字参数。
+        调用transit_fn时，一并输入到transit_fn中的关键字参数
+    :param batch_size: 数据批次大小
+    :param bkg_gen: 是否采用BackgroundGenerator
+        BackgroundGenerator可利用多线程机制提前取出数据批
+    :param max_prefetch: BackgroundGenerator提前取出的数据批数目
+    :param kwargs: pytorch.utils.data.DataLoader的额外参数
+    :return: 数据集加载器
+    """
+    if transit_fn is None:
+        transit_fn = default_transit_fn
+    if transit_kwargs is None:
+        transit_kwargs = {}
+    if isinstance(dataset, LazyDataSet):
+        # 懒加载需要保存有数据集预处理方法
         return LazyDataLoader(
-            dataset, transit_fn, batch_size,
-            shuffle=shuffle, sampler=sampler,  # 请注意，LazyDataSet提供的校正方法是针对索引集的，需要另外指定数据校正方法
-            **kwargs
+            dataset, transit_fn, transit_kwargs, batch_size,
+            dataset.i_cfn, bkg_gen, max_prefetch,
+            collate_fn=dataset.collate_fn, **kwargs
         )
-    elif type(dataset) == DataSet:
+    elif isinstance(dataset, DataSet):
+        # 删除预处理方法，以便DataLoader的多进程加载
         dataset.pop_preprocesses()
-        return data_related.dataloader.DataLoader(
-            dataset, transit_fn, batch_size,
-            max_prefetch=max_prefetch, bkgGen=bkgGen,
-            shuffle=shuffle, collate_fn=dataset.collate_fn,
-            sampler=sampler, **kwargs
+        # if hasattr(dataset, 'transformer')
+        # del dataset.transformer
+        return DataLoader(
+            dataset, transit_fn, transit_kwargs, batch_size,
+            bkg_gen, max_prefetch, collate_fn=dataset.collate_fn, **kwargs
         )
 
 
@@ -171,6 +112,7 @@ def k_fold_split(dataset: DataSet or LazyDataSet, k: int = 10, shuffle: bool = T
     :return: DataLoader生成器，每次生成（训练集下标供给器，验证集下标生成器），生成k次
     """
     assert k > 1, f'k折验证需要k值大于1，而不是{k}'
+    # print(f'\r正在进行{k}折数据集分割……', flush=True)
     data_len = len(dataset)
     fold_size = len(dataset) // k
     total_ranger = np.random.randint(0, data_len, (data_len,)) if shuffle else np.arange(data_len)
@@ -182,7 +124,7 @@ def k_fold_split(dataset: DataSet or LazyDataSet, k: int = 10, shuffle: bool = T
         train_range = np.concatenate((train_range1, train_range2), axis=0)
         del train_range1, train_range2
         yield [
-            DataLoader(ranger, shuffle=True, collate_fn=lambda d: d[0])
+            DLoader(ranger, shuffle=True, collate_fn=lambda d: d[0])
             for ranger in (train_range, valid_range)
         ]
 
@@ -214,11 +156,16 @@ def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
     :param epsilon: 防止分母为0的无穷小量。
     :return: 标准化的数据
     """
-    mean, std = [
-        # func(data, dim=list(range(2, len(data.shape))), keepdim=True)
-        func(data, dim=list(range(1, len(data.shape))), keepdim=True)
-        for func in [torch.mean, torch.std]
-    ]
+    try:
+        mean, std = [
+            func(data, dim=list(range(2, len(data.shape))), keepdim=True)
+            for func in [torch.mean, torch.std]
+        ]
+    except RuntimeError as e:
+        if 'Input dtype must be either a floating point or complex dtype.' in e.args[0]:
+            raise ValueError(f"标准化需要输入的数据为浮点数或者是复数，然而输入的数据类型为：{data.dtype}")
+        else:
+            raise e
     std += epsilon
     if len(data.shape) == 4:
         return F.normalize(data, mean, std)
@@ -226,3 +173,36 @@ def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
         return (data - mean) / std
     else:
         raise Exception(f'不支持的数据形状{data.shape}！')
+
+
+def denormalize(data: torch.Tensor, mean=None, std=None, range=None) -> torch.Tensor:
+    """进行数据反标准化
+
+    当mean与std均有指定时进行反标准化，计算方法为：
+    data * std + mean
+    当mean与std均为None时进行数据区间的反归一化，计算方法为：
+    ((data - d_min) * range / (d_max - d_min)) + low
+    :param data: 需要进行标准化的数据
+    :param mean: 反标准化所用均值
+    :param std: 反标准化所用标准差
+    :param range: 反归一化后，数据分布的区间。
+    :return: 反标准化后的数据
+    """
+    # 如果指定了均值和方差
+    if mean is not None and std is not None:
+        return data * std + mean
+    # 如果指定了数据区间但没指定均值和方差
+    elif range is not None:
+        low, high = range
+        range = high - low
+        # 获取最小值并扩充成源数据维度
+        d_min = data.view(len(data), -1).min(1)[0]
+        d_min = d_min.expand(*reversed(data.shape))
+        d_min = d_min.permute(*torch.arange(d_min.ndim - 1, -1, -1))
+        # 获取最大值并扩充成源数据维度
+        d_max = data.view(len(data), -1).max(1)[0]
+        d_max = d_max.expand(*reversed(data.shape))
+        d_max = d_max.permute(*torch.arange(d_min.ndim - 1, -1, -1))
+        return ((data - d_min) * range / (d_max - d_min)) + low
+    else:
+        raise ValueError("反标准化需要指定均值和方差，或者指定数据区间")

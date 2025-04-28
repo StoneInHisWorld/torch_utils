@@ -4,8 +4,11 @@ from threading import Thread as BuiltinThread
 class Thread(BuiltinThread):
 
     def __init__(self, func, *args, **kwargs):
-        """
+        """重写的python内置线程，能够返回执行的结果
         摘录自https://zhuanlan.zhihu.com/p/91601448
+        :param func: xuy
+        :param args:
+        :param kwargs:
         """
         self.func = func
         self.args = args
@@ -26,4 +29,6 @@ class Thread(BuiltinThread):
             raise self.exc
 
     def get_result(self):
+        if self.exc is not None:
+            raise self.exc
         return self.result

@@ -5,7 +5,7 @@ from torch.profiler import ProfilerActivity
 from torch.profiler import record_function
 
 from utils.accumulator import Accumulator
-from utils.decorators import prepare
+from networks.decorators import prepare
 from utils.history import History
 
 

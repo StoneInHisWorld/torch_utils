@@ -4,7 +4,7 @@ from typing import Tuple
 from torch import nn
 
 from networks.basic_nn import BasicNN
-from networks.layers.multi_output import MultiOutputLayer, linear_output
+from layers.multi_output import MultiOutputLayer, linear_output
 
 VGG_11 = (
     (1, 64), (1, 128), (2, 256), (2, 512), (2, 512)
@@ -13,7 +13,7 @@ VGG_11 = (
 
 class VGG(BasicNN):
 
-    required_shape = (224, 224)
+    input_size = (224, 224)
 
     def __init__(self, in_channels: int, out_features: Iterable or int,
                  conv_arch: Tuple[int, int] = VGG_11, regression=False,

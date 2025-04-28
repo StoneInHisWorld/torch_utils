@@ -5,7 +5,7 @@ img_modes = ['L', '1']
 
 
 def calculate_pcc(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    """
+    r"""
     计算PCC值，公式为：
     .. math::
         \mathrm{pcc}(\hat{y}, y) = cov(\hat{y}, y) / ( \mathrm{\sigma_{\hat{y}}} \mathrm{\sigma_{y}})
@@ -13,13 +13,16 @@ def calculate_pcc(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     :param y: 计算对象2
     :return: 两张图片的PCC值
     """
-    mean_x, mean_y = [t.mean(dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
-    std_x, std_y = [t.std(dim=list(range(1, len(t.shape))), keepdim=True) for t in [y_hat, y]]
-    conv_xy = ((y_hat - mean_x) * (y - mean_y)).sum(dim=list(range(1, len(y.shape))), keepdim=True) / (
-            y.shape[-1] * y.shape[-2] - 1
-    )
-    denominator = std_x * std_y
-    return conv_xy / denominator
+    assert y_hat.shape == y.shape, '计算PCC的两个张量形状需一致'
+    # 新方法计算PCC
+    corrcoef_xy = [
+        torch.corrcoef(o)[0, 1]
+        for o in [
+            torch.vstack([t_hat.flatten(), t.flatten()])
+            for t_hat, t in zip(y_hat, y)
+        ]
+    ]
+    return torch.vstack(corrcoef_xy)
 
 
 class PCCLoss(nn.Module):
@@ -48,14 +51,11 @@ class PCC(nn.Module):
         super().__init__()
 
     def forward(self, y_hat: torch.Tensor, y: torch.Tensor):
-        result = calculate_pcc(y_hat, y).squeeze()
+        result = calculate_pcc(y_hat, y)
+        result = result.mean(dim=list(range(1, len(result.shape))))
         if self.reduction == 'mean':
             return result.mean()
         elif self.reduction == 'sum':
             return result.sum()
         else:
             return result
-        # if self.size_averaged:
-        #     return result.mean()
-        # else:
-        #     return result.squeeze()

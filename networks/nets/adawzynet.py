@@ -1,12 +1,12 @@
 from torch import nn
 
 from networks.basic_nn import BasicNN
-from networks.layers.multi_output import MultiOutputLayer
+from layers.multi_output import MultiOutputLayer
 
 
 class AdaWZYNet(BasicNN):
 
-    required_shape = (256, 256)
+    input_size = (256, 256)
     down_sampling = lambda i, k: nn.Sequential(
         # 下采样
         nn.Conv2d(i, i, kernel_size=k, stride=2, padding=1),

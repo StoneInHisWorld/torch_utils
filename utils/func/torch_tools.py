@@ -4,9 +4,9 @@ import torch
 from torch import cuda, nn as nn
 from torch.nn import init as init
 
-from networks.layers.ganloss import GANLoss
-from networks.layers.pcc import PCCLoss
-from networks.layers.ssim import SSIMLoss
+from layers import GANLoss
+from layers import PCCLoss
+from layers import SSIMLoss
 
 loss_es = ["l1", "entro", "mse", "huber", "ssim", "pcc", 'gan']
 init_funcs = ["normal", "xavier", "zero", "state", 'constant', 'trunc_norm']
@@ -141,8 +141,6 @@ def init_wb(func_str: str = "xavier", **kwargs):
     elif func_str == 'trunc_norm':
         mean, std = kwargs.pop('mean', 0), kwargs.pop('std', 1)
         a, b = kwargs.pop('a', 0), kwargs.pop('b', 1)
-        # w_init = lambda m: init.trunc_normal_(m, )
-        # b_init = init.zeros_
         w_init = functools.partial(init.trunc_normal_, mean=mean, std=std, a=a, b=b)
         b_init = init.zeros_
     elif func_str == 'skip':
@@ -162,7 +160,7 @@ def init_wb(func_str: str = "xavier", **kwargs):
             for m in module_s:
                 _init_impl(m)
             return
-        elif isinstance(module_s, nn.BatchNorm2d):
+        elif isinstance(module_s, nn.modules.batchnorm._NormBase):
             # 使用"全0法"初始化批次标准化层的权重和偏置量会导致计算结果均为0，因此将被跳过！
             # 泽维尔初始化不支持低于二维的张量初始化，因此将被跳过！
             if func_str == 'xavier' or func_str == 'zero':

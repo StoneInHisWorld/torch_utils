@@ -6,7 +6,7 @@ from networks.basic_nn import BasicNN
 
 class AlexNet(BasicNN):
 
-    required_shape = (224, 224)
+    input_size = (224, 224)
 
     def __init__(self, in_channels, out_features,
                  regression=False, **kwargs) -> None:

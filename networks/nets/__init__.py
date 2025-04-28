@@ -4,8 +4,8 @@ from .alexnet import AlexNet
 from .googlenet import GoogLeNet
 from .lenet import LeNet
 from .mlp import MLP
-from .pix2pix import Pix2Pix
+from .pix2pix.pix2pix import Pix2Pix
 from .slp import SLP
 from .vgg import VGG
 from .wzynet_essay import WZYNetEssay
-from .enlargingnet import EnLargingNN
+from .elnn.enlargingnet import EnLargingNN

@@ -1,6 +1,5 @@
-import os
 import random
-from typing import Tuple, Iterable, Callable, List
+from typing import Tuple, List
 
 import PIL.Image
 import numpy as np
@@ -8,56 +7,77 @@ from PIL import Image as IMAGE, ImageDraw
 from PIL.Image import Image
 from tqdm import tqdm
 
+from utils.func.pytools import check_para
 
-def resize_img(image: Image, required_shape: Tuple[int, int]) -> Image:
-    """
-    重塑图片。
-    先将图片等比例放大到最大（放缩到最小）满足required_shape的尺寸，再对图片随机取部分或填充黑边以适配所需形状
+
+def resize_img(image: Image, required_shape: Tuple[int, int], interpolation='nearest') -> Image:
+    """重塑图片
+
+    在不改变图片的比例的情况下进行图片重塑。如改变图片比例不影响任务，请使用PIL.Image.Image.resize()方法提升效率。
+    先将图片等比例放大到最大（放缩到最小）满足required_shape的某个维度，再对图片随机取部分或填充黑边以适配所需形状
+    :param interpolation: 指定图片resize的插值方法
     :param image: 待编辑图片
-    :param required_shape: 所需形状
+    :param required_shape: 所需形状，(宽度，高度)
     :return: 重塑完成的图片。
     """
     # 实现将图片进行随机裁剪以达到目标shape的功能
-    ih, iw = image.size
-    h, w = required_shape
+    iw, ih = image.size
+    w, h = required_shape
 
     # 长边放缩比例
-    scale = max(w / iw, h / ih)
+    scale = max(h / ih, w / iw)
     # 计算新图片shape
-    new_w = int(iw * scale)
     new_h = int(ih * scale)
+    new_w = int(iw * scale)
     # 计算图片缺失shape
-    dw = w - new_w
     dh = h - new_h
+    dw = w - new_w
+
     # 等比例缩放数据
-    image = image.resize((new_h, new_w), IMAGE.BICUBIC)
+    def __get_interpolation():
+        """获取插值方法"""
+        supported = ['nearest', 'bicubic', 'bilinear', 'lanczos']
+        assert check_para('interpolation', interpolation, supported)
+        if interpolation == 'nearest':
+            return PIL.Image.NEAREST
+        elif interpolation == 'bicubic':
+            return PIL.Image.BICUBIC
+        elif interpolation == 'bilinear':
+            return PIL.Image.BILINEAR
+        elif interpolation == 'lanczos':
+            return PIL.Image.LANCZOS
+
+    image = image.resize((new_w, new_h), __get_interpolation())
     # 若需求图片大小较大，则进行填充
-    if dw > 0 or dh > 0:
-        back_ground = IMAGE.new(image.mode, (w, h), 0)
+    if dh > 0 or dw > 0:
+        back_ground = IMAGE.new(image.mode, (h, w), 0)
         back_ground.paste(image)
+        image = back_ground
     # 若需求图片大小较小，则随机取部分
-    if dw < 0 or dh < 0:
-        i_h = random.randint(0, -dh) if dh < 0 else 0
+    if dh < 0 or dw < 0:
         i_w = random.randint(0, -dw) if dw < 0 else 0
-        image.crop((i_w, i_w, i_w + new_w, i_h + new_h))
+        i_h = random.randint(0, -dh) if dh < 0 else 0
+        image = image.crop((i_w, i_h, i_w + h, i_h + w))
     return image
 
 
 def crop_img(img: Image, required_shape, loc: str or Tuple[int, int]) -> Image:
-    """
-    按照指定位置裁剪图片
+    """按照指定位置裁剪图片
+
     :param img: 即将进行裁剪的图片
     :param required_shape: 需要保留的尺寸
-    :param loc: 裁剪的位置。可以指定为“lt, lb, rt, rb, c”的其中一种，或者指定为二元组指示裁剪区域的左上角坐标
+    :param loc: 裁剪的位置。
+        可以指定为“lt, lb, rt, rb, c”的其中一种
+        或者指定为二元组指示裁剪区域的左上角坐标(x, y)
     :return: 裁剪完成的图片
     """
     img_size = img.size
     iw, ih = img_size
     rw, rh = required_shape
     assert rh <= ih and rw <= iw, (
-        f'裁剪尺寸{required_shape}需要小于图片尺寸{img_size}！'
+        f'裁剪尺寸{required_shape}不能超出图片尺寸{img_size}！'
     )
-    if type(loc) == str:
+    if isinstance(loc, str):
         if loc == 'lt':
             loc = (0, 0, 0 + rw, 0 + rh)
         elif loc == 'lb':
@@ -70,43 +90,23 @@ def crop_img(img: Image, required_shape, loc: str or Tuple[int, int]) -> Image:
             loc = (iw // 2 - rw // 2, ih // 2 - rh // 2, iw // 2 + rw // 2, ih // 2 + rh // 2)
         else:
             raise Exception(f'不支持的裁剪位置{loc}！')
-    elif type(loc) == Tuple and len(loc) == 2:
+    elif isinstance(loc, tuple) and len(loc) == 2:
         loc = (loc[0], loc[1], loc[0] + rw, loc[1] + rh)
     else:
         raise Exception(f'无法识别的裁剪位置参数{loc}')
     return img.crop(loc)
 
 
-def read_img(path: str, mode: str = 'L', requires_id: bool = False,
-             *preprocesses: Iterable[Tuple[Callable, dict]]) -> np.ndarray:
+def read_img(path: str, mode: str = 'L'):
     """
     读取图片
     :param path: 图片所在路径
     :param mode: 图片读取模式
-    :param requires_id: 是否需要给图片打上ID
     :return: 图片对应numpy数组，形状为（通道，图片高，图片宽，……）
     """
     img_modes = ['L', 'RGB', '1']
     assert mode in img_modes, f'不支持的图像模式{mode}！'
-    # img = Image.open(path).convert(mode)
-    img = IMAGE.open(path)
-    preprocesses = (*preprocesses, (Image.convert, (mode,), {}))
-    for preprocess in preprocesses:
-        func, args, kwargs = preprocess
-        img = func(img, *args, **kwargs)
-    img = np.array(img)
-    # 复原出通道。1表示样本数量维
-    if mode == 'L' or mode == '1':
-        img_channels = 1
-    elif mode == 'RGB':
-        img_channels = 3
-    else:
-        img_channels = -1
-    img = img.reshape((img_channels, *img.shape[:2]))
-    # if requires_id:
-    #     # 添加上读取文件名
-    #     file_name = os.path.split(path)[-1]
-    #     img = np.hstack((file_name, img))
+    img = IMAGE.open(path).convert(mode)
     return img
 
 
@@ -136,10 +136,11 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     :param kwargs: 关键词参数。支持的参数包括：comment，单个白板的脚注；text_size，标签及脚注的文字大小；border_size，图片/标签/边界之间的宽度
     :return: 生成的结果图序列
     """
-    comments = kwargs['comments'] if 'comments' in kwargs.keys() else ['' for _ in
-                                                                       range(len(groups_of_imgs_labels_list))]
+    footnotes = kwargs['footnotes'] if 'footnotes' in kwargs.keys() \
+        else ['' for _ in range(len(groups_of_imgs_labels_list))]
     text_size = kwargs['text_size'] if 'text_size' in kwargs.keys() else 15
     border_size = kwargs['border_size'] if 'border_size' in kwargs.keys() else 5
+    img_size = kwargs['img_size'] if 'img_size' in kwargs.keys() else None
     required_shape = kwargs['required_shape'] if 'required_shape' in kwargs.keys() else None
     # 判断白板所用模式
     mode = '1'
@@ -148,38 +149,59 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
         modes.add(img.mode)
     if 'CMYK' in modes:
         mode = 'CMYK'
+        color = (255, 255, 255, 255)
+        text_color = (0, 0, 0, 0)
     elif 'RGB' in modes:
         mode = 'RGB'
-    elif 'L' in modes:
-        mode = 'L'
+        color = (255, 255, 255)
+        text_color = (0, 0, 0)
+    elif 'F' in modes or 'L' in modes or '1' in modes:
+        if 'F' in modes:
+            mode = 'F'
+        elif 'L' in modes:
+            mode = 'L'
+        else:
+            mode = '1'
+        color = 255
+        text_color = 0
+    else:
+        raise NotImplementedError(f'暂未识别的图片模式组合{modes}，无法进行背景板颜色定义以及返图模式推断')
 
-    def _concat_imgs(comment: str = "",
-                     *imgs_and_labels: Tuple[Image, str]
-                     ) -> Image:
+    def _impl(footnotes: str = "",
+              *imgs_and_labels: Tuple[Image, str]
+              ) -> Image:
         """拼接图片和标签，再添加脚注形成单张图片"""
         # 计算绘图窗格大小
-        cb_height = max([img.height for img, _ in imgs_and_labels])
-        cb_width = max([img.width for img, _ in imgs_and_labels])
+        if img_size:
+            cb_height, cb_width = img_size
+        else:
+            cb_height = max([img.height for img, _ in imgs_and_labels])
+            cb_width = max([img.width for img, _ in imgs_and_labels])
         n_cube = len(imgs_and_labels)
         # 计算脚注空间
-        n_cm_lines = comment.count('\n') + 2  # 加上'COMMENT:'和内容
+        n_ftn_lines = footnotes.count('\n') + 2  # 加上'COMMENT:'和内容
         text_indent = int(np.ceil(text_size / 3))
-        cm_height = text_size * n_cm_lines + text_indent * (n_cm_lines - 1)
-        cm_width = int(max([len(l) for l in comment.split('\n')]) * text_size / 2.5)
+        ftn_height = text_size * n_ftn_lines + text_indent * (n_ftn_lines - 1)
+        ftn_width = int(max([len(l) for l in footnotes.split('\n')]) * text_size / 2.5)
         # 绘制白板
         wb_width = max(
             (n_cube + 1) * border_size + n_cube * cb_width,
-            2 * border_size + cm_width
+            2 * border_size + ftn_width
         )
-        wb_height = 3 * border_size + text_size + text_indent + cb_height + cm_height
+        wb_height = 3 * border_size + text_size + text_indent + cb_height + ftn_height
         # 制作输入、输出、标签对照图
-        whiteboard = IMAGE.new(
-            mode, (wb_width, wb_height), color=255
-        )
+        whiteboard = IMAGE.new(mode, (wb_width, wb_height), color=color)
         draw = ImageDraw.Draw(whiteboard)
         # 绘制标签和图片
         for i, (img, label) in enumerate(imgs_and_labels):
-            draw.text(((i + 1) * border_size + i * cb_width, border_size), label)
+            if img_size:
+                img = resize_img(img, img_size)
+            # 添加图片标题
+            draw.text(
+                ((i + 1) * border_size + i * cb_width, border_size),
+                label, fill=text_color
+            )
+            # 拼接图片
             whiteboard.paste(
                 img.convert(mode),
                 (
@@ -189,22 +211,22 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
             )
         # 绘制脚注
         draw.text(
-            (border_size, wb_height - cm_height - border_size),
-            'COMMENT: \n' + comment
+            (border_size, wb_height - ftn_height - border_size),
+            'COMMENT: \n' + footnotes, fill=text_color
         )
         return whiteboard
 
     rets = []
     with tqdm(
-            total=min(len(groups_of_imgs_labels_list), len(comments)),
-            unit='张', position=0, desc=f"正在拼装图片中……", mininterval=1, leave=True
+            zip(groups_of_imgs_labels_list, footnotes), total=len(groups_of_imgs_labels_list),
+            unit='张', position=0, desc=f"正在拼装图片中……",
+            mininterval=1, leave=True, ncols=80
     ) as pbar:
-        for imgs_and_labels, comment in zip(groups_of_imgs_labels_list, comments):
-            ret = _concat_imgs(comment, *imgs_and_labels)
+        for imgs_and_labels, foot_note in pbar:
+            ret = _impl(foot_note, *imgs_and_labels)
             if required_shape is not None:
                 ret = ret.resize(required_shape)
             rets.append(ret)
-            pbar.update(1)
     return rets
 
 
@@ -239,6 +261,31 @@ def add_mask(images: List[np.ndarray], mask: np.ndarray) -> np.ndarray:
     # IMAGE.fromarray(ret[0].reshape((256, 256))).show()  # 查看掩膜图片的语句
 
 
+def extract_holes(images: np.ndarray,
+                  hole_poses: List[Tuple[int, int]],
+                  hole_sizes: List[int]) -> list:
+    """
+    根据孔径大小和位置提取图片孔径内容
+    :param images: 图片序列。
+    :param hole_poses: 孔径位置，即方形孔径的左上角坐标。
+    :param hole_sizes: 孔径大小，需为整数列表，内含孔径边长。目前只支持方形孔径。
+    :return: 挖出的孔径列表。
+    """
+    # 检查越界问题
+    assert np.max(np.array(hole_poses)[:, 0]) < images.shape[
+        -2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
+    assert np.max(np.array(hole_poses)[:, 1]) < images.shape[
+        -1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
+    hole_sizes = np.array(hole_sizes)
+    images = np.array(images)
+    # 挖孔
+    holes = [[] for _ in range(len(images))]
+    for (x, y), size in zip(hole_poses, hole_sizes.flatten()):
+        for i, image in enumerate(images[:, :, x: x + size, y: y + size]):
+            holes[i].append(image)
+    return holes
+
+
 def extract_and_cat_holes(images: np.ndarray,
                           hole_poses: List[Tuple[int, int]],
                           hole_sizes: List[int],
@@ -246,7 +293,7 @@ def extract_and_cat_holes(images: np.ndarray,
                           required_shape=None) -> np.ndarray:
     """
     根据孔径大小和位置提取图片孔径内容，并将所有孔径粘连到一起，形成孔径聚合图片。
-    :param required_shape:
+    :param required_shape: 指定返回的图片大小
     :param images: 图片序列。
     :param hole_poses: 孔径位置，即方形孔径的左上角坐标。
     :param hole_sizes: 孔径大小，需为整数列表，内含孔径边长。目前只支持方形孔径。
@@ -291,30 +338,32 @@ def extract_and_cat_holes(images: np.ndarray,
     return whiteboards
 
 
-def mean_LI_of_holes(images: np.ndarray,
-                     hole_poses: List[Tuple[int, int]],
-                     hole_sizes: List[int]):
-    # 检查越界问题
-    assert np.max(np.array(hole_poses)[:, 0]) < images.shape[
-        -2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
-    assert np.max(np.array(hole_poses)[:, 1]) < images.shape[
-        -1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
-    for (x, y), size in zip(hole_poses, hole_sizes):
-        images[:, :, x: x + size, y: y + size] = np.mean(
-            images[:, :, x: x + size, y: y + size], axis=(2, 3), keepdims=True
-        )
-    return images
+# def mean_LI_of_holes(images: np.ndarray,
+#                      hole_poses: List[Tuple[int, int]],
+#                      hole_sizes: List[int]):
+#     # 检查越界问题
+#     assert np.max(np.array(hole_poses)[:, 0]) < images.shape[
+#         -2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
+#     assert np.max(np.array(hole_poses)[:, 1]) < images.shape[
+#         -1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
+#     for (x, y), size in zip(hole_poses, hole_sizes):
+#         images[:, :, x: x + size, y: y + size] = np.mean(
+#             images[:, :, x: x + size, y: y + size], axis=(2, 3), keepdims=True
+#         )
+#     return images
 
 
 def get_mean_LI_of_holes(images: np.ndarray,
                          hole_poses: List[Tuple[int, int]],
-                         hole_sizes: List[int]):
-    """计算图片序列中挖孔的平均光强
-    :param images: 三维图片序列，维度信息（通道数，长度，宽度）
+                         hole_sizes: List[int] or List[Tuple[int, int]]):
+    """计算图片序列中，每个指定挖孔区域的平均光强
+
+    :param images: 三维图片序列，每张图片要求维度信息为（通道数，长度，宽度）
     :param hole_poses: 每张图片的挖孔位置序列，该位置序列会应用到所有图片的计算中。
     :param hole_sizes: 每个挖孔位置的挖孔大小，要求len(hole_sizes) == len(hole_poses)。
     :return: 光强序列，序列中的每个元素为挖孔所得光强序列。
     """
+    assert isinstance(images, np.ndarray), f'输入的图片序列必须为numpy数组！'
     # 检查越界问题
     assert np.max(np.array(hole_poses)[:, 0]) < images.shape[
         -2], f'孔径的横坐标取值{np.max(np.array(hole_poses)[:, 0])}越界！'
@@ -322,19 +371,51 @@ def get_mean_LI_of_holes(images: np.ndarray,
         -1], f'孔径的纵坐标取值{np.max(np.array(hole_poses)[:, 1])}越界！'
     assert len(hole_poses) == len(hole_sizes), \
         f'挖孔位置需要和挖孔大小一一对应，提供了{len(hole_poses)}个位置但只收到了{len(hole_sizes)}个大小要求。'
-    mean_LIs_groups = []
-    for image in images:
+
+    def __dig_holes(image):
+        """挖孔函数"""
         mean_LIs = []
-        for (x, y), size in zip(hole_poses, hole_sizes):
-            mean_LIs.append(np.mean(image[:, x: x + size, y: y + size]))
-        mean_LIs_groups.append(mean_LIs)
-    return mean_LIs_groups
+        if len(image.shape) <= 2:
+            # 图片缺少通道维
+            for (x, y), size in zip(hole_poses, hole_sizes):
+                if hasattr(size, '__iter__'):
+                    # 指定了孔径的长宽
+                    mean_LIs.append(np.mean(image[x: x + size[0], y: y + size[1]]))
+                else:
+                    # 指定了孔径的边长
+                    mean_LIs.append(np.mean(image[x: x + size, y: y + size]))
+        elif len(image.shape) == 3:
+            # 图片有通道维度
+            for (x, y), size in zip(hole_poses, hole_sizes):
+                if hasattr(size, '__iter__'):
+                    # 指定了孔径的长宽
+                    mean_LIs.append(np.mean(image[:, x: x + size[0], y: y + size[1]]))
+                else:
+                    # 指定了孔径的边长
+                    mean_LIs.append(np.mean(image[:, x: x + size, y: y + size]))
+        else:
+            raise NotImplementedError(f'暂未支持的图片维度{images.shape}，请检查图片数据！')
+        return mean_LIs
+
+    # for image in images:
+    #     # mean_LIs = []
+    #     # for (x, y), size in zip(hole_poses, hole_sizes):
+    #     #     if hasattr(size, '__iter__'):
+    #     #         # 指定了孔径的长宽
+    #     #         mean_LIs.append(np.mean(image[:, x: x + size[0], y: y + size[1]]))
+    #     #     else:
+    #     #         # 指定了孔径的边长
+    #     #         mean_LIs.append(np.mean(image[:, x: x + size, y: y + size]))
+    #     # mean_LIs_groups.append(mean_LIs)
+    #     mean_LIs_groups.append(__dig_holes(image))
+    return [__dig_holes(image) for image in images]
 
 
 def blend(required_shapes: List, group_of_values: List,
           group_of_n_rows: List, group_of_n_cols: List, mode='L',
-          dtype=np.float32) -> list:
+          dtype=np.float32) -> list[np.ndarray]:
     """按照给定大小以及给定颜料值生成一组晕染图
+
     :param required_shapes: 晕染图组中，每一张晕染图的大小
     :param group_of_values: 每一张晕染图中填充的颜料值，要求颜料块的数量和颜料值一致，即n_rows * n_cols == len(values)
     :param group_of_n_rows: 每一张晕染图中颜料的行数
@@ -351,7 +432,7 @@ def blend(required_shapes: List, group_of_values: List,
         raise NotImplementedError(f'暂未支持的图片模式{mode}，支持的模式包括{supported}')
     blackboards = []
     for req_sha, values, n_rows, n_cols in zip(required_shapes, group_of_values, group_of_n_rows, group_of_n_cols):
-        assert n_rows * n_cols == len(values), f'提供的颜料值{len(values)}应与绘制区域数目{n_rows * n_cols}一致'
+        assert n_rows * n_cols == len(values), f'提供的颜料数量{len(values)}应与绘制区域数目{n_rows * n_cols}一致'
         blackboard = np.zeros((channel, *req_sha), dtype=dtype)
         # 绘制区域大小
         area_height = req_sha[0] // n_rows

@@ -5,7 +5,7 @@ from networks.basic_nn import BasicNN
 
 class LeNet(BasicNN):
 
-    required_shape = (32, 32)
+    input_size = (32, 32)
 
     def __init__(self, in_channels, out_features,
                  regression=False, **kwargs) -> None:

@@ -24,7 +24,6 @@ class GANLoss(nn.Module):
         self.register_buffer('real_label', torch.tensor(target_real_label))
         self.register_buffer('fake_label', torch.tensor(target_fake_label))
         self.gan_mode = gan_mode
-        # TODO:适配size_averaged
         if gan_mode == 'lsgan':
             self.loss = nn.MSELoss(**kwargs)
         elif gan_mode == 'vanilla':
@@ -59,7 +58,7 @@ class GANLoss(nn.Module):
         if self.gan_mode in ['lsgan', 'vanilla']:
             target_tensor = self.get_target_tensor(prediction, target_is_real)
             loss = self.loss(prediction, target_tensor)
-        elif self.gan_mode == 'wgangp':
+        else:
             if target_is_real:
                 loss = -prediction
             else:

@@ -1,7 +1,7 @@
 from torch import nn
 
 from networks.basic_nn import BasicNN
-from networks.layers.multi_output import MultiOutputLayer
+from layers.multi_output import MultiOutputLayer
 
 
 class WZYNetEssay(BasicNN):
@@ -11,7 +11,7 @@ class WZYNetEssay(BasicNN):
     [1] 王志远. 基于深度学习的散斑光场信息恢复[D]. 厦门：华侨大学，2023
     """
 
-    required_shape = (256, 256)
+    input_size = (256, 256)
 
     def __init__(self, input_channels, base_channels, out_features,
                  kernel_size=3, bn_momen=0.95, dropout_rate=0.,

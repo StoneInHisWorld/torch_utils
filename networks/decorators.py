@@ -1,74 +1,28 @@
 import warnings
 from functools import wraps
 
+import dill
 import torch
 from torchinfo import summary
 from tqdm import tqdm
 
-from networks.basic_nn import BasicNN
-
-
-def unpack_kwargs(allow_args: dict[str, tuple]):
-    """
-    为函数拆解输入的关键字参数。
-    若调用时对某字符串参数进行赋值，则会检查该参数是否在提供的参数范围内。
-    若未检测到输入值，则会指定默认值。
-    会忽略不识别的参数值。
-    需要被装饰函数含有parameters参数，设定其值为None，用于接受拆解过后的关键词参数。
-    所有关键字参数均被视为用于拆解的参数，被装饰函数不得拥有关键字参数。
-
-    :param allow_args: 函数允许的关键词参数，字典key为参数关键字，value为二元组。
-        二元组0号位为默认值，1号位为允许范围。1号位仅当参数类型为字符串时有效，否则为空列表。
-    :return: 装饰过的函数
-    """
-    warnings.warn('该装饰器过于复杂，已被弃用', DeprecationWarning)
-
-    def unpack_decorator(train_func):
-        """
-        装饰器
-        :param train_func: 需要参数的函数
-        :return 装饰过的函数
-        """
-
-        @wraps(train_func)
-        def wrapper(*args, **kwargs):
-            """
-            按允许输入参数排列顺序拆解输入参数，或者赋值为其默认值
-            :param args: train_func的位置参数
-            :param kwargs: train_func的关键字参数
-            :return: 包装函数
-            """
-            parameters = ()
-            for k in allow_args.keys():
-                default = allow_args[k][0]
-                allow_range = allow_args[k][1]
-                input_arg = kwargs.pop(k, default)
-                if isinstance(default, str):
-                    assert input_arg in allow_range, \
-                        f'输入参数{k}:{input_arg}不在允许范围内，允许的值为{allow_range}'
-                parameters = *parameters, input_arg
-            return train_func(*args, parameters=parameters)
-
-        return wrapper
-
-    return unpack_decorator
-
+from networks import BasicNN
 
 class net_builder:
     """网络创建装饰器。
     使用@new_builder()进行调用，创建好网络后传输给需要的函数。
     """
 
-    def __init__(self, destroy=False):
+    def __init__(self, mute=False):
         """网络创建装饰器。
         使用@new_builder()进行调用，创建好网络后传输给需要的函数。
         需要修饰的方法的前四个参数指定为trainer, net_class, n_init_args, n_init_kwargs，
             其中trainer提供数据源信息，后三个参数提供网络构造参数。
         若不需要构造网络，则令trainer.module对象不为None即可，此时只需向args提供trainer参数。
 
-        :param destroy: 是否在函数调用过后销毁网络，以节省内存。Deprecated!
+        :param mute: 是否在函数调用过后销毁网络，以节省内存。Deprecated!
         """
-        self.destroy = destroy
+        self.mute = mute
 
     def __call__(self, func):
         @wraps(func)
@@ -81,22 +35,25 @@ class net_builder:
             :param kwargs:
             :return:
             """
-            _, trainer, *args = args
+            prepare_obj, trainer, *args = args
+            if isinstance(trainer, bytes):
+                # 如果trainer被序列化了
+                trainer = dill.loads(trainer)
             if trainer.module is None:
                 # 构造网络对象并交由trainer持有
                 net_class, n_init_args, n_init_kwargs = trainer.module_class, trainer.m_init_args, trainer.m_init_kwargs
-                net = self.__build(net_class, n_init_args, n_init_kwargs, trainer)
+                net = self.__build(net_class, n_init_args, n_init_kwargs, trainer, prepare_obj.mute)
                 setattr(trainer, 'module', net)
             else:
                 net = trainer.module
             args = trainer, net, *args
-            args = func(_, *args, **kwargs)
+            args = func(prepare_obj, *args, **kwargs)
 
             return args
 
         return wrapper
 
-    def __build(self, net_class, n_init_args, n_init_kwargs, trainer):
+    def __build(self, net_class, n_init_args, n_init_kwargs, trainer, mute):
         """根据参数构造一个神经网络
         :param net_class: 构造的神经网络类型，作为类构造器传入
         :param n_init_args: 类构造器所用位置参数
@@ -104,16 +61,22 @@ class net_builder:
         :return: 构造完成的神经网络
         """
         assert issubclass(net_class, BasicNN), '请使用BasicNN的子类作为训练网络！'
-        print(f'\r正在构造{net_class.__name__}', end='', flush=True)
+        if not mute:
+            print(f'\r正在构造{net_class.__name__}', end='', flush=True)
         try:
             n_init_kwargs['with_checkpoint'] = trainer.runtime_cfg['with_checkpoint']
             net = net_class(*n_init_args, **n_init_kwargs)
         except FileNotFoundError:
             # 处理预训练网络加载
+            # 去掉.ptsd
             where = n_init_kwargs['init_kwargs']['where'][:-5]
-            net = torch.load(where + '.ptm')
-        print(f'\r构造{net_class.__name__}完成')
-        self.__list_net(net, trainer)
+            try:
+                net = torch.load(where + '.ptm')
+            except FileNotFoundError:
+                raise FileNotFoundError(f'找不到网络持久化文件{where + ".ptm"}')
+        if not mute:
+            print(f'\r构造{net_class.__name__}完成')
+            self.__list_net(net, trainer)
         return net
 
     def __list_net(self, net, trainer) -> None:
@@ -122,15 +85,9 @@ class net_builder:
         :return: None
         """
         if trainer.runtime_cfg['print_net']:
-            # input_size = trainer.datasource.fea_channel, *net.required_shape
             input_size = trainer.input_size
-            # input_size = (1, 3, 3)
             try:
-                summary(
-                    # net, input_size=input_size,
-                    # batch_size=trainer.hps['batch_size']
-                    net, input_size=(trainer.hps['batch_size'], *input_size)
-                )
+                summary(net, input_size=(trainer.hps['batch_size'], *input_size))
             except Exception as e:
                 warnings.warn(f"打印网络时遇到错误：{e}，将切换成简洁打印模式！")
                 print(net)
@@ -142,7 +99,7 @@ class prepare:
     # 是否处于k_fold模式
     k_fold = False
 
-    def __init__(self, what='train'):
+    def __init__(self, what='train', mute=False):
         """函数准备装饰器，进行不同类型的准备，请使用@prepare()进行调用
 
         'train': 需要传入参数net、prepare_args、criterion_a、*args，其含义分别为训练待使用的网络对象，
@@ -157,6 +114,7 @@ class prepare:
         :param what: 进行何种准备
         """
         self.what = what
+        self.mute = mute
 
     def __call__(self, func):
         @wraps(func)
@@ -183,7 +141,6 @@ class prepare:
                 with torch.no_grad():
                     result = func(*args, **kwargs)
                 self.__after_predict(args[0])
-            # TODO：针对多进程设计一个准备流程
             else:
                 raise ValueError(f'未知准备类型{self.what}!')
             return result
@@ -301,7 +258,8 @@ class prepare:
             del net.optimizer_s, net.scheduler_s
         # 创建进度条
         trainer.pbar = tqdm(
-            data_iter, unit='批', position=0, desc=f'正在计算结果……', mininterval=1, ncols=100
+            data_iter, unit='批', position=0, desc=f'正在计算结果……',
+            mininterval=1, ncols=80
         )
         # 设置神经网络模式
         net.eval()

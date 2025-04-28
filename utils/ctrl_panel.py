@@ -1,64 +1,63 @@
 import json
+import jsonref
+import os.path
 
 import pandas as pd
 import torch
 
-from utils.experiment import Experiment
-from utils.func import pytools
+from config.init_cfg import init_log, init_settings, init_hps
+from .experiment import Experiment
+from .func import pytools as ptools
 
+from jsonref import JsonRef
 
-def init_log(path):
-    """日志初始化方法
-    日志初始化只会增加一个条目，该条目里只有“exp_no==1”的信息
-    :param path:
-    :return:
-    """
-    with open(path, 'w', encoding='utf-8') as log:
-        log.write("exp_no\n1\n")
+def resolve_jsonref(obj):
+    """用于处理JsonRef对象"""
+    if isinstance(obj, JsonRef):
+        return resolve_jsonref(obj.__subject__)  # 解引用
+    elif isinstance(obj, dict):
+        return {k: resolve_jsonref(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [resolve_jsonref(item) for item in obj]
+    else:
+        return obj
+
 
 
 class ControlPanel:
     """控制台类负责读取、管理动态运行参数、超参数组合，以及实验对象的提供"""
 
-    def __init__(self, datasource,
-                 hp_cfg_path: str,
-                 runtime_cfg_path: str,
-                 log_path: str = None,
-                 net_path: str = None,
-                 plot_path: str = None):
-        """控制台类。
-        负责读取、管理动态运行参数、超参数组合，以及实验对象的提供。
-        迭代每次提供一个实验对象，包含有单次训练的超参数组合以及动态运行参数组合，训练过程中不可改变，每次迭代后会更新运行配置参数。
+    def __init__(self, datasource, net_type, cfg_root):
+        """控制面板
 
+        负责读取、管理动态运行参数、超参数组合，生成超参数配置文件路径、日志文件存储路径以及网络文件存储目录，提供实验Experiment对象。
+        迭代每次提供一个实验对象，包含有单次训练的超参数组合以及动态运行参数组合，训练过程中不可改变，每次迭代后会更新运行配置参数。
         :param datasource: 训练数据来源
-        :param hp_cfg_path: 超参数配置文件路径
-        :param runtime_cfg_path: 运行配置文件路径
-        :param log_path: 日志文件存储路径
-        :param net_path: 网络文件存储路径
+        :param net_type: 训练所用模型类
+        :param cfg_root: 运行配置文件路径
         """
-        # 路径检查以及路径提取
-        pytools.check_path(hp_cfg_path)
-        pytools.check_path(runtime_cfg_path)
-        if log_path is not None:
-            pytools.check_path(log_path, init_log)
-        if net_path is not None:
-            pytools.check_path(net_path)
-        if plot_path is not None:
-            pytools.check_path(plot_path)
-        # 路径整理
-        self.__rcp = runtime_cfg_path
-        self.__hcp = hp_cfg_path
-        self.__lp = log_path
-        self.__np = net_path
-        self.__pp = plot_path
-        self.__datasource = datasource
+        # 生成运行动态配置
+        self.__rcp = os.path.join(cfg_root, f'settings.json')  # 运行配置json文件路径
         # 读取运行配置
-        with open(self.__rcp, 'r') as cfg:
-            self.cfg_dict = json.load(cfg)
+        ptools.check_path(self.__rcp, init_settings)
+        self.__read_runtime_cfg()
+        # 生成其他路径
+        net_name = net_type.__name__.lower()
+        self.__hcp = os.path.join(cfg_root, f'hp_control/{net_name}_hp.json')  # 网络训练超参数文件路径
+        log_root = self.cfg_dict['log_root']
+        self.__lp = os.path.join(log_root, f'{net_name}_log.csv')  # 日志文件存储路径
+        self.__np = os.path.join(log_root, f'trained_net/{net_name}/')  # 训练成果网络存储路径
+        self.__pp = os.path.join(log_root, f'imgs/{net_name}/')  # 历史趋势图存储路径
+        # 路径检查
+        ptools.check_path(self.__hcp, init_hps)
+        ptools.check_path(self.__lp, init_log)
+        ptools.check_path(self.__np)
+        ptools.check_path(self.__pp)
         # 设置随机种子
         torch.random.manual_seed(self['random_seed'])
         # # 读取实验编号
         self.__read_expno()
+        self.__datasource = datasource
 
     def __read_expno(self):
         """读取实验编号
@@ -94,7 +93,7 @@ class ControlPanel:
         """
         with open(self.__hcp, 'r', encoding='utf-8') as cfg:
             hyper_params = json.load(cfg)
-            for hps in pytools.permutation([], *hyper_params.values()):
+            for hps in ptools.permutation([], *hyper_params.values()):
                 hyper_params = {k: v for k, v in zip(hyper_params.keys(), hps)}
                 # 构造实验对象
                 self.__cur_exp = Experiment(
@@ -108,7 +107,12 @@ class ControlPanel:
                     f'---------------------------'
                 )
                 yield self.__cur_exp
+                # 读取运行动态参数
                 self.__read_runtime_cfg()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                # 更新实验编号
+                self.exp_no += 1
 
     def __getitem__(self, item):
         """获取控制面板中的运行配置参数。
@@ -120,92 +124,18 @@ class ControlPanel:
         return self.cfg_dict[item]
 
     def __read_runtime_cfg(self):
-        """读取运行配置并更新实验编号"""
+        """读取运行配置并更新或者赋值"""
         with open(self.__rcp, 'r', encoding='utf-8') as config:
-            config_dict = json.load(config)
-            assert config_dict.keys() == self.cfg_dict.keys(), '在运行期间，不允许添加新的运行设置参数！'
-            for k, v in config_dict.items():
-                self.cfg_dict[k] = v
-        # 更新实验编号
-        self.exp_no += 1
-
-    # def __list_net(self, net, input_size, batch_size) -> None:
-    #     """
-    #     打印网络信息。
-    #     :param net: 待打印的网络信息。
-    #     :param input_size: 网络输入参数。
-    #     :param batch_size: 训练的批量大小。
-    #     :return: None
-    #     """
-    #     if self['print_net']:
-    #         try:
-    #             summary(net, input_size=input_size, batch_size=batch_size)
-    #         except RuntimeError as _:
-    #             print(net)
-
-    # def __plot_history(self, history, **plot_kwargs) -> None:
-    #     # 检查参数设置
-    #     cfg_range = ['plot', 'save', 'no']
-    #     cfg = self['plot_history']
-    #     if not pytools.check_para('plot_history', cfg, cfg_range):
-    #         print('请检查setting.json中参数plot_history设置是否正确，本次不予绘制历史趋势图！')
-    #         return
-    #     if cfg == 'no':
-    #         return
-    #     if self.__pp is None:
-    #         warnings.warn('未指定绘图路径，不予保存历史趋势图！')
-    #     savefig_as = None if self.__pp is None or cfg == 'plot' else self.__pp + str(self.exp_no) + '.jpg'
-    #     # 绘图
-    #     ltools.plot_history(
-    #         history, mute=self['plot_mute'],
-    #         title='EXP NO.' + str(self.exp_no),
-    #         savefig_as=savefig_as, **plot_kwargs
-    #     )
-    #     print('已绘制历史趋势图')
-
-    # def register_result(self, history, test_log=None, **plot_kwargs) -> None:
-    #     """根据训练历史记录进行输出，并进行日志参数的记录。
-    #     在神经网络训练完成后，需要调用本函数将结果注册到超参数控制台。
-    #     :param history: 训练历史记录
-    #     :param test_log: 测试记录
-    #     :return: None
-    #     """
-    #     log_msg = {}
-    #     if len(history) <= 0:
-    #         raise ValueError('历史记录对象为空！')
-    #     # 输出训练部分的数据
-    #     for name, log in history:
-    #         if name != name.replace('train_', '训练'):
-    #             # 输出训练信息，并记录
-    #             print(f"{name.replace('train_', '训练')} = {log[-1]:.5f},", end=' ')
-    #             log_msg[name] = log[-1]
-    #     # 输出验证部分的数据
-    #     print('\b\b')
-    #     for name, log in history:
-    #         if name != name.replace('valid_', '验证'):
-    #             # 输出验证信息，并记录
-    #             print(f"{name.replace('valid_', '验证')} = {log[-1]:.5f},", end=' ')
-    #             log_msg[name] = log[-1]
-    #     # 输出测试部分的数据
-    #     print('\b\b')
-    #     if test_log is not None:
-    #         for k, v in test_log.items():
-    #             print(f"{k.replace('test_', '测试')} = {v:.5f},", end=' ')
-    #         print('\b\b')
-    #     log_msg.update(test_log)
-    #     self.__plot_history(
-    #         history, **plot_kwargs
-    #     )
-    #     self.__cur_exp.add_logMsg(
-    #         True, **log_msg, data_portion=self['data_portion']
-    #     )
-    #     if self.device != torch.device('cpu') and self["cuda_memrecord"]:
-    #         self.__cur_exp.add_logMsg(
-    #             True,
-    #             max_GPUmemory_allocated=torch.cuda.max_memory_allocated(self.device) / (1024 ** 3),
-    #             max_GPUmemory_reserved=torch.cuda.max_memory_reserved(self.device) / (1024 ** 3),
-    #         )
-    #         torch.cuda.reset_peak_memory_stats(self.device)
+            config_dict = jsonref.load(config, merge_props=True)
+            config_dict = resolve_jsonref(config_dict)
+            if hasattr(self, 'cfg_dict'):
+                # 更新运行动态参数
+                assert config_dict.keys() == self.cfg_dict.keys(), '在运行期间，不允许添加新的运行设置参数！'
+                for k, v in config_dict.items():
+                    self.cfg_dict[k] = v
+            else:
+                # 首次获取运行动态参数
+                self.cfg_dict = config_dict
 
     @property
     def runtime_cfg(self):
@@ -214,5 +144,3 @@ class ControlPanel:
     @property
     def device(self):
         return torch.device(self['device'])
-
-

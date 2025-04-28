@@ -6,8 +6,8 @@ import inspect
 import utils.func.torch_tools as ttools
 # from networks.basic_nn import BasicNN
 from networks.basic_nn import BasicNN
-from networks.nets.pix2pix_d import Pix2Pix_D
-from networks.nets.pix2pix_g import Pix2Pix_G
+from networks.nets.pix2pix.pix2pix_d import Pix2Pix_D
+from networks.nets.pix2pix.pix2pix_g import Pix2Pix_G
 
 
 class Pix2Pix(BasicNN):
@@ -25,7 +25,7 @@ class Pix2Pix(BasicNN):
                  d_args, d_kwargs,
                  direction='AtoB', isTrain=True,
                  **kwargs):
-        """实现pix2pix模型，通过给定数据对学习输入图片到输出图片的映射。
+        r"""实现pix2pix模型，通过给定数据对学习输入图片到输出图片的映射。
 
         pix2pix不使用图片缓存。
 
@@ -33,16 +33,27 @@ class Pix2Pix(BasicNN):
 
         分辨器目标函数为 :math:`\ell_D = 0.5 D_read + 0.5 D_fake`
 
+        目前可指定的损失函数包括：pcc | cGAN
+
         训练过程中输出四个目标值，分别为G_GAN、G_L1、D_real、D_fake：
 
         - :math:`G_GAN`：生成器的GAN损失
         - :math:`G_{L1}`：生成器的L1损失
         - :math:`D_real`：分辨器分辨真图为真的概率，其输入为真实标签。
         - :math:`D_fake`：分辨器分辨合成图为假的概率，其输入为生成器合成图。
-        :param g_args: 生成器位置参数
-        :param g_kwargs: 生成器关键词参数
+
+        :param g_args: 生成器位置参数，包括version, *args, **kwargs
+            version: 指定pix2pix生成器版本的字符串，支持['u256', 'r9', 'u128']
+                三种版本要求的图片大小分别为[(256, 256), (256, 256), (128, 128)]；
+            args: 参见各个生成器的位置参数，包括UNet256Generator、UNet128Generator、ResNetGenerator
+        :param g_kwargs: 生成器关键词参数，参见各个生成器的关键字参数以及BasicNN关键字参数
         :param d_args: 分辨器位置参数
-        :param d_kwargs: 分辨器关键词参数
+            input_nc: 输入图片的通道数；
+            ndf: 第一卷积层的过滤层数；
+            net_type: 结构名称 -- basic | n_layers | pixel；
+            n_layers_D: 分辨器中的卷积层数，仅当`netD == 'n_layers'`时有效；
+            norm_type: 标准化层的类型，包括 batch | instance | none
+        :param d_kwargs: 分辨器关键词参数，请查询BasicNN关键字参数
         :param direction: 方向，'AtoB'意为从特征集预测到标签集，'BtoA'意为从标签集预测到特征集
         :param kwargs: BasicNN关键词参数
         """
@@ -51,9 +62,11 @@ class Pix2Pix(BasicNN):
         self.direction = direction
         netG = Pix2Pix_G(*g_args, **g_kwargs)
 
+        kwargs['input_size'] = netG.input_size
         if isTrain:
             # 定义一个分辨器
             # conditional GANs需要输入和输出图片，因此分辨器的通道数为input_nc + output_nc
+            d_kwargs['input_size'] = None
             netD = Pix2Pix_D(*d_args, **d_kwargs)
             super(Pix2Pix, self).__init__(OrderedDict([
                 ('netG', netG), ('netD', netD)
@@ -303,7 +316,3 @@ class Pix2Pix(BasicNN):
             ['G_LS', 'G_GAN', 'G_PCC', 'D_LS', 'D_real', 'D_fake']
         test_ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_PCC']
         return ls_fn, loss_names, test_ls_names
-
-    @property
-    def required_shape(self):
-        return (256, 256)
