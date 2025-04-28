@@ -20,5 +20,9 @@ dependencies:
       - scipy
       # 请在https://pytorch.org/get-started/locally/中找到需要的pytorch版本
       # - torch
+      - jsonref
+      - toolz
+      - tqdm
+      - dill
       - torchsummary
       - opencv-python
