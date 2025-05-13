@@ -306,7 +306,7 @@ class BasicNN(nn.Sequential):
         """
         # 形状检查
         if self.input_size:
-            assert x.shape[-2:] == self.input_size, f'输入网络的张量形状{x.shape}与网络要求形状{self.input_size}不匹配！'
+            assert x.shape[-2:] == self.input_size[-2:], f'输入网络的张量形状{x.shape}与网络要求形状{self.input_size}不匹配！'
         # checkpoint检查
         if self.__checkpoint:
             x = checkpoint.checkpoint(
