@@ -59,3 +59,59 @@ class ResnetBlock(nn.Module):
         """使用跳过链接的前向传播"""
         out = x + self.conv_block(x)  # add skip connections
         return out
+
+
+class Bottleneck(nn.Module):
+    """用于ResNet-50/101/152的ResNet-Stage"""
+    expansion = 4  # 每个块输出通道数是中间层的 4 倍
+
+    def __init__(self, in_channels, mid_channels, stride=1, downsample=None, groups=32):
+        super(Bottleneck, self).__init__()
+        self.main_branch = nn.Sequential(
+            nn.Conv2d(in_channels, mid_channels, kernel_size=1, bias=False),
+            nn.GroupNorm(groups, mid_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, stride=stride, padding=1, bias=False),
+            nn.GroupNorm(groups, mid_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_channels, mid_channels * self.expansion, kernel_size=1, bias=False),
+            nn.GroupNorm(groups, mid_channels * self.expansion),
+        )
+        self.downsample = downsample
+        self.output = nn.ReLU(inplace=True)
+        # self.conv1 = nn.Conv2d(in_channels, mid_channels, kernel_size=1, bias=False)
+        # self.gn1 = nn.GroupNorm(groups, mid_channels)
+        # self.conv2 = nn.Conv2d(mid_channels, mid_channels, kernel_size=3, stride=stride, padding=1, bias=False)
+        # self.gn2 = nn.GroupNorm(groups, mid_channels)
+        # self.conv3 = nn.Conv2d(mid_channels, mid_channels * self.expansion, kernel_size=1, bias=False)
+        # self.gn3 = nn.GroupNorm(groups, mid_channels * self.expansion)
+        # self.relu = nn.ReLU(inplace=True)
+        # self.downsample = downsample
+
+    def forward(self, inputs):
+        # identity = inputs
+        #
+        # out = self.conv1(inputs)
+        # out = self.gn1(out)
+        # out = self.relu(out)
+        #
+        # out = self.conv2(out)
+        # out = self.gn2(out)
+        # out = self.relu(out)
+        #
+        # out = self.conv3(out)
+        # out = self.gn3(out)
+        #
+        # if self.downsample is not None:
+        #     identity = self.downsample(inputs)
+        #
+        # out += identity
+        # out = self.relu(out)
+        #
+        # return out
+        output = self.main_branch(inputs)
+        if self.downsample is not None:
+            inputs = self.downsample(inputs)
+        output += inputs
+        return self.output(output)
+
