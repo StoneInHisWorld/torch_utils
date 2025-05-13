@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from networks.basic_nn import BasicNN
-from layers.resnet_block import ResnetBlock
+from layers.resnet_blocks import ResnetBlock
 
 
 class UNet128Genarator(nn.Sequential):
