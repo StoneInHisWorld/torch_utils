@@ -1,4 +1,5 @@
 import warnings
+from functools import reduce
 from typing import List, Tuple
 
 import torch
@@ -263,7 +264,8 @@ class BasicNN(nn.Sequential):
         :param ls: 损失值
         :return: None
         """
-        ls[0].backward()
+        total = reduce(lambda x, y: x + y, ls, torch.zeros(1, requires_grad=True))
+        total.backward()
 
     def get_clone_function(self):
         parameter_group = {name: param for name, param in self._construction_parameters.items()}
