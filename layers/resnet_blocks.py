@@ -65,18 +65,29 @@ class Bottleneck(nn.Module):
     """用于ResNet-50/101/152的ResNet-Stage"""
     expansion = 4  # 每个块输出通道数是中间层的 4 倍
 
-    def __init__(self, in_channels, mid_channels, stride=1, downsample=None, groups=32):
+    def __init__(self,
+                 in_channels, mid_channels,
+                 stride=1, downsample=None,
+                 # norm_layer=nn.BatchNorm2d, norm_kwargs=None
+                 ):
         super(Bottleneck, self).__init__()
-        self.main_branch = nn.Sequential(
+        # if norm_kwargs is None:
+        #     norm_kwargs = {'num_features': mid_channels}
+        # else:
+        #     norm_kwargs['num_features'] = mid_channels
+        main_branch = [
             nn.Conv2d(in_channels, mid_channels, kernel_size=1, bias=False),
-            nn.GroupNorm(groups, mid_channels),
+            nn.BatchNorm2d(mid_channels),
             nn.ReLU(inplace=True),
             nn.Conv2d(mid_channels, mid_channels, kernel_size=3, stride=stride, padding=1, bias=False),
-            nn.GroupNorm(groups, mid_channels),
+            nn.BatchNorm2d(mid_channels),
             nn.ReLU(inplace=True),
             nn.Conv2d(mid_channels, mid_channels * self.expansion, kernel_size=1, bias=False),
-            nn.GroupNorm(groups, mid_channels * self.expansion),
-        )
+            nn.BatchNorm2d(mid_channels * self.expansion),
+        ]
+        # norm_kwargs['num_features'] = mid_channels * self.expansion
+        # main_branch.append(norm_layer(mid_channels * self.expansion))
+        self.main_branch = nn.Sequential(*main_branch)
         self.downsample = downsample
         self.output = nn.ReLU(inplace=True)
         # self.conv1 = nn.Conv2d(in_channels, mid_channels, kernel_size=1, bias=False)
