@@ -304,7 +304,7 @@ class BasicNN(nn.Sequential):
         :param x: 前向传播输入
         :return: 前向传播结果
         """
-        # 形状检查
+        # 如果指定了输入形状，则进行形状检查
         if self.input_size:
             assert x.shape[-2:] == self.input_size[-2:], f'输入网络的张量形状{x.shape}与网络要求形状{self.input_size}不匹配！'
         # checkpoint检查
