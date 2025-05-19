@@ -1,13 +1,14 @@
 import time
 from typing import Iterable, Callable
 
+import torch
 from torch.utils.data import Dataset as torch_ds
 
 
 class DataSet(torch_ds):
 
     def __init__(self, features, labels, transformer,
-                 collate_fn: Callable = None):
+                 collate_fn=None, device=None):
         """
         普通数据集，存储数据实际内容供DataLoader进行读取。
         :param features: 数据特征集
@@ -20,6 +21,7 @@ class DataSet(torch_ds):
         self._labels = labels
         self.transformer = transformer
         self.collate_fn = collate_fn
+        self.device = device
 
     def __getitem__(self, item):
         return self._features[item], self._labels[item]
@@ -43,6 +45,11 @@ class DataSet(torch_ds):
         """
         start_time = time.perf_counter()
         self._features, self._labels = self.transformer.transform_data(self._features, self._labels)
+        data_device = {self._features.device, self._labels.device}
+        if self.device:
+            print(f'\r正在进行数据迁移（{[d for d in data_device]}->{self.device}），'
+                  f'如果不需要数据集整体迁移请将settings.json中的"ds_kwargs.device"设置为null')
+            self._features, self._labels = self._features.to(self.device), self._labels.to(self.device)
         print(f'\r预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
 
     @property

@@ -59,11 +59,12 @@ def default_transit_fn(batch, **kwargs):
     return batch
 
 
-def to_loader(dataset: DataSet or LazyDataSet,
-              batch_size: int = 1,
-              transit_fn=None, transit_kwargs=None,
-              bkg_gen=True, max_prefetch=3,
-              **kwargs):
+def to_loader(
+        dataset: DataSet or LazyDataSet, batch_size: int = 1, transit_fn=None,
+        transit_kwargs=None, bkg_gen=True, max_prefetch=3, device=torch.device('cpu'),
+        non_blocking=True, share_memory=True,  # 数据迁移参数
+        **kwargs
+):
     """根据数据集类型转化为数据集加载器。
     为了适配多进程处理，Dataset对象在转化为DataLoader对象前，会删除所携带的预处理方法。
 
@@ -81,8 +82,8 @@ def to_loader(dataset: DataSet or LazyDataSet,
     :param kwargs: pytorch.utils.data.DataLoader的额外参数
     :return: 数据集加载器
     """
-    if transit_fn is None:
-        transit_fn = default_transit_fn
+    # if transit_fn is None:
+    #     transit_fn = default_transit_fn
     if transit_kwargs is None:
         transit_kwargs = {}
     if isinstance(dataset, LazyDataSet):
@@ -98,8 +99,9 @@ def to_loader(dataset: DataSet or LazyDataSet,
         # if hasattr(dataset, 'transformer')
         # del dataset.transformer
         return DataLoader(
-            dataset, transit_fn, transit_kwargs, batch_size,
-            bkg_gen, max_prefetch, collate_fn=dataset.collate_fn, **kwargs
+            dataset, transit_fn, transit_kwargs,
+            bkg_gen, max_prefetch, device, non_blocking, share_memory,
+            batch_size, collate_fn=dataset.collate_fn, **kwargs
         )
 
 
@@ -167,12 +169,12 @@ def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
         else:
             raise e
     std += epsilon
-    if len(data.shape) == 4:
+    if 3 <= len(data.shape) <= 4:
         return F.normalize(data, mean, std)
     elif len(data.shape) < 3:
         return (data - mean) / std
     else:
-        raise Exception(f'不支持的数据形状{data.shape}！')
+        raise Exception(f'不支持的数据形状{data.shape}！只支持三维或者四维张量。')
 
 
 def denormalize(data: torch.Tensor, mean=None, std=None, range=None) -> torch.Tensor:
