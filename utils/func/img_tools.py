@@ -249,7 +249,7 @@ def get_mask(pos: List[Tuple[int, int]], size: List[int or Tuple[int]], img_chan
     return mask
 
 
-@jit
+
 def add_mask(images: List[np.ndarray], mask: np.ndarray) -> np.ndarray:
     """
     给图片加上掩膜。
@@ -264,7 +264,6 @@ def add_mask(images: List[np.ndarray], mask: np.ndarray) -> np.ndarray:
     # IMAGE.fromarray(ret[0].reshape((256, 256))).show()  # 查看掩膜图片的语句
 
 
-@jit
 def extract_holes(images: np.ndarray,
                   hole_poses: List[Tuple[int, int]],
                   hole_sizes: List[int]) -> list:
@@ -290,7 +289,6 @@ def extract_holes(images: np.ndarray,
     return holes
 
 
-@jit
 def extract_and_cat_holes(images: np.ndarray,
                           hole_poses: List[Tuple[int, int]],
                           hole_sizes: List[int],
@@ -343,7 +341,6 @@ def extract_and_cat_holes(images: np.ndarray,
     return whiteboards
 
 
-@jit
 def get_mean_LI_of_holes(images: np.ndarray,
                          hole_poses: List[Tuple[int, int]],
                          hole_sizes: List[int] or List[Tuple[int, int]]):
@@ -363,6 +360,7 @@ def get_mean_LI_of_holes(images: np.ndarray,
     assert len(hole_poses) == len(hole_sizes), \
         f'挖孔位置需要和挖孔大小一一对应，提供了{len(hole_poses)}个位置但只收到了{len(hole_sizes)}个大小要求。'
 
+    # @jit
     def __dig_holes(image):
         """挖孔函数"""
         mean_LIs = []
@@ -391,7 +389,6 @@ def get_mean_LI_of_holes(images: np.ndarray,
     return [__dig_holes(image) for image in images]
 
 
-@jit
 def blend(required_shapes: List, group_of_values: List,
           group_of_n_rows: List, group_of_n_cols: List, mode='L',
           dtype=np.float32) -> list[np.ndarray]:
