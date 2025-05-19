@@ -6,7 +6,7 @@ import numpy as np
 from PIL import Image as IMAGE, ImageDraw
 from PIL.Image import Image
 from tqdm import tqdm
-from numba import jit
+# from numba import jit
 
 
 from utils.func.pytools import check_para
