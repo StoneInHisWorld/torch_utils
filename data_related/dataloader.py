@@ -3,7 +3,6 @@ import queue
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 
-import dill
 import torch
 from prefetch_generator import BackgroundGenerator
 from torch.utils.data import DataLoader as DLoader
@@ -13,7 +12,8 @@ from data_related.datasets import LazyDataSet
 
 def default_transit_fn(
         device, non_blocking, share_memory,
-        indicated_transit_fn, batch, **kwargs):
+        indicated_transit_fn, batch, **kwargs
+):
     """可自定义的数据供给传输函数
     DataLoader每次从内存取出数据后，都会调用本函数对批次进行预处理
 
@@ -30,16 +30,18 @@ def default_transit_fn(
     # if kwargs['share_memory']:
     #     batch = batch[0].share_memory_(), batch[1].share_memory_()
     # return indicated_transit_fn(batch)
-    batch = (
-        batch[0].to(device, non_blocking=non_blocking),
-        batch[1].to(device, non_blocking=non_blocking)
-    )
+    X, y = batch
+    device = torch.device(device)
+    if X.device != device:
+        X = X.to(device, non_blocking=non_blocking)
+    if y.device != device:
+        y = y.to(device, non_blocking=non_blocking)
     if share_memory:
-        batch = batch[0].share_memory_(), batch[1].share_memory_()
+        X, y = X.share_memory_(), y.share_memory_()
     if indicated_transit_fn:
-        return indicated_transit_fn(batch)
+        return indicated_transit_fn((X, y), **kwargs)
     else:
-        return batch
+        return X, y
 
 
 class DataLoader(DLoader):
