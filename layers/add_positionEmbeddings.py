@@ -43,6 +43,16 @@ class AddPositionEmbs(nn.Module):
     def forward(self, inputs):
         return self._forward_impl(inputs)
 
+    def to(self, device):
+        """将权重参数转移到指定设备上
+
+        Args:
+            device: 权重参数所处设备
+        """
+        super(AddPositionEmbs, self).to(device)
+        self.weights = self.weights.to(device)
+        return self
+
     def bert_forward(self, inputs):
         """BERT模式下的添加位置编码
 
