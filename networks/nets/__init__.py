@@ -9,3 +9,5 @@ from .slp import SLP
 from .vgg import VGG
 from .wzynet_essay import WZYNetEssay
 from .elnn.enlargingnet import EnLargingNN
+from .patches_generator import PatchGenerator
+from .resnet import ResNet50
