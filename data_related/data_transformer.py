@@ -1,3 +1,4 @@
+from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 
 
@@ -65,6 +66,10 @@ class DataTransformer:
                     futures.append(pool.submit(self.f_preprocesses, fea))
                 if self.l_preprocesses and lb:
                     futures.append(pool.submit(self.l_preprocesses, lb))
+                for future in as_completed(futures):
+                    if future.exception():
+                        pool.shutdown(wait=False)  # 立即终止线程池
+                        raise future.exception()
             return [f.result() for f in futures]
         if self.f_preprocesses and fea:
             futures.append(self.f_preprocesses(fea))
