@@ -162,9 +162,15 @@ def init_wb(func_str: str = "xavier", **kwargs):
             return
         elif isinstance(module_s, nn.modules.batchnorm._NormBase):
             # 使用"全0法"初始化批次标准化层的权重和偏置量会导致计算结果均为0，因此将被跳过！
-            # 泽维尔初始化不支持低于二维的张量初始化，因此将被跳过！
+            # 泽维尔初始化不支持低于二维的张量初始化，因此将替换为正态初始化！
             if func_str == 'xavier' or func_str == 'zero':
-                w_init_impl, b_init_impl = lambda ts: None, lambda ts: None
+                w_init_impl, b_init_impl = init.normal_, init.normal_
+        elif module_s.__module__ == 'torch.nn.modules.normalization':
+            # 使用"全0法"初始化批次标准化层的权重和偏置量会导致计算结果均为0，因此将被跳过！
+            # 泽维尔初始化不支持低于二维的张量初始化，因此将替换为正态初始化！
+            if func_str == 'xavier' or func_str == 'zero':
+                w_init_impl, b_init_impl = init.normal_, init.normal_
+
         if hasattr(module_s, 'weight') and module_s.weight is not None:
             w_init_impl(module_s.weight)
         if hasattr(module_s, 'bias') and module_s.bias is not None:
