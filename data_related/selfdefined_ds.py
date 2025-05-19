@@ -12,8 +12,8 @@ from data_related.storage_dloader import StorageDataLoader
 from utils import itools, tstools, ControlPanel
 
 
-def default_transit_fn(batch, **kwargs):
-    return batch
+# def default_transit_fn(batch, **kwargs):
+#     return batch
 
 
 class SelfDefinedDataSet:
@@ -45,9 +45,10 @@ class SelfDefinedDataSet:
         self.bulk_preprocess = config['bulk_preprocess']
         shuffle = config['shuffle']
         which = config['which_dataset']
+        self.device = config['device']
         # 判断图片指定形状
-        self.f_req_sha = tuple(config['f_req_sha'])
-        self.l_req_sha = tuple(config['l_req_sha'])
+        self.f_req_sha = tuple(config['f_req_sha']) if config['f_req_sha'] else None
+        self.l_req_sha = tuple(config['l_req_sha']) if config['l_req_sha'] else None
         # 指定数据集服务的模型类型
         self.module = module
 
@@ -80,9 +81,9 @@ class SelfDefinedDataSet:
             # 按照数据比例切分数据集索引
             self._train_f, self._train_l = data_slicer(data_portion, shuffle, self._train_f, self._train_l)
             self._train_f = self._train_f if self._f_lazy \
-                else self.reader.fetch(self._train_f, not self.bulk_preprocess)
+                else self.reader.fetch(self._train_f, None, not self.bulk_preprocess)[0]
             self._train_l = self._train_l if self._l_lazy \
-                else self.reader.fetch(None, self._train_l, not self.bulk_preprocess)
+                else self.reader.fetch(None, self._train_l, not self.bulk_preprocess)[0]
             assert len(self._train_f) == len(self._train_l), \
                 f'训练集的特征集和标签集长度{len(self._train_f)}&{len(self._train_l)}不一致'
         # 加载测试集
@@ -90,9 +91,9 @@ class SelfDefinedDataSet:
         self._test_f, self._test_l = [fn(d) for fn, d in zip([self._get_fea_index, self._get_lb_index], directories)]
         self._test_f, self._test_l = data_slicer(data_portion, shuffle, self._test_f, self._test_l)
         self._test_f = self._test_f if self._f_lazy \
-            else self.reader.fetch(self._test_f, not self.bulk_preprocess)
+            else self.reader.fetch(self._test_f, None, not self.bulk_preprocess)[0]
         self._test_l = self._test_l if self._l_lazy \
-            else self.reader.fetch(None, self._test_l, not self.bulk_preprocess)
+            else self.reader.fetch(None, self._test_l, not self.bulk_preprocess)[0]
 
         # 加载结果报告
         assert len(self._test_f) == len(
@@ -193,24 +194,25 @@ class SelfDefinedDataSet:
         """
         pass
 
-    @staticmethod
-    @abstractmethod
-    def get_criterion_a() -> List[
+    def get_criterion_a(self) -> List[
         Callable[
             [torch.Tensor, torch.Tensor, bool],
             float or torch.Tensor
         ]
     ]:
-        """获取数据集的准确率指标函数
+        """获取数据集的评价指标函数
 
         请注意，返回的指标函数不能有重名，否则可能会导致数据计算错误或者历史记录趋势图绘制重叠
         :return: 一系列指标函数。签名均为
         def criterion(Y_HAT, Y, size_averaged) -> float or torch.Tensor
         其中size_averaged表示是否要进行批量平均。
         """
-        pass
+        if hasattr(self, f'{self.module.__name__}_criterion_a'):
+            return getattr(self, f'{self.module.__name__}_criterion_a')()
+        else:
+            return []
 
-    def _to_dataset(self, i_cfn=None, collate_fn=None) -> list[LazyDataSet] or list[DataSet]:
+    def _to_dataset(self, i_cfn, collate_fn) -> list[LazyDataSet] or list[DataSet]:
         """根据自身模式，转换为合适的数据集，并对数据集进行预处理函数注册和执行。
         对于懒加载数据集，需要提供read_fn()，签名须为：
             read_fn(fea_index: Iterable[path], lb_index: Iterable[path]) -> Tuple[features: Iterable, labels: Iterable]
@@ -232,7 +234,7 @@ class SelfDefinedDataSet:
         else:
             # 生成数据集
             gen_datasets += [
-                DataSet(f, l, self.transformer, collate_fn)
+                DataSet(f, l, self.transformer, collate_fn, self.device)
                 for f, l in fl_pairs
             ]
             train_preprocess_desc, test_preprocess_desc = \
@@ -249,9 +251,11 @@ class SelfDefinedDataSet:
                        transit_fn: Callable = None, **dl_kwargs):
         train_ds, test_ds = self._to_dataset(i_cfn, collate_fn)
         train_portion = dl_kwargs.pop('train_portion', 0.8)
-        transit_fn = transit_fn if transit_fn is not None else default_transit_fn
+        # transit_fn = transit_fn if transit_fn is not None else default_transit_fn
         # 获取数据迭代器
-        test_iter = dso.to_loader(test_ds, batch_size, transit_fn, **dl_kwargs)
+        test_iter = dso.to_loader(
+            test_ds, batch_size, transit_fn, **dl_kwargs
+        )
         if self.is_train:
             # 使用k-fold机制
             data_iter_generator = (
