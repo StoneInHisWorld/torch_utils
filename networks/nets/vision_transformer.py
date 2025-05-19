@@ -1,12 +1,10 @@
 from collections import OrderedDict
 
 import torch
-import torchvision.models
-
-from networks.basic_nn import BasicNN
 from torch import nn
-import torch.nn.functional as F
-from layers.patching import Patching2D
+
+from layers.add_positionEmbeddings import AddPositionEmbs
+from networks.basic_nn import BasicNN
 from networks.nets.resnet import ResNet50
 
 supported_models = ['r50_b16', 'b16']
@@ -16,12 +14,20 @@ supported_resnets = ['resnet50', None]
 
 class EncoderLayer(nn.Module):
 
-    def __init__(self, which,
-                 num_hiddens, num_telayer_head, ffn_num_hiddens, num_telayer):
+    def __init__(self, classifier,
+                 num_hiddens, emb_size, num_telayer_head,
+                 ffn_num_hiddens, num_telayer, dropout_rate,
+                 add_pos_emb=True
+                 ):
         # 编码器
-        assert which in supported_classifier, f"无效的编码器分类符{which}，支持的分类符有{supported_classifier}"
+        assert classifier in supported_classifier, f"无效的编码器分类符{classifier}，支持的分类符有{supported_classifier}"
         super(EncoderLayer, self).__init__()
-        self.classifier = which
+        if add_pos_emb:
+            # 加上分类符
+            self.position_embedding = AddPositionEmbs((emb_size + 1, num_hiddens))
+        else:
+            self.position_embedding = nn.Identity()
+        self.classifier = classifier
         self.encoder = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 num_hiddens, num_telayer_head, ffn_num_hiddens, batch_first=True
@@ -29,6 +35,9 @@ class EncoderLayer(nn.Module):
             num_layers=num_telayer,
             norm=nn.LayerNorm(num_hiddens)
         )
+        self.dropout = nn.Dropout(dropout_rate)
+        # 加上分类符
+        self.norm_layer = nn.LayerNorm([emb_size + 1, num_hiddens])
 
     def forward(self, inputs):
         # if self.encoder is not None:
@@ -46,14 +55,17 @@ class EncoderLayer(nn.Module):
         #     inputs = self.encoder(inputs)
         bs, c, h, w = inputs.shape
         # 将序列长度移动到第1维，通道维移动到第2维
+        inputs = inputs.permute(0, 2, 3, 1)
         inputs = inputs.reshape([bs, h * w, c])
 
         # 在此添加类别符
         if self.classifier in ['token', 'token_unpooled']:
             cls = torch.zeros(1, 1, c).repeat(bs, 1, 1)
             inputs = torch.cat([cls, inputs], 1)
-
-        return self.encoder(inputs)
+        inputs = self.position_embedding(inputs)
+        inputs = self.dropout(inputs)
+        inputs = self.encoder(inputs)
+        return self.norm_layer(inputs)
 
         # if self.classifier == 'token':
         #     # 0号位即为分类标签
@@ -162,9 +174,9 @@ class VisionTransformer(BasicNN):
         # num_hiddens = input_channel * patch_size ** 2
 
         # 将图片切块
-        # input_size = (3, 224, 224) if 'input_size' not in kwargs.keys() else kwargs['input_size']
+        input_size = (3, 224, 224) if 'input_size' not in kwargs.keys() else kwargs['input_size']
         # input_channel, _, _ = input_size
-        self.__get_model_config(which)
+        self.__get_model_config(which, input_size)
         # 获取ResNet层
         resnet, output_channels = self.find_a_resnet(in_channels)
         linear_projector = nn.Conv2d(
@@ -177,9 +189,11 @@ class VisionTransformer(BasicNN):
         # self.classifier = classifier
         # if classifier in ['token', 'token_unpooled']:
         #     self.init_cls = torch.zeros(1, 1, input_channel)
+        # embed_size = (input_size[1] // self.patches_size) * (input_size[2] // self.patches_size)
         encoder = EncoderLayer(
-            self.classifier, self.hidden_size, self.tran_num_heads,
-            self.tran_mlp_dim, self.tran_num_layers
+            self.classifier, self.hidden_size, self.tran_emb_size,
+            self.tran_num_heads, self.tran_mlp_dim, self.tran_num_layers,
+            self.tran_dropout_rate
         )
         fetch_class = FetchClass(self.classifier)
         # # 编码器
@@ -235,20 +249,21 @@ class VisionTransformer(BasicNN):
             output_channels = in_channels
         return resnet, output_channels
 
-    def __get_model_config(self, which):
+    def __get_model_config(self, which, input_size):
         assert which in supported_models, f'不支持的模型类型{which}，支持的模型类型包括{supported_models}'
         if which == 'r50_b16':
-            self.__get_r50_b16_config()
+            self.__get_r50_b16_config(input_size)
         elif which == 'b16':
-            self.__get_b16_config()
+            self.__get_b16_config(input_size)
         else:
             pass
 
-    def __get_b16_config(self):
+    def __get_b16_config(self, input_size):
         """指定ViT_B16的配置"""
         self.resnet_type = None
         self.patches_size = 16
         self.hidden_size = 768
+        self.tran_emb_size = (input_size[1] // self.patches_size) * (input_size[2] // self.patches_size)
         self.tran_mlp_dim = 3072
         self.tran_num_heads = 12
         self.tran_num_layers = 12
@@ -257,9 +272,9 @@ class VisionTransformer(BasicNN):
         self.classifier = 'token'
         self.representation_size = None
 
-    def __get_r50_b16_config(self):
+    def __get_r50_b16_config(self, input_size):
         """Returns the Resnet50 + ViT-B/16 configuration."""
-        self.__get_b16_config()
+        self.__get_b16_config(input_size)
         self.resnet_type = 'resnet50'
         self.tran_attention_dropout_rate = 0.1
         self.patches_size = 1
@@ -343,8 +358,8 @@ class VisionTransformer(BasicNN):
     #     #         bias_init=nn.initializers.constant(self.head_bias_init))(inputs)
     #     # return inputs
 
-
-inputs = torch.rand([4, 3, 224, 224])
-transformer = VisionTransformer('r50_b16', 3, num_classes=784)
-inputs = transformer(inputs)
-print(inputs.shape)
+#
+# inputs = torch.rand([4, 3, 224, 224])
+# transformer = VisionTransformer('b16', 3, num_classes=784)
+# inputs = transformer(inputs)
+# print(inputs.shape)
