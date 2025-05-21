@@ -242,7 +242,7 @@ class BasicNN(nn.Sequential):
         else:
             with torch.no_grad():
                 result = self._forward_impl(X, y)
-            assert len(result) == 2, f'前反向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
+            assert len(result) == 2, f'前向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
             assert len(result[1]) == len(self.test_ls_names), \
                 f'前向传播返回的损失值数量{result[1]}与指定的损失名称数量{len(self.loss_names)}不匹配。'
         return result
@@ -264,7 +264,8 @@ class BasicNN(nn.Sequential):
         :param ls: 损失值
         :return: None
         """
-        total = reduce(lambda x, y: x + y, ls, torch.zeros(1, requires_grad=True))
+        zeros = torch.zeros(1, requires_grad=True, device=ls[0].device)
+        total = reduce(lambda x, y: x + y, ls, zeros)
         total.backward()
 
     def get_clone_function(self):
