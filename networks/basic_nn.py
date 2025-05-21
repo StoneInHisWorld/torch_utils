@@ -205,7 +205,7 @@ class BasicNN(nn.Sequential):
                 where = kwargs['where']
                 if where.endswith('.ptsd'):
                     paras = torch.load(where) if torch.cuda.is_available() else \
-                        torch.load(where, map_location=torch.device('cpu'))
+                        torch.load(where, map_location=torch.device('cpu'), weights_only=True)
                     self.load_state_dict(paras)
                 elif where.endswith('.ptm'):
                     raise NotImplementedError('针对预训练好的网络，请使用如下方法获取`net = torch.load("../xx.ptm")`')
