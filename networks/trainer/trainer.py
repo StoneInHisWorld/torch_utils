@@ -103,66 +103,116 @@ class Trainer:
         pbar.close()
         return history
 
+    # @prepare('predict')
+    # def predict(self, wrap_fn=None, save_path=None):
+    #     """预测方法。
+    #     对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
+    #     :param ls_fn_args: 损失函数序列的关键词参数
+    #     :param data_iter: 预测数据迭代器。
+    #     :param criterion_a: 计算准确度所使用的函数序列，该函数需要求出每个样本的准确率。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
+    #     :param wrap_fn: 对所有数据进行打包的方法。如不指定，则直接返回预测数据。签名需为：unwrap_fn(inputs, predictions, labels, metrics, losses) -> Any
+    #     :return: 打包好的数据集
+    #     """
+    #     # 提取训练器参数
+    #     net = self.module
+    #     criterion_a = self.criterion_a
+    #     pbar = self.pbar
+    #     # 如果传递了包装方法
+    #     if wrap_fn is not None:
+    #         # 将本次预测所产生的全部数据打包并返回。
+    #         inputs, predictions, labels, metrics, losses = [], [], [], [], []
+    #         # 对每个批次进行预测，并进行评价指标和损失值的计算
+    #         for fe_batch, lb_batch in pbar:
+    #             result = net.forward_backward(fe_batch, lb_batch, False)
+    #             pre_batch, ls_es = result
+    #             inputs.append(fe_batch)
+    #             predictions.append(pre_batch)
+    #             labels.append(lb_batch)
+    #             metrics_to_be_appended = [
+    #                 criterion(pre_batch, lb_batch, size_averaged=False)
+    #                 for criterion in criterion_a
+    #             ]
+    #             metrics.append(torch.vstack(metrics_to_be_appended).T)
+    #             losses.append(torch.vstack(ls_es).T)
+    #         pbar.set_description('结果计算完成')
+    #         # 将所有批次的数据堆叠在一起
+    #         inputs = torch.cat(inputs, dim=0)
+    #         predictions = torch.cat(predictions, dim=0)
+    #         labels = torch.cat(labels, dim=0)
+    #         metrics = torch.cat(metrics, dim=0)
+    #         losses = torch.cat(losses, dim=0)
+    #         # 获取输出结果需要的注解
+    #         comments = net.get_comment(
+    #             inputs, predictions, labels,
+    #             metrics, [ptools.get_computer_name(criterion) for criterion in criterion_a],
+    #             losses
+    #         )
+    #         # 将注解与所有数据打包，输出
+    #         predictions = wrap_fn(inputs, predictions, labels, comments)
+    #     else:
+    #         # 如果不需要打包数据，则直接返回预测数据集
+    #         predictions = []
+    #         for fe_batch, lb_batch in pbar:
+    #             predictions.append(net(fe_batch))
+    #         predictions = torch.cat(predictions, dim=0)
+    #     # # 如果指定了保存路径，则保存预测结果
+    #     # if save_path:
+    #     #     ptools.check_path(save_path)
+    #     #     with tqdm(predictions, unit='张', position=0, desc=f"正在保存结果……",
+    #     #               mininterval=1, leave=True, ncols=80) as pbar:
+    #     #         for i, res in enumerate(pbar):
+    #     #             res.save(os.path.join(save_path, f'{i}.png'), format='PNG', dpi=(400, 400), compress_level=0)
+    #     return predictions
+
     @prepare('predict')
-    def predict(self, wrap_fn=None, save_path=None):
-        """预测方法。
-        对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
-        :param ls_fn_args: 损失函数序列的关键词参数
-        :param data_iter: 预测数据迭代器。
-        :param criterion_a: 计算准确度所使用的函数序列，该函数需要求出每个样本的准确率。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
-        :param wrap_fn: 对所有数据进行打包的方法。如不指定，则直接返回预测数据。签名需为：unwrap_fn(inputs, predictions, labels, metrics, losses) -> Any
-        :return: 打包好的数据集
+    def predict(self, ret_ls_metric=True, ret_ds=True):
+        """根据参数创建网络并进行预测
+        对于数据迭代器中的每一批次数据，根据需要保存输入数据、预测数据、标签集、评价指标、损失值数据，并打包返回。
+
+        Args:
+            ret_ls_metric: 是否返回损失值数据以及评价指标数据
+            ret_ds: 是否返回原数据集
+
+        Returns:
+            [预测数据]
+             + [特征数据集，标签数据集] if ret_ls_metric == True
+             + [评价指标数据，损失值数据，评价指标函数名称，
+                损失值函数名称] if ret_ds == True
         """
         # 提取训练器参数
         net = self.module
         criterion_a = self.criterion_a
         pbar = self.pbar
-        # 如果传递了包装方法
-        if wrap_fn is not None:
-            # 将本次预测所产生的全部数据打包并返回。
-            inputs, predictions, labels, metrics, losses = [], [], [], [], []
-            # 对每个批次进行预测，并进行评价指标和损失值的计算
-            for fe_batch, lb_batch in pbar:
-                result = net.forward_backward(fe_batch, lb_batch, False)
-                pre_batch, ls_es = result
+        # 本次预测所产生的全部数据池
+        inputs, predictions, labels, metrics, loss_pool = [], [], [], [], []
+        # 对每个批次进行预测，并进行评价指标和损失值的计算
+        for fe_batch, lb_batch in pbar:
+            result = net.forward_backward(fe_batch, lb_batch, False)
+            pre_batch, ls_es = result
+            predictions.append(pre_batch)
+            if ret_ds:
                 inputs.append(fe_batch)
-                predictions.append(pre_batch)
                 labels.append(lb_batch)
-                metrics_to_be_appended = [
+            if ret_ls_metric:
+                metrics.append(torch.vstack([
                     criterion(pre_batch, lb_batch, size_averaged=False)
                     for criterion in criterion_a
-                ]
-                metrics.append(torch.vstack(metrics_to_be_appended).T)
-                losses.append(torch.vstack(ls_es).T)
-            pbar.set_description('结果计算完成')
-            # 将所有批次的数据堆叠在一起
-            inputs = torch.cat(inputs, dim=0)
-            predictions = torch.cat(predictions, dim=0)
-            labels = torch.cat(labels, dim=0)
-            metrics = torch.cat(metrics, dim=0)
-            losses = torch.cat(losses, dim=0)
-            # 获取输出结果需要的注解
-            comments = net.get_comment(
-                inputs, predictions, labels,
-                metrics, [ptools.get_computer_name(criterion) for criterion in criterion_a],
-                losses
-            )
-            # 将注解与所有数据打包，输出
-            predictions = wrap_fn(inputs, predictions, labels, comments)
-        else:
-            # 如果不需要打包数据，则直接返回预测数据集
-            predictions = []
-            for fe_batch, lb_batch in pbar:
-                predictions.append(net(fe_batch))
-            predictions = torch.cat(predictions, dim=0)
-        # 如果指定了保存路径，则保存预测结果
-        if save_path:
-            ptools.check_path(save_path)
-            with tqdm(predictions, unit='张', position=0, desc=f"正在保存结果……",
-                      mininterval=1, leave=True, ncols=80) as pbar:
-                for i, res in enumerate(pbar):
-                    res.save(os.path.join(save_path, f'{i}.png'), format='PNG', dpi=(400, 400), compress_level=0)
-        return predictions
+                ]).T)
+                loss_pool.append(torch.vstack(ls_es).T)
+        pbar.set_description('结果计算完成')
+        # 将所有批次的数据堆叠在一起
+        ret = [torch.cat(predictions, dim=0)]
+        if ret_ds:
+            ret.append(torch.cat(inputs, dim=0))
+            ret.append(torch.cat(labels, dim=0))
+        if ret_ls_metric:
+            ret.append(torch.cat(metrics, dim=0))
+            ret.append(torch.cat(loss_pool, dim=0))
+            ret.append([
+                ptools.get_computer_name(criterion) for criterion in criterion_a
+            ])
+            ret.append(net.test_ls_names)
+        return ret
 
     @prepare('train')
     @hook()
