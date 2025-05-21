@@ -63,7 +63,7 @@ class AddPositionEmbs(nn.Module):
             输出为（批量大小, 时序步数, 输入维度）
         """
         assert inputs.shape[1:] == self.input_size, \
-            (f"期待的输入形状为{("batch_size", *self.input_size)}，"
+            (f"期待的输入形状为{('batch_size', *self.input_size)}，"
              f"而实际上得到的输入形状为{inputs.shape}")
         return inputs + self.weights
 
@@ -77,7 +77,7 @@ class AddPositionEmbs(nn.Module):
             输出为（批量大小, 时序步数, 输入维度）
         """
         assert inputs.shape[1:] == self.input_size, \
-            (f"期待的输入形状为{("batch_size", *self.input_size)}，"
+            (f"期待的输入形状为{('batch_size', *self.input_size)}，"
              f"而实际上得到的输入形状为{inputs.shape}")
         inputs = inputs + self.weights[:, :inputs.shape[1], :]
         return self.dropout(inputs)
