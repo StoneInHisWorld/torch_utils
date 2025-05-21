@@ -1,5 +1,6 @@
 import warnings
 from functools import wraps
+from typing import Iterable
 
 import dill
 import torch
@@ -7,6 +8,7 @@ from torchinfo import summary
 from tqdm import tqdm
 
 from networks import BasicNN
+
 
 class net_builder:
     """网络创建装饰器。
@@ -86,10 +88,15 @@ class net_builder:
         """
         if trainer.runtime_cfg['print_net']:
             input_size = trainer.input_size
-            try:
-                summary(net, input_size=(trainer.hps['batch_size'], *input_size))
-            except Exception as e:
-                warnings.warn(f"打印网络时遇到错误：{e}，将切换成简洁打印模式！")
+            if isinstance(input_size, Iterable):
+                try:
+                    summary(net, input_size=(trainer.hps['batch_size'], *input_size))
+                except Exception as e:
+                    msg = f"打印网络时遇到错误：{e}，只显示网络结构！"
+                    warnings.warn(msg)
+                    print(net)
+            else:
+                warnings.warn(f"输入形状{input_size}无法解析，只显示网络结构！")
                 print(net)
 
 
