@@ -130,7 +130,10 @@ class PatchGenerator(BasicNN):
                 y, (0, embd_size, 0, 0), mode='constant', value=0
             )
         # 前向传播
-        pred = self((X, y))
+        if X.requires_grad:
+            pred = self((X, y))
+        else:
+            pred = self((X, torch.zeros_like(y)))
         # 去掉标签集中填充部分以计算损失值
         if embd_size > 0:
             y = y[:, :, :-embd_size]
