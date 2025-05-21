@@ -103,6 +103,8 @@ def to_loader(
             bkg_gen, max_prefetch, device, non_blocking, share_memory,
             batch_size, collate_fn=dataset.collate_fn, **kwargs
         )
+    else:
+        raise TypeError('接收到的dataset并非LazyDataSet或是DataSet类型！')
 
 
 def k_fold_split(dataset: DataSet or LazyDataSet, k: int = 10, shuffle: bool = True):
