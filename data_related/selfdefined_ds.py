@@ -8,6 +8,7 @@ from data_related import ds_operation as dso
 from data_related.data_transformer import DataTransformer
 from data_related.datasets import LazyDataSet, DataSet
 from data_related.ds_operation import data_slicer
+from data_related.prediction_wrapper import PredictionWrapper
 from data_related.storage_dloader import StorageDataLoader
 from utils import itools, tstools, ControlPanel
 
@@ -113,8 +114,6 @@ class SelfDefinedDataSet:
             self._train_l = torch.vstack(self._train_l)
             self._test_f = torch.vstack(self._test_f)
             self._test_l = torch.vstack(self._test_l)
-        # 获取结果包装程序
-        self._set_wrap_fn(module)
 
     @abstractmethod
     def _check_path(self, root: str, which: str) -> [str, str, str, str]:
@@ -126,55 +125,55 @@ class SelfDefinedDataSet:
             如果self.is_train == True，则返回[训练特征集路径，训练标签集路径，测试特征集路径，测试标签集路径]；
             否则返回[测试特征集路径，测试标签集路径]
         """
-        pass
+        raise NotImplementedError('没有编写路径检查程序！')
 
-    @abstractmethod
-    def _get_fea_reader(self) -> Generator:
-        """根据根目录下的特征集索引进行存储访问的数据读取器
-
-        读取器只需要读取单个索引值。
-        为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，请通过yield的方式返回读取器。编程示例如下：
-
-        ```
-        def _get_fea_reader(self):
-            # 获取.tar数据集资源
-            tfile = tarfile.open(self.tarfile_name, 'r')
-            # 提供数据读取器
-            yield toolz.compose(*reversed([
-                tfile.extractfile,
-                functools.partial(read_img, mode=self.fea_mode),
-            ]))
-            # 进行资源回收
-            tfile.close()
-        ```
-
-        :return: 数据读取器生成器
-        """
-        pass
-
-    @abstractmethod
-    def _get_lb_reader(self) -> Generator:
-        """根据根目录下的标签集索引进行存储访问的数据读取器
-
-        读取器只需要读取单个索引值。
-        为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，请通过yield的方式返回读取器。编程示例如下：
-
-        ```
-        def _get_lb_reader(self):
-            # 获取.tar数据集资源
-            tfile = tarfile.open(self.tarfile_name, 'r')
-            # 提供数据读取器
-            yield toolz.compose(*reversed([
-                tfile.extractfile,
-                functools.partial(read_img, mode=self.fea_mode),
-            ]))
-            # 进行资源回收
-            tfile.close()
-        ```
-
-        :return: 数据读取器生成器
-        """
-        pass
+    # @abstractmethod
+    # def _get_fea_reader(self) -> Generator:
+    #     """根据根目录下的特征集索引进行存储访问的数据读取器
+    #
+    #     读取器只需要读取单个索引值。
+    #     为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，请通过yield的方式返回读取器。编程示例如下：
+    #
+    #     ```
+    #     def _get_fea_reader(self):
+    #         # 获取.tar数据集资源
+    #         tfile = tarfile.open(self.tarfile_name, 'r')
+    #         # 提供数据读取器
+    #         yield toolz.compose(*reversed([
+    #             tfile.extractfile,
+    #             functools.partial(read_img, mode=self.fea_mode),
+    #         ]))
+    #         # 进行资源回收
+    #         tfile.close()
+    #     ```
+    #
+    #     :return: 数据读取器生成器
+    #     """
+    #     raise NotImplementedError('没有指定特征集读取程序！')
+    #
+    # @abstractmethod
+    # def _get_lb_reader(self) -> Generator:
+    #     """根据根目录下的标签集索引进行存储访问的数据读取器
+    #
+    #     读取器只需要读取单个索引值。
+    #     为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，请通过yield的方式返回读取器。编程示例如下：
+    #
+    #     ```
+    #     def _get_lb_reader(self):
+    #         # 获取.tar数据集资源
+    #         tfile = tarfile.open(self.tarfile_name, 'r')
+    #         # 提供数据读取器
+    #         yield toolz.compose(*reversed([
+    #             tfile.extractfile,
+    #             functools.partial(read_img, mode=self.fea_mode),
+    #         ]))
+    #         # 进行资源回收
+    #         tfile.close()
+    #     ```
+    #
+    #     :return: 数据读取器生成器
+    #     """
+    #     pass
 
     @abstractmethod
     def _get_fea_index(self, root) -> list:
@@ -183,7 +182,7 @@ class SelfDefinedDataSet:
         :param root: 数据集根目录
         :return 提取出的索引列表
         """
-        pass
+        raise NotImplementedError('没有编写特征集索引读取程序！')
 
     @abstractmethod
     def _get_lb_index(self, root) -> list:
@@ -192,7 +191,7 @@ class SelfDefinedDataSet:
         :param root: 数据集根目录
         :return 提取出的索引列表
         """
-        pass
+        raise NotImplementedError('没有编写标签集索引读取程序！')
 
     def get_criterion_a(self) -> List[
         Callable[
@@ -249,14 +248,30 @@ class SelfDefinedDataSet:
     def to_dataloaders(self,
                        k, batch_size, i_cfn=None, collate_fn=None,
                        transit_fn: Callable = None, **dl_kwargs):
-        train_ds, test_ds = self._to_dataset(i_cfn, collate_fn)
-        train_portion = dl_kwargs.pop('train_portion', 0.8)
+        """将自定义数据集转化为数据集迭代器
+
+        Args:
+            k: 指定k折训练
+            batch_size: 指定训练批量大小
+            i_cfn: LazyDataSet所用索引整理函数
+            collate_fn: torch.utils.data.DataLoader所用数据整理函数
+            transit_fn: 数据迁移函数
+            **dl_kwargs: torch.utils.data.DataLoader所用关键字参数
+
+        Returns:
+            训练模式返回（训练数据迭代器，测试数据迭代器），测试模式返回测试数据迭代器
+        """
+        # train_ds, test_ds = self._to_dataset(i_cfn, collate_fn)
+        # train_portion = dl_kwargs.pop('train_portion', 0.8)
         # transit_fn = transit_fn if transit_fn is not None else default_transit_fn
         # 获取数据迭代器
-        test_iter = dso.to_loader(
-            test_ds, batch_size, transit_fn, **dl_kwargs
-        )
+        # test_iter = dso.to_loader(
+        #     test_ds, batch_size, transit_fn, **dl_kwargs
+        # )
+        ret = []
         if self.is_train:
+            train_ds, test_ds = self._to_dataset(i_cfn, collate_fn)
+            train_portion = dl_kwargs.pop('train_portion', 0.8)
             # 使用k-fold机制
             data_iter_generator = (
                 [
@@ -268,50 +283,61 @@ class SelfDefinedDataSet:
                 ]
                 for sampler_group in dso.split_data(train_ds, k, train_portion)
             )  # 将抽取器遍历，构造加载器
-            return data_iter_generator, test_iter
-        return test_iter
-
-    def _set_wrap_fn(self, module: type):
-        """根据处理模型的类型，自动设置结果包装方法
-        此函数会对self.wrap_fn进行赋值
-
-        :param module: 用于处理本数据集的模型类型
-        """
-        if hasattr(self, f'{module.__name__}_wrap_fn'):
-            self.wrap_fn = getattr(self, f'{module.__name__}_wrap_fn')
+            ret.append(data_iter_generator)
         else:
-            self.wrap_fn = self.default_wrap_fn
-
-    def default_wrap_fn(self,
-                        inputs: torch.Tensor,
-                        predictions: torch.Tensor,
-                        labels: torch.Tensor,
-                        footnotes: list
-                        ) -> Any:
-        """默认结果包装方法
-        将输入、预测、标签张量转换成图片，并拼接配上脚注。
-
-        :param inputs: 输入张量
-        :param predictions: 预测张量
-        :param labels: 标签张量
-        :param footnotes: 脚注
-        :return: 包装完成的结果图
-        """
-        inp_s = tstools.tensor_to_img(inputs, self.fea_mode)
-        pre_s = tstools.tensor_to_img(predictions, self.lb_mode)
-        lb_s = tstools.tensor_to_img(labels, self.lb_mode)
-        del inputs, predictions, labels
-        # 制作输入、输出、标签对照图
-        ret = itools.concat_imgs(
-            *[
-                [(inp, f'input_{inp.size}'), (pre, f'prediction_{pre.size}'),
-                 (lb, f'labels_{lb.size}')]
-                for inp, pre, lb in zip(inp_s, pre_s, lb_s)
-            ],
-            footnotes=footnotes, text_size=10, border_size=2, img_size=(192, 192),
-            required_shape=(1000, 1000)
+            test_ds = self._to_dataset(i_cfn, collate_fn)[0]
+        # 获取测试集数据迭代器
+        test_iter = dso.to_loader(
+            test_ds, batch_size, transit_fn, **dl_kwargs
         )
-        return ret
+        #     return data_iter_generator, test_iter
+        # test_iter = dso.to_loader(
+        #     test_ds, batch_size, transit_fn, **dl_kwargs
+        # )
+        # return test_iter
+        return [*ret, test_iter]
+
+    # def _set_wrap_fn(self, module: type):
+    #     """根据处理模型的类型，自动设置结果包装方法
+    #     此函数会对self.wrap_fn进行赋值
+    #
+    #     :param module: 用于处理本数据集的模型类型
+    #     """
+    #     if hasattr(self, f'{module.__name__}_wrap_fn'):
+    #         self.wrap_fn = getattr(self, f'{module.__name__}_wrap_fn')
+    #     else:
+    #         self.wrap_fn = self.default_wrap_fn
+
+    # def default_wrap_fn(self,
+    #                     inputs: torch.Tensor,
+    #                     predictions: torch.Tensor,
+    #                     labels: torch.Tensor,
+    #                     footnotes: list
+    #                     ) -> Any:
+    #     """默认结果包装方法
+    #     将输入、预测、标签张量转换成图片，并拼接配上脚注。
+    #
+    #     :param inputs: 输入张量
+    #     :param predictions: 预测张量
+    #     :param labels: 标签张量
+    #     :param footnotes: 脚注
+    #     :return: 包装完成的结果图
+    #     """
+    #     inp_s = tstools.tensor_to_img(inputs, self.fea_mode)
+    #     pre_s = tstools.tensor_to_img(predictions, self.lb_mode)
+    #     lb_s = tstools.tensor_to_img(labels, self.lb_mode)
+    #     del inputs, predictions, labels
+    #     # 制作输入、输出、标签对照图
+    #     ret = itools.concat_imgs(
+    #         *[
+    #             [(inp, f'input_{inp.size}'), (pre, f'prediction_{pre.size}'),
+    #              (lb, f'labels_{lb.size}')]
+    #             for inp, pre, lb in zip(inp_s, pre_s, lb_s)
+    #         ],
+    #         footnotes=footnotes, text_size=10, border_size=2, img_size=(192, 192),
+    #         required_shape=(1000, 1000)
+    #     )
+    #     return ret
 
     @abstractmethod
     def _get_transformer(self) -> DataTransformer:
@@ -319,7 +345,7 @@ class SelfDefinedDataSet:
         需要根据访问的数据类型以及任务需求，自定义数据预处理程序
         :return: 数据转换器
         """
-        raise NotImplementedError(f"未实现函数")
+        raise NotImplementedError('没有指定数据集转换器！')
 
     @abstractmethod
     def _get_reader(self) -> StorageDataLoader:
@@ -327,7 +353,20 @@ class SelfDefinedDataSet:
         该数据处理器为StorageDataLoader的子类
         :return: 数据读取器
         """
-        raise NotImplementedError(f"未实现函数")
+        raise NotImplementedError('没有指定特征集读取程序！')
+
+    @abstractmethod
+    def get_wrapper(self, required_raw_ds=True) -> PredictionWrapper:
+        """返回根据预测结果进行打包输出的结果打包器
+        该结果打包器为PredictionWrapper的子类
+
+        Args:
+            required_raw_ds: 需要未进行预处理的原数据集
+
+        Returns:
+            结果打包器
+        """
+        raise NotImplementedError('没有指定结果打包器！')
 
     @property
     def train_len(self):
