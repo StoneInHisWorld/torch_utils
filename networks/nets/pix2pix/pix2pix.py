@@ -90,7 +90,7 @@ class Pix2Pix(BasicNN):
         AtoB = self.direction == 'AtoB'
         X, y = [X, y] if AtoB else [y, X]
         pred = self(X)
-        G_lsfn, D_lsfn = self.ls_fn_s
+        G_lsfn, D_lsfn = self.train_ls_fn_s
         if backward:
             # 需要进行反向传播
             # 取出优化器和损失函数

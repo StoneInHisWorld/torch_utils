@@ -240,7 +240,7 @@ class Trainer:
         optimizer_s = net.optimizer_s
         scheduler_s = net.scheduler_s
         # 损失项
-        loss_names = [f'train_{item}' for item in net.loss_names]
+        loss_names = [f'train_{item}' for item in net.train_ls_names]
         # 评价项
         criteria_names = [f'train_{ptools.get_computer_name(criterion)}' for criterion in criterion_a]
         # 学习率项
@@ -306,7 +306,7 @@ class Trainer:
         optimizer_s = net.optimizer_s
         scheduler_s = net.scheduler_s
         # 损失项
-        loss_names = [f'train_{item}' for item in net.loss_names]
+        loss_names = [f'train_{item}' for item in net.train_ls_names]
         # 评价项
         criteria_names = [
             f'train_{ptools.get_computer_name(criterion)}' for criterion in criterion_a
@@ -509,7 +509,7 @@ class Trainer:
             self.module = None
             eval_subprocess = Process(
                 target=eval_impl,
-                args=(module.loss_names, self.criterion_a, pbar_Q, eval_Q, log_Q, end_env)
+                args=(module.train_ls_names, self.criterion_a, pbar_Q, eval_Q, log_Q, end_env)
             )
             process_pool += [eval_subprocess]
             # 日志进程

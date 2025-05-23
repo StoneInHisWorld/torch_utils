@@ -17,7 +17,7 @@ def profiling_impl(n_epochs, os, log_path, trainer, data_iter):
     optimizer_s = net.optimizer_s
     scheduler_s = net.scheduler_s
     # 记录项设置
-    loss_names = [f'train_{item}' for item in net.loss_names]
+    loss_names = [f'train_{item}' for item in net.train_ls_names]
     criteria_names = [f'train_{criterion.__name__}' for criterion in criterion_a]
     lr_names = net.lr_names
     history = History(*(criteria_names + loss_names + lr_names))

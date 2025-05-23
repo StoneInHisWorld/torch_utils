@@ -224,7 +224,7 @@ def tlog_impl(
         # 学习率项
         lr_names = net.lr_names
         # 损失项
-        loss_names = [f'train_{item}' for item in net.loss_names]
+        loss_names = [f'train_{item}' for item in net.train_ls_names]
         # 评价项
         criteria_names = [
             f'train_{get_computer_name(criterion)}'
@@ -281,7 +281,7 @@ def vlog_impl(
         # 学习率项
         lr_names = net.lr_names
         # 损失项
-        loss_names = [f'train_{item}' for item in net.loss_names]
+        loss_names = [f'train_{item}' for item in net.train_ls_names]
         # 评价项
         criteria_names = [
             f'train_{get_computer_name(criterion)}' for criterion in criterion_a

@@ -193,8 +193,8 @@ class prepare:
             return
         net = trainer.module
         # 清除训练痕迹
-        del net.optimizer_s, net.scheduler_s, net.ls_fn_s, \
-            net.lr_names, net.loss_names, net.test_ls_names
+        del net.optimizer_s, net.scheduler_s, net.lr_names, net.train_ls_fn_s, \
+            net.train_ls_names, net.test_ls_fn_s, net.test_ls_names
         net.ready = False
 
     @staticmethod
@@ -241,7 +241,7 @@ class prepare:
         """
         net = trainer.module
         # 清除测试痕迹
-        del net.ls_fn_s, net.lr_names, net.loss_names, net.test_ls_names
+        del net.lr_names, net.train_ls_fn_s, net.train_ls_names, net.test_ls_fn_s, net.test_ls_names
 
     @net_builder()
     def __prepare_predict(self, *args):

@@ -1,3 +1,4 @@
+import functools
 import warnings
 from functools import reduce
 from typing import List, Tuple
@@ -39,7 +40,7 @@ class BasicNN(nn.Sequential):
         self._init_submodules(init_meth, **init_kwargs)
         self.optimizer_s = None
         self.scheduler_s = None
-        self.ls_fn_s = None
+        self.train_ls_fn_s = None
         # self._gradient_clipping = None
         # 设备迁移
         self.apply(lambda m: m.to(device))
@@ -79,7 +80,13 @@ class BasicNN(nn.Sequential):
         if len(ls_args) == 0:
             warnings.warn('损失函数参数不足以构造足够的损失函数，将用默认的mse损失函数进行填充！', UserWarning)
             ls_args = [('mse', {}), ]
-        self.ls_fn_s, self.loss_names, self.test_ls_names = self._get_ls_fn(*ls_args)
+        # self.trainls_fn_s, self.loss_names, self.test_ls_names = self._get_ls_fn(*ls_args)
+        if len(ls_args) == 1:
+            ls_args = [ls_args[0], ls_args[0]]
+        assert len(ls_args) == 2, (f"收到了{len(ls_args)}组损失值计算参数，"
+                                   f"无法判断哪组为训练损失函数参数，或是测试损失函数参数")
+        (self.train_ls_fn_s, self.train_ls_names, self.test_ls_fn_s,
+         self.test_ls_names) = self._get_ls_fn(*ls_args)
         try:
             # 设置梯度裁剪方法
             self._gradient_clipping = self._gradient_clipping
@@ -114,26 +121,43 @@ class BasicNN(nn.Sequential):
             for optim, (ss, kwargs) in zip(self.optimizer_s, args)
         ]
 
-    def _get_ls_fn(self, *args):
-        """获取网络的损失函数序列，并设置网络的损失名称、测试损失名称
+    def _get_ls_fn(self, train_ls_args: List[Tuple[str, dict]],
+                   test_ls_args: List[Tuple[str, dict]]):
+        """获取网络的训练和测试损失函数序列，并设置网络的训练损失、测试损失名称
         根据参数列表中的每一项调用torch_tools.py中的get_ls_fn()来获取损失函数。
         获取损失函数前，会提取关键词参数中的size_averaged。size_averaged == True，则会返回torch_tools.sample_wise_ls_fn()包装过的损失函数。
 
-        :param args: 多个二元组，元组格式为（损失函数类型字符串，本损失函数关键词参数），若不指定关键词参数，请用空字典。
-        :return: 损失函数序列，损失函数名称，测试损失函数名称
+        :param train_ls_args: 多个二元组，元组格式为（训练损失函数类型字符串，本损失函数关键词参数），若不指定关键词参数，请用空字典。
+        :param test_ls_args: 多个二元组，元组格式为（测试损失函数类型字符串，本损失函数关键词参数），若不指定关键词参数，请用空字典。
+        :return: 训练损失函数序列，训练损失函数名称，测试损失函数序列，测试损失函数名称
         """
-        ls_fn_s, loss_names = [], []
-        for (type_s, kwargs) in args:
+        # 训练损失
+        train_ls_fn_s, train_ls_names = [], []
+        for (ls_type, kwargs) in train_ls_args:
             # 根据参数获取损失函数
-            loss_names.append(type_s.upper())
+            train_ls_names.append(ls_type.upper())
             size_averaged = kwargs.pop('size_averaged', True)
-            unwrapped_fn = ttools.get_ls_fn(type_s, **kwargs)
-            ls_fn_s.append(
+            unwrapped_fn = ttools.get_ls_fn(ls_type, **kwargs)
+            train_ls_fn_s.append(
                 unwrapped_fn if size_averaged else
-                lambda x, y: ttools.sample_wise_ls_fn(x, y, unwrapped_fn)
+                functools.partial(ttools.sample_wise_ls_fn, unwrapped_fn=unwrapped_fn)
+                # lambda x, y: ttools.sample_wise_ls_fn(x, y, unwrapped_fn)
             )
-        test_ls_names = loss_names
-        return ls_fn_s, loss_names, test_ls_names
+        # 测试损失
+        test_ls_fn_s, test_ls_names = [], []
+        for (ls_type, kwargs) in test_ls_args:
+            # 根据参数获取损失函数
+            test_ls_names.append(ls_type.upper())
+            size_averaged = kwargs.pop('size_averaged', True)
+            unwrapped_fn = ttools.get_ls_fn(ls_type, **kwargs)
+            test_ls_fn_s.append(
+                unwrapped_fn if size_averaged else
+                functools.partial(ttools.sample_wise_ls_fn, unwrapped_fn=unwrapped_fn)
+                # lambda x, y: ttools.sample_wise_ls_fn(x, y, unwrapped_fn)
+            )
+        # test_ls_names = train_ls_names.copy()
+        # return train_ls_fn_s, train_ls_names, test_ls_names
+        return train_ls_fn_s, train_ls_names, test_ls_fn_s, test_ls_names
 
     def get_comment(self,
                     inputs, predictions, labels,
@@ -237,14 +261,14 @@ class BasicNN(nn.Sequential):
                 for optim in self.optimizer_s:
                     optim.step()
             assert len(result) == 2, f'前反向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
-            assert len(result[1]) == len(self.loss_names), \
-                f'前向传播返回的损失值数量{result[1]}与指定的损失名称数量{len(self.loss_names)}不匹配。'
+            assert len(result[1]) == len(self.train_ls_names), \
+                f'前向传播返回的损失值数量{result[1]}与指定的损失名称数量{len(self.train_ls_names)}不匹配。'
         else:
             with torch.no_grad():
                 result = self._forward_impl(X, y)
             assert len(result) == 2, f'前向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
             assert len(result[1]) == len(self.test_ls_names), \
-                f'前向传播返回的损失值数量{result[1]}与指定的损失名称数量{len(self.loss_names)}不匹配。'
+                f'前向传播返回的损失值数量{result[1]}与指定的损失名称数量{len(self.test_ls_names)}不匹配。'
         return result
 
     def _forward_impl(self, X, y) -> Tuple[torch.Tensor, List]:
@@ -256,7 +280,7 @@ class BasicNN(nn.Sequential):
         :return: （预测值， （损失值集合））
         """
         pred = self(X)
-        return pred, [ls_fn(pred, y) for ls_fn in self.ls_fn_s]
+        return pred, [ls_fn(pred, y) for ls_fn in self.train_ls_fn_s]
 
     def _backward_impl(self, *ls):
         """反向传播实现
@@ -309,7 +333,8 @@ class BasicNN(nn.Sequential):
         """
         # 如果指定了输入形状，则进行形状检查
         if self.input_size:
-            assert x.shape[-2:] == self.input_size[-2:], f'输入网络的张量形状{x.shape}与网络要求形状{self.input_size}不匹配！'
+            assert x.shape[-2:] == self.input_size[
+                                   -2:], f'输入网络的张量形状{x.shape}与网络要求形状{self.input_size}不匹配！'
         # checkpoint检查
         if self.__checkpoint:
             x = checkpoint.checkpoint(
