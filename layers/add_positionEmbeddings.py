@@ -74,13 +74,13 @@ class AddPositionEmbs(nn.Module):
             inputs: 前向传播的输入
 
         Returns:
-            输出为（批量大小, 时序步数, 输入维度）
+            输出为（批量大小, 时序步数, 词元维度）
         """
-        assert inputs.shape[1:] == self.input_size, \
-            (f"期待的输入形状为{('batch_size', *self.input_size)}，"
-             f"而实际上得到的输入形状为{inputs.shape}")
+        assert inputs.shape[-1] == self.input_size[-1], \
+            (f"期待的输入词元维度为{self.input_size[-1]}，"
+             f"而实际上得到的输入词元维度为{inputs.shape[-1]}")
         inputs = inputs + self.weights[:, :inputs.shape[1], :]
-        return self.dropout(inputs)
+        return self.dropout(inputs * torch.sqrt(torch.FloatTensor(self.input_size[-1])))
 
     def bert_init(self, inputs_size, device, dtype):
         return torch.normal(
