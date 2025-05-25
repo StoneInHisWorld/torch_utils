@@ -53,10 +53,18 @@ class EncoderLayer(nn.Module):
         #         inputs = torch.cat([cls, inputs], 1)
         #
         #     inputs = self.encoder(inputs)
-        bs, c, h, w = inputs.shape
-        # 将序列长度移动到第1维，通道维移动到第2维
-        inputs = inputs.permute(0, 2, 3, 1)
-        inputs = inputs.reshape([bs, h * w, c])
+        if len(inputs.shape) == 4:
+            bs, c, h, w = inputs.shape
+            # 将序列长度移动到第1维，通道维移动到第2维
+            inputs = inputs.permute(0, 2, 3, 1)
+            inputs = inputs.reshape([bs, h * w, c])
+        elif len(inputs.shape) == 3:
+            bs, h_w, c = inputs.shape
+            # # 将序列长度移动到第1维，通道维移动到第2维
+            # inputs = inputs.permute(0, 2, 3, 1)
+            # inputs = inputs.reshape([bs, h * w, c])
+        else:
+            raise ValueError(f"支持的输入形状是三维或四维，但得到的输入形状是{len(inputs.shape)}的！")
 
         # 在此添加类别符
         if self.classifier in ['token', 'token_unpooled']:
