@@ -98,7 +98,7 @@ class PatchGenerator(BasicNN):
         """
         outputs = []
         inputs, labels = inputs
-        lb_mask = nn.Transformer.generate_square_subsequent_mask(labels.size()[-1])
+        lb_mask = nn.Transformer.generate_square_subsequent_mask(labels.size()[-1]).to(inputs.device)
         inputs = self.pos_embedding(self.f_embedding(inputs))
         labels = self.pos_embedding(self.l_embedding(labels))
         num_pixel_in_patch = self.patches_size ** 2
@@ -185,7 +185,7 @@ class PatchGenerator(BasicNN):
     def __auto_regressive_predict(self, X, label_shape):
         # 初始化预测向量
         bs, seq_len = label_shape
-        targets = torch.zeros(bs, 1).to(torch.long)
+        targets = torch.zeros(bs, 1).to(torch.long).to(X.device)
         for _ in range(seq_len):
             output = self((X, targets))
             y = torch.argmax(output, 1)
