@@ -81,7 +81,7 @@ class AddPositionEmbs(nn.Module):
              f"而实际上得到的输入词元维度为{inputs.shape[-1]}")
         inputs = inputs + self.weights[:, :inputs.shape[1], :]
         return self.dropout(inputs * torch.sqrt(
-            torch.FloatTensor(self.input_size[-1]).to(inputs.device)))
+            torch.FloatTensor([self.input_size[-1]]).to(inputs.device)))
 
     def bert_init(self, inputs_size, device, dtype):
         return torch.normal(
