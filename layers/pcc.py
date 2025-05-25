@@ -13,7 +13,8 @@ def calculate_pcc(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     :param y: 计算对象2
     :return: 两张图片的PCC值
     """
-    assert y_hat.shape == y.shape, '计算PCC的两个张量形状需一致'
+    assert y_hat.shape == y.shape, (f'计算PCC的两个张量形状需一致，然而预测值的形状为'
+                                    f'{y_hat.shape}，标签值的形状为{y.shape}')
     # 新方法计算PCC
     corrcoef_xy = [
         torch.corrcoef(o)[0, 1]
