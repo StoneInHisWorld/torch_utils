@@ -98,7 +98,8 @@ class PatchGenerator(BasicNN):
         """
         outputs = []
         inputs, labels = inputs
-        lb_mask = nn.Transformer.generate_square_subsequent_mask(labels.size()[-1]).to(inputs.device)
+        lb_mask = nn.Transformer.generate_square_subsequent_mask(labels.size()[-1])
+        lb_mask = (lb_mask == -torch.inf).to(inputs.device)
         inputs = self.pos_embedding(self.f_embedding(inputs))
         labels = self.pos_embedding(self.l_embedding(labels))
         num_pixel_in_patch = self.patches_size ** 2
@@ -180,7 +181,6 @@ class PatchGenerator(BasicNN):
         # 去掉标签集中填充部分以计算损失值
         # if embd_size > 0:
         #     y = y[:, :, :-embd_size]
-
 
     def __auto_regressive_predict(self, X, label_shape):
         # 初始化预测向量
