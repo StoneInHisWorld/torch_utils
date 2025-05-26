@@ -96,19 +96,19 @@ class PatchGenerator(BasicNN):
         Returns:
 
         """
-        outputs = []
         inputs, labels = inputs
         lb_mask = nn.Transformer.generate_square_subsequent_mask(labels.size()[-1])
         lb_mask = (lb_mask == -torch.inf).to(inputs.device)
         inputs = self.pos_embedding(self.f_embedding(inputs))
         labels = self.pos_embedding(self.l_embedding(labels))
-        num_pixel_in_patch = self.patches_size ** 2
-        for i, l_slice in enumerate(torch.split(labels, num_pixel_in_patch, 1)):
-            i = i * num_pixel_in_patch
-            l_mask = lb_mask[i: i + num_pixel_in_patch, i: i + num_pixel_in_patch]
-            # 图片处理不含padding_mask
-            outputs.append(self.transformer(inputs, l_slice, tgt_mask=l_mask))
-        outputs = torch.cat(outputs, 1)
+        # num_pixel_in_patch = self.patches_size ** 2
+        # for i, l_slice in enumerate(torch.split(labels, num_pixel_in_patch, 1)):
+        #     i = i * num_pixel_in_patch
+        #     l_mask = lb_mask[i: i + num_pixel_in_patch, i: i + num_pixel_in_patch]
+        #     # 图片处理不含padding_mask
+        #     outputs.append(self.transformer(inputs, l_slice, tgt_mask=l_mask))
+        # outputs = torch.cat(outputs, 1)
+        outputs = self.transformer(inputs, labels, tgt_mask=lb_mask)
         if torch.is_grad_enabled():
             return self.linear_projector(outputs)
         else:
