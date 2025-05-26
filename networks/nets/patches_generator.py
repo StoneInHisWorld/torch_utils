@@ -78,6 +78,7 @@ class PatchGenerator(BasicNN):
             pos_embedding = nn.Identity()
         transformer = nn.Transformer(d_model, batch_first=True, **tran_kwargs)
         linear_projector = nn.Linear(d_model, out_pixel_range)
+        self.pixel_basis = torch.arange(0, out_pixel_range).reshape(1, out_pixel_range, 1).to(torch.float32)
         self.patches_size = patches_size
         super().__init__(OrderedDict([
             ("f_embedding", f_embedding),
@@ -110,10 +111,12 @@ class PatchGenerator(BasicNN):
         # outputs = torch.cat(outputs, 1)
         outputs = self.transformer(inputs, labels, tgt_mask=lb_mask)
         if torch.is_grad_enabled():
-            return self.linear_projector(outputs)
+            outputs = self.linear_projector(outputs)
+            return F.softmax(outputs, 2)
         else:
             # 预测结果只需要看最后一个词
-            return self.linear_projector(outputs[:, -1])
+            outputs = self.linear_projector(outputs[:, -1])
+            return F.softmax(outputs, 1)
         # outputs = torch.cat(outputs, 1)
         # return self.linear_projector(outputs)
         # if torch.is_grad_enabled():
@@ -171,12 +174,14 @@ class PatchGenerator(BasicNN):
         if torch.is_grad_enabled():
             pred = self((X, y))
             ls_es = [ls_fn(pred, y) for ls_fn in self.train_ls_fn_s]
-            pred = F.softmax(pred, 2).argmax(dim=2)
-            return pred, ls_es
+            # pred = torch.matmul(pred, self.pixel_basis).squeeze()
+            # return pred, ls_es
         else:
             # 自回归预测
             pred = self.__auto_regressive_predict(X, y.shape)
-            return pred, [ls_fn(pred, y) for ls_fn in self.test_ls_fn_s]
+            ls_es = [ls_fn(pred, y) for ls_fn in self.test_ls_fn_s]
+        pred = torch.matmul(pred, self.pixel_basis).squeeze()
+        return pred, ls_es
             # pred = self((X, y.shape))
         # 去掉标签集中填充部分以计算损失值
         # if embd_size > 0:
@@ -185,11 +190,11 @@ class PatchGenerator(BasicNN):
     def __auto_regressive_predict(self, X, label_shape):
         # 初始化预测向量
         bs, seq_len = label_shape
-        targets = torch.zeros(bs, 1).to(torch.long).to(X.device)
+        targets = torch.zeros(bs, 1, self.pixel_basis.shape[-2]).to(torch.int).to(X.device)
         for _ in range(seq_len):
-            output = self((X, targets))
-            y = torch.argmax(output, 1)
-            targets = torch.cat([targets, y.unsqueeze(1)], 1)
+            output = self((X, targets.argmax(2)))
+            output = F.softmax(output.unsqueeze(1), 2)
+            targets = torch.cat([targets, output], 1)
         return targets[:, 1:].to(torch.float32)
 
     def _get_ls_fn(self, *args):
@@ -198,6 +203,13 @@ class PatchGenerator(BasicNN):
             where = train_ls_names.index('ENTRO')
             train_ls_fn_s[where] = functools.partial(
                 SEQ_ENTROLOSS, wrapped_entroloss=train_ls_fn_s[where]
+            )
+        except ValueError:
+            pass
+        try:
+            where = test_ls_names.index('ENTRO')
+            test_ls_fn_s[where] = functools.partial(
+                SEQ_ENTROLOSS, wrapped_entroloss=test_ls_fn_s[where]
             )
         except ValueError:
             pass
