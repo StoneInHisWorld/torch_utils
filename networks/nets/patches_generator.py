@@ -99,7 +99,8 @@ class PatchGenerator(BasicNN):
         """
         inputs, labels = inputs
         lb_mask = nn.Transformer.generate_square_subsequent_mask(labels.size()[-1])
-        lb_mask = (lb_mask == -torch.inf).to(inputs.device)
+        self.pixel_basis = self.pixel_basis.to(inputs.device)
+        lb_mask = (lb_mask == -torch.inf).to(inputs.device).to(torch.bool)
         inputs = self.pos_embedding(self.f_embedding(inputs))
         labels = self.pos_embedding(self.l_embedding(labels))
         # num_pixel_in_patch = self.patches_size ** 2
