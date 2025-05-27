@@ -189,7 +189,7 @@ class Experiment:
         """
         kwargs.update(self.__extra_lm)
         ltools.write_log(self.__lp, **kwargs)
-        print('已编写日志')
+        print(f'已在{self.__lp}编写日志')
 
     def __save_net(self) -> None:
         """保存实验对象持有网络
@@ -215,9 +215,10 @@ class Experiment:
             return
         if save_net == 'entire':
             torch.save(self.__net, self.__np + f'{self.__exp_no}.ptm')
+            print(f'已在{self.__np}保存网络，保存文件为：{self.__exp_no}.ptm')
         elif save_net == 'state':
             torch.save(self.__net.state_dict(), self.__np + f'{self.__exp_no}.ptsd')
-        print('已保存网络')
+            print(f'已在{self.__np}保存网络，保存文件为：{self.__exp_no}.ptsd')
 
     def __plot_history(self, history, **plot_kwargs) -> None:
         """绘制历史趋势图
@@ -251,7 +252,7 @@ class Experiment:
             title='EXP NO.' + str(self.__exp_no),
             savefig_as=savefig_as, **plot_kwargs
         )
-        print('已绘制历史趋势图')
+        # print('已绘制历史趋势图')
 
     @property
     def device(self):

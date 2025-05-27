@@ -112,7 +112,7 @@ def plot_history(history,
         if not os.path.exists(os.path.split(savefig_as)[0]):
             os.makedirs(os.path.split(savefig_as)[0])
         plt.savefig(savefig_as)
-        print('已保存历史趋势图')
+        print(f'已保存历史趋势图于{savefig_as}')
     if not mute:
         plt.show()
     if not accumulative:
