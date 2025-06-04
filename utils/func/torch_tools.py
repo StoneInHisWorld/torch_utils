@@ -206,7 +206,7 @@ def get_lr_scheduler(optimizer, which: str = 'step', **kwargs):
         raise NotImplementedError(f"不支持的学习率规划器{which}, 当前支持的初始化方式包括{lr_schedulers}")
 
 
-def get_activation(which: str = 'step', **kwargs):
+def get_activation(which: str = 'relu', **kwargs):
     """获取激活函数
     :param which: 使用哪种类型的激活函数
     :param kwargs: 指定激活函数的关键词参数
@@ -220,6 +220,8 @@ def get_activation(which: str = 'step', **kwargs):
         return torch.nn.LeakyReLU(**kwargs)
     elif which == 'tanh':
         return torch.nn.Tanh()
+    elif which == 'gelu':
+        return torch.nn.GELU()
     else:
         raise NotImplementedError(f"不支持的激活函数{which}, 当前支持的激活函数层包括{activations}")
 
