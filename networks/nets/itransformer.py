@@ -8,6 +8,7 @@ import torch.nn.functional as F
 
 from networks import BasicNN
 from layers.add_positionEmbeddings import AddPositionEmbs
+from layers import KVCacheTransformerBlock, auto_regression
 
 
 #
@@ -57,12 +58,14 @@ def SEQ_ENTROLOSS(pred, y, wrapped_entroloss):
     return wrapped_entroloss(pred, y)
 
 
-class PatchGenerator(BasicNN):
+class ITransformer(BasicNN):
 
-    def __init__(self,
-                 in_len, in_pixel_range, out_len, out_pixel_range,
-                 pixel_dim=128, patches_size=4, pos_emb='original', tran_kwargs=None,
-                 **kwargs):
+    def __init__(
+            self,
+            in_len, in_pixel_range, out_len, out_pixel_range,
+            auto_regression: bool = True, pos_emb='original', tran_kwargs=None,
+            **kwargs
+    ):
         if tran_kwargs is None:
             tran_kwargs = {}
         self.pixel_range = max(in_pixel_range, out_pixel_range)
@@ -76,10 +79,12 @@ class PatchGenerator(BasicNN):
             )
         else:
             pos_embedding = nn.Identity()
-        transformer = nn.Transformer(d_model, batch_first=True, **tran_kwargs)
+        transformer = KVCacheTransformerBlock(in_len, out_len, d_model, auto_regressive=auto_regression, **tran_kwargs)
+        # transformer = nn.Transformer(d_model, batch_first=True, **tran_kwargs)
         linear_projector = nn.Linear(d_model, out_pixel_range)
         self.pixel_basis = torch.arange(0, out_pixel_range).reshape(1, out_pixel_range, 1).to(torch.float32)
-        self.patches_size = patches_size
+        # self.patches_size = patches_size
+        self.auto_reg = auto_regression
         super().__init__(OrderedDict([
             ("f_embedding", f_embedding),
             ("l_embedding", l_embedding),
@@ -97,45 +102,45 @@ class PatchGenerator(BasicNN):
         Returns:
 
         """
-        inputs, labels = inputs
-        lb_mask = nn.Transformer.generate_square_subsequent_mask(labels.size()[-1])
-        lb_mask = (lb_mask == -torch.inf).to(inputs.device)
-        inputs = self.pos_embedding(self.f_embedding(inputs))
-        labels = self.pos_embedding(self.l_embedding(labels))
+        # inputs, labels_or_shape = inputs
+        # lb_mask = nn.Transformer.generate_square_subsequent_mask(labels_or_shape.size()[-1])
+        # lb_mask = (lb_mask == -torch.inf).to(inputs.device)
+        # inputs = self.pos_embedding(self.f_embedding(inputs))
+        # labels_or_shape = self.pos_embedding(self.l_embedding(labels_or_shape))
         # num_pixel_in_patch = self.patches_size ** 2
-        # for i, l_slice in enumerate(torch.split(labels, num_pixel_in_patch, 1)):
+        # for i, l_slice in enumerate(torch.split(labels_or_shape, num_pixel_in_patch, 1)):
         #     i = i * num_pixel_in_patch
         #     l_mask = lb_mask[i: i + num_pixel_in_patch, i: i + num_pixel_in_patch]
         #     # 图片处理不含padding_mask
         #     outputs.append(self.transformer(inputs, l_slice, tgt_mask=l_mask))
         # outputs = torch.cat(outputs, 1)
-        outputs = self.transformer(inputs, labels, tgt_mask=lb_mask)
-        if torch.is_grad_enabled():
-            outputs = self.linear_projector(outputs)
-            return F.softmax(outputs, 2)
-        else:
-            # 预测结果只需要看最后一个词
-            outputs = self.linear_projector(outputs[:, -1])
-            return F.softmax(outputs, 1)
+        # outputs = self.transformer(inputs, labels_or_shape, tgt_mask=lb_mask)
+        # if torch.is_grad_enabled():
+        #     outputs = self.linear_projector(outputs)
+        #     return F.softmax(outputs, 2)
+        # else:
+        #     # 预测结果只需要看最后一个词
+        #     outputs = self.linear_projector(outputs[:, -1])
+        #     return F.softmax(outputs, 1)
         # outputs = torch.cat(outputs, 1)
         # return self.linear_projector(outputs)
         # if torch.is_grad_enabled():
         #     # 强制教学
         #     # i_bs, i_len, i_c = inputs.shape
-        #     # l_bs, l_len, l_c = labels.shape
+        #     # l_bs, l_len, l_c = labels_or_shape.shape
         #     # # 将序列长度移动到第1维，通道维移动到第2维
         #     # inputs = inputs.permute(0, 2, 3, 1)
-        #     # labels = labels.permute(0, 2, 3, 1)
+        #     # labels_or_shape = labels_or_shape.permute(0, 2, 3, 1)
         #     # inputs = inputs.reshape([i_bs, i_h * i_w, i_c])
-        #     # labels = labels.reshape([l_bs, l_h * l_w, l_c])
+        #     # labels_or_shape = labels_or_shape.reshape([l_bs, l_h * l_w, l_c])
         #     # 使用F.pad填充
         #     # f_kwargs = {}
         #     # if i_c > l_c:
-        #     #     labels = F.pad(labels, (0, i_c - l_c, 0, 0), mode='constant', value=0)
+        #     #     labels_or_shape = F.pad(labels_or_shape, (0, i_c - l_c, 0, 0), mode='constant', value=0)
         #     # elif i_c < l_c:
         #     #     inputs = F.pad(inputs, (0,  l_c - i_c, 0, 0), mode='constant', value=0)
-        #     for l_slice in torch.split(labels, self.patches_size ** 2, 1):
-        #         l_mask = nn.Transformer.generate_square_subsequent_mask(labels.size()[-1])
+        #     for l_slice in torch.split(labels_or_shape, self.patches_size ** 2, 1):
+        #         l_mask = nn.Transformer.generate_square_subsequent_mask(labels_or_shape.size()[-1])
         #         # 图片处理不含padding_mask
         #         outputs.append(self.transformer(inputs, l_slice))
         #     outputs = torch.cat(outputs, 1)
@@ -143,19 +148,36 @@ class PatchGenerator(BasicNN):
         # else:
         #     # 预测
         #     # inputs = self.position_embedding(inputs)
-        #     bs, seq_len, seq_dim = labels
+        #     bs, seq_len, seq_dim = labels_or_shape
         #     for _ in range(seq_len):
         #         memory = self.transformer(
         #             torch.zeros(bs, self.patches_size ** 2, seq_dim),
         #             inputs
         #         )
         #         outputs.append(memory[:, -1].unsqueeze(1))
-
+        # self.transformer.refresh_head(inputs.shape[0], inputs.device)
+        if self.auto_reg and not torch.is_grad_enabled():
+            inputs = self.pos_embedding(self.f_embedding(inputs))
+            b, _, d = inputs.shape
+            self.transformer.refresh_head(b, inputs.device)
+            outputs = auto_regression(
+                self.transformer, inputs, torch.zeros((b, 1, d)),
+                lambda out, progress: progress >= self.transformer.tgt_len
+            )
+        else:
+            inputs, labels = inputs
+            inputs = self.pos_embedding(self.f_embedding(inputs))
+            labels = self.pos_embedding(self.l_embedding(labels))
+            self.transformer.refresh_head(inputs.shape[0], inputs.device)
+            outputs = self.transformer(inputs, labels)
+        outputs = self.linear_projector(outputs)
+        return F.softmax(outputs, 2)
 
     def _forward_impl(self, X, y) -> Tuple[torch.Tensor, List]:
         """前向传播实现。
         进行前向传播后，根据self._ls_fn()计算损失值，并返回。
-        若要更改optimizer.zero_grad()以及backward()的顺序，请直接重载forward_backward()！
+        参考自：https://www.zhihu.com/question/584772471/answer/2900724691
+
         :param X: 特征集
         :param y: 标签集
         :return: （预测值， （损失值集合））
@@ -171,6 +193,15 @@ class PatchGenerator(BasicNN):
         #         y, (0, embd_size, 0, 0), mode='constant', value=0
         #     )
         # 前向传播
+        # if torch.is_grad_enabled():
+        #     pred = self((X, y))
+        #     ls_es = [ls_fn(pred, y) for ls_fn in self.train_ls_fn_s]
+        #     # pred = torch.matmul(pred, self.pixel_basis).squeeze()
+        #     # return pred, ls_es
+        # else:
+        #     # 自回归预测
+        #     pred = self.__auto_regressive_predict(X, y.shape)
+        #     ls_es = [ls_fn(pred, y) for ls_fn in self.test_ls_fn_s]
         if torch.is_grad_enabled():
             pred = self((X, y))
             ls_es = [ls_fn(pred, y) for ls_fn in self.train_ls_fn_s]
@@ -178,24 +209,27 @@ class PatchGenerator(BasicNN):
             # return pred, ls_es
         else:
             # 自回归预测
-            pred = self.__auto_regressive_predict(X, y.shape)
+            pred = self(X)
             ls_es = [ls_fn(pred, y) for ls_fn in self.test_ls_fn_s]
-        pred = torch.matmul(pred, self.pixel_basis).squeeze()
+        pred = (pred @ self.pixel_basis).squeeze()
         return pred, ls_es
-            # pred = self((X, y.shape))
+        # pred = self((X, y.shape))
         # 去掉标签集中填充部分以计算损失值
         # if embd_size > 0:
         #     y = y[:, :, :-embd_size]
 
-    def __auto_regressive_predict(self, X, label_shape):
-        # 初始化预测向量
-        bs, seq_len = label_shape
-        targets = torch.zeros(bs, 1, self.pixel_basis.shape[-2]).to(torch.int).to(X.device)
-        for _ in range(seq_len):
-            output = self((X, targets.argmax(2)))
-            output = F.softmax(output.unsqueeze(1), 2)
-            targets = torch.cat([targets, output], 1)
-        return targets[:, 1:].to(torch.float32)
+    # def __auto_regressive_predict(self, X, label_shape):
+    #     """自回归预测
+    #     参考自：https://www.zhihu.com/question/584772471/answer/2900724691
+    #     """
+    #     # 初始化预测向量
+    #     bs, seq_len = label_shape
+    #     targets = torch.zeros(bs, 1, self.pixel_basis.shape[-2]).to(torch.int).to(X.device)
+    #     for _ in range(seq_len):
+    #         output = self((X, targets.argmax(2)))
+    #         output = F.softmax(output.unsqueeze(1), 2)
+    #         targets = torch.cat([targets, output], 1)
+    #     return targets[:, 1:].to(torch.float32)
 
     def _get_ls_fn(self, *args):
         train_ls_fn_s, train_ls_names, test_ls_fn_s, test_ls_names = super()._get_ls_fn(*args)
@@ -223,10 +257,23 @@ class PatchGenerator(BasicNN):
         key_padding_mask[tokens == 2] = -torch.inf
         return key_padding_mask
 
-#
-# model = PatchGenerator(81, 256, 2)
-# inputs = torch.rand([4, 81, 256])
-# labels = torch.rand([4, 256, 2])
-# labels = F.pad(labels, (0, 254, 0, 0), mode='constant', value=0)
-# outputs = model((inputs, labels))
-# print(outputs.shape)
+
+# batch_size = 32
+# inputs_len = 20
+# labels_len = 40
+# inputs_dim = 256
+# labels_dim = 2
+# model = ITransformer(
+#     inputs_len, inputs_dim, labels_len, labels_dim, tran_kwargs={
+#         "nhead": 2, "num_encoder_layers": 2, "num_decoder_layers": 2,
+#         "d_model": 64, "dim_feedforward": 512
+#     }
+# )
+# inputs = torch.randint(0, 256, [batch_size, inputs_len])
+# labels = torch.randint(0, 2, [batch_size, labels_len])
+# with torch.enable_grad():
+#     outputs = model((inputs, labels))
+#     print(outputs.shape)
+# with torch.no_grad():
+#     outputs = model(inputs)
+#     print(outputs.shape)
