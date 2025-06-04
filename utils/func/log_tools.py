@@ -6,7 +6,7 @@ import pandas as pd
 import matplotlib
 import pandas.errors
 
-matplotlib.use('Agg')
+# matplotlib.use('TkAgg')
 
 from matplotlib import pyplot as plt
 
@@ -74,6 +74,10 @@ def plot_history(history,
         for label, _ in history
     ])))
     n_cols = int(np.ceil(len(subplots_titles) / max_nrows))
+    if mute:
+        matplotlib.use('Agg')
+    else:
+        matplotlib.use('TkAgg')
     # 设置整张图片的属性
     fig, axes = plt.subplots(
         min(max_nrows, len(subplots_titles)), n_cols,
@@ -113,8 +117,9 @@ def plot_history(history,
             os.makedirs(os.path.split(savefig_as)[0])
         plt.savefig(savefig_as)
         print('已保存历史趋势图')
-    if not mute:
-        plt.show()
+    # if not mute:
+    #     plt.show()
+    plt.show()
     if not accumulative:
         plt.close(fig)
         plt.clf()
