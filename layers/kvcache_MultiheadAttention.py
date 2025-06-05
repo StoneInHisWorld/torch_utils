@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
+from torch.nn.parameter import Parameter
 
 
 class KVCache_AttentionHead(nn.Module):
@@ -50,9 +51,9 @@ class KVCache_AttentionHead(nn.Module):
         self.v_cache = torch.zeros(batch_size, v_cache_size, self.head_size, device=device)
         self.cache_index = 0
 
-    def set_mask(self, ql, kl):
+    def set_mask(self, ql, kl, device):
         # QK^{T}矩阵掩膜
-        self.register_buffer('tril', torch.tril(torch.ones(ql, kl)))
+        self.register_buffer('tril', torch.tril(torch.ones(ql, kl, device=device)))
 
 
 class KVStatic_KVCAH(KVCache_AttentionHead):
@@ -300,10 +301,10 @@ class SelfAttention_KVCAH(KVCache_AttentionHead):
     #     self.v_cache = torch.zeros(batch_size, v_cache_size + 1, self.head_size, device=device)
     #     self.cache_index = 0
 
-    def set_mask(self, ql, kl):
+    def set_mask(self, ql, kl, device):
         # QK^{T}矩阵掩膜
         assert ql == kl, "自注意力掩码需为方阵！"
-        super().set_mask(ql, kl)
+        super().set_mask(ql, kl, device=device)
         # self.register_buffer('tril', torch.tril(torch.ones(ql, kl)))
 
 
@@ -322,6 +323,7 @@ class KVCacheMultiHeadAttention(nn.Module):
         assert embed_size % num_head == 0, f"模型词语的维度{embed_size}应该能整除头数目{num_head}！"
         head_size = embed_size // num_head
 
+        self.num_heads = num_head
         self.batch_first = True
         self._qkv_same_embed_dim = True
 
@@ -334,12 +336,18 @@ class KVCacheMultiHeadAttention(nn.Module):
             for _ in range(num_head)
         ])
         self.dropout = nn.Dropout(dropout)
-        self.proj = nn.Linear(embed_size, embed_size, bias, **factory_kwargs)
-        self.in_proj_bias = self.proj.bias
+        self.out_proj = nn.Linear(
+            embed_size, embed_size,
+            # bias,
+            **factory_kwargs
+        )
+        # self.in_proj_bias = self.out_proj.bias
+        self.in_proj_weight = Parameter(torch.empty(3 * embed_size, **factory_kwargs))
+        self.in_proj_bias = Parameter(torch.empty(3 * embed_size, **factory_kwargs))
 
     def forward(self, q, k, v):
         out = torch.cat([head(q, k, v) for head in self.sa_head], dim=-1)
-        out = self.dropout(self.proj(out))
+        out = self.dropout(self.out_proj(out))
         return out
 
     def refresh_head(self, batch_size, ql, kl, vl, device):
@@ -348,7 +356,8 @@ class KVCacheMultiHeadAttention(nn.Module):
         for head in self.sa_head:
             if not torch.is_grad_enabled():
                 head.refresh_cache(batch_size, kl, vl, device)
-            head.set_mask(ql, kl)
+            else:
+                head.set_mask(ql, kl, device)
 
 #
 # embed_size = 128

@@ -161,7 +161,7 @@ class ITransformer(BasicNN):
             b, _, d = inputs.shape
             self.transformer.refresh_head(b, inputs.device)
             outputs = auto_regression(
-                self.transformer, inputs, torch.zeros((b, 1, d)),
+                self.transformer, inputs, torch.zeros((b, 1, d), device=inputs.device),
                 lambda out, progress: progress >= self.transformer.tgt_len
             )
         else:
@@ -211,6 +211,7 @@ class ITransformer(BasicNN):
             # 自回归预测
             pred = self(X)
             ls_es = [ls_fn(pred, y) for ls_fn in self.test_ls_fn_s]
+        self.pixel_basis = self.pixel_basis.to(X.device)
         pred = (pred @ self.pixel_basis).squeeze()
         return pred, ls_es
         # pred = self((X, y.shape))

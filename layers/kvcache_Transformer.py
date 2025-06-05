@@ -20,12 +20,14 @@ class KVCache_TransformerEncoderLayer(TransformerEncoderLayer):
         factory_kwargs = {'device': device, 'dtype': dtype}
         super().__init__(
             d_model, nhead, dim_feedforward, dropout, layer_norm_eps=layer_norm_eps, batch_first=True,
-            norm_first=norm_first, bias=bias, **factory_kwargs
+            norm_first=norm_first,
+            # bias=bias,
+            **factory_kwargs
         )
         del self.self_attn
         self.batch_first = True
         self.self_attn = KVCacheMultiHeadAttention(
-            nhead, d_model, True, bias,dropout, auto_regressive, **factory_kwargs
+            nhead, d_model, True, bias, dropout, auto_regressive, **factory_kwargs
         )
         # # Implementation of Feedforward model
         # self.linear1 = nn.Linear(d_model, dim_feedforward, bias=bias, **factory_kwargs)
@@ -37,13 +39,29 @@ class KVCache_TransformerEncoderLayer(TransformerEncoderLayer):
         # self.norm2 = nn.LayerNorm(d_model, eps=layer_norm_eps, bias=bias, **factory_kwargs)
         # self.dropout1 = nn.Dropout(dropout)
         # self.dropout2 = nn.Dropout(dropout)
-        if activation == 'relu':
-            self.activation_relu_or_gelu = 1
-        elif activation == 'gelu':
-            self.activation_relu_or_gelu = 2
-        else:
-            self.activation_relu_or_gelu = 0
+        # if activation == 'relu':
+        #     self.activation_relu_or_gelu = 1
+        # elif activation == 'gelu':
+        #     self.activation_relu_or_gelu = 2
+        # else:
+        #     self.activation_relu_or_gelu = 0
         self.activation = ttools.get_activation(activation)
+
+    def forward(
+            self,
+            src: Tensor,
+            src_mask: Optional[Tensor] = None,
+            src_key_padding_mask: Optional[Tensor] = None,
+            is_causal: bool = False
+    ) -> Tensor:
+        x = src
+        if self.norm_first:
+            x = x + self._sa_block(self.norm1(x), src_mask, src_key_padding_mask)
+            x = x + self._ff_block(self.norm2(x))
+        else:
+            x = self.norm1(x + self._sa_block(x, src_mask, src_key_padding_mask))
+            x = self.norm2(x + self._ff_block(x))
+        return x
 
     # self-attention block
     def _sa_block(self, x: Tensor,
@@ -72,7 +90,9 @@ class KVCache_TransformerDecoderLayer(TransformerDecoderLayer):
         factory_kwargs = {'device': device, 'dtype': dtype}
         super().__init__(
             d_model, nhead, dim_feedforward, dropout, layer_norm_eps=layer_norm_eps, batch_first=True,
-            norm_first=norm_first, bias=bias, **factory_kwargs
+            norm_first=norm_first,
+            # bias=bias,
+            **factory_kwargs
         )
         del self.self_attn, self.multihead_attn
         self.batch_first = True
@@ -162,7 +182,8 @@ class KVCacheTransformerBlock(nn.Transformer):
         super().__init__(
             d_model, nhead, num_encoder_layers, num_decoder_layers, dim_feedforward,
             dropout, activation, encoder, decoder, layer_norm_eps, True,
-            norm_first, bias, **factory_kwargs
+            norm_first, bias,
+            # **factory_kwargs
         )
 
     def refresh_head(self, batch_size, device):
@@ -314,6 +335,3 @@ def auto_regression(transformer, src, init_q, stop_fn, keep_init_q: bool = False
 # #     # de_outputs.append(decoder(tgt, en_outputs))
 # # de_outputs = torch.cat(de_outputs, dim=1)
 # # output = encoder(data)
-
-
-
