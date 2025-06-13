@@ -52,10 +52,16 @@ from layers import KVCacheTransformerBlock, auto_regression
 #         return self._attention_weights
 #
 
-def SEQ_ENTROLOSS(pred, y, wrapped_entroloss):
+def SEQ_ENTROLOSS(pred, y, unwrapped_entroloss):
     pred = pred.permute(0, 2, 1)
     # y = y.argmax(2)
-    return wrapped_entroloss(pred, y)
+    return unwrapped_entroloss(pred, y)
+
+
+def SEQ_MSE(pred, y, unwrapped_mseloss, pixel_basis):
+    pred = (pred @ pixel_basis.to(pred.device)).squeeze()
+    y = y.to(torch.float32)
+    return unwrapped_mseloss(pred, y)
 
 
 class ITransformer(BasicNN):
@@ -234,17 +240,36 @@ class ITransformer(BasicNN):
 
     def _get_ls_fn(self, *args):
         train_ls_fn_s, train_ls_names, test_ls_fn_s, test_ls_names = super()._get_ls_fn(*args)
+        """针对训练损失函数的特殊处理"""
         try:
+            # 针对交叉熵损失的特别处理
             where = train_ls_names.index('ENTRO')
             train_ls_fn_s[where] = functools.partial(
-                SEQ_ENTROLOSS, wrapped_entroloss=train_ls_fn_s[where]
+                SEQ_ENTROLOSS, unwrapped_entroloss=train_ls_fn_s[where]
             )
         except ValueError:
             pass
         try:
+            # 针对均方差的特别处理
+            where = train_ls_names.index('MSE')
+            train_ls_fn_s[where] = functools.partial(
+                SEQ_MSE, unwrapped_mseloss=train_ls_fn_s[where], pixel_basis=self.pixel_basis
+            )
+        except ValueError:
+            pass
+        """针对测试损失函数的特别处理"""
+        try:
             where = test_ls_names.index('ENTRO')
             test_ls_fn_s[where] = functools.partial(
-                SEQ_ENTROLOSS, wrapped_entroloss=test_ls_fn_s[where]
+                SEQ_ENTROLOSS, unwrapped_entroloss=test_ls_fn_s[where]
+            )
+        except ValueError:
+            pass
+        try:
+            # 针对均方差的特别处理
+            where = test_ls_names.index('MSE')
+            test_ls_fn_s[where] = functools.partial(
+                SEQ_MSE, unwrapped_mseloss=test_ls_fn_s[where], pixel_basis=self.pixel_basis
             )
         except ValueError:
             pass
