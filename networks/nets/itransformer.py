@@ -64,6 +64,12 @@ def SEQ_MSE(pred, y, unwrapped_mseloss, pixel_basis):
     return unwrapped_mseloss(pred, y)
 
 
+def SEQ_L1(pred, y, unwrapped_mseloss, pixel_basis):
+    pred = (pred @ pixel_basis.to(pred.device)).squeeze()
+    y = y.to(torch.float32)
+    return unwrapped_mseloss(pred, y)
+
+
 class ITransformer(BasicNN):
 
     def __init__(
@@ -257,6 +263,14 @@ class ITransformer(BasicNN):
             )
         except ValueError:
             pass
+        try:
+            # 针对均方差的特别处理
+            where = train_ls_names.index('L1')
+            train_ls_fn_s[where] = functools.partial(
+                SEQ_L1, unwrapped_mseloss=train_ls_fn_s[where], pixel_basis=self.pixel_basis
+            )
+        except ValueError:
+            pass
         """针对测试损失函数的特别处理"""
         try:
             where = test_ls_names.index('ENTRO')
@@ -270,6 +284,14 @@ class ITransformer(BasicNN):
             where = test_ls_names.index('MSE')
             test_ls_fn_s[where] = functools.partial(
                 SEQ_MSE, unwrapped_mseloss=test_ls_fn_s[where], pixel_basis=self.pixel_basis
+            )
+        except ValueError:
+            pass
+        try:
+            # 针对均方差的特别处理
+            where = test_ls_names.index('L1')
+            test_ls_fn_s[where] = functools.partial(
+                SEQ_L1, unwrapped_mseloss=test_ls_fn_s[where], pixel_basis=self.pixel_basis
             )
         except ValueError:
             pass
