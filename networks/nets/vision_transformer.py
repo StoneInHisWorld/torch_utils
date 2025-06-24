@@ -100,48 +100,6 @@ class FetchClass(nn.Module):
         return inputs
 
 
-#
-#
-# class ResNet(BasicNN):
-#
-#     def __init__(self, which, in_channel, width):
-#         assert which in supported_resnets, f'不支持的ResNet类型{which}！支持的类型包括{supported_resnets}'
-#         # 输入通道需要根据实际情况调整（例如 RGB 图像为 3）
-#         width = int(64 * width)
-#         conv1 = nn.Sequential(
-#             nn.Conv2d(
-#                 in_channel, width,
-#                 kernel_size=7, stride=2, padding=3, bias=False
-#             ),
-#             nn.GroupNorm(64, in_channel),
-#             nn.ReLU(),
-#             nn.MaxPool2d(3, 2, 1)
-#         )
-#
-#     def _make_stage(self, block, planes, blocks, stride=1):
-#         downsample = None
-#         # 当 stride≠1 或通道数变化时，需要下采样
-#         if stride != 1 or self.inplanes != planes * block.expansion:
-#             downsample = nn.Sequential(
-#                 nn.Conv2d(
-#                     self.inplanes,
-#                     planes * block.expansion,
-#                     kernel_size=1,
-#                     stride=stride,
-#                     bias=False
-#                 ),
-#                 nn.GroupNorm(32, planes * block.expansion),  # 与残差块一致
-#             )
-#
-#         layers = []
-#         layers.append(block(self.inplanes, planes, stride, downsample))
-#         self.inplanes = planes * block.expansion  # 更新输入通道数
-#         for _ in range(1, blocks):
-#             layers.append(block(self.inplanes, planes))
-#
-#         return nn.Sequential(*layers)
-
-
 class VisionTransformer(BasicNN):
     """
     VisionTransformer标准实现
