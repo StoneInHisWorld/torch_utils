@@ -14,7 +14,7 @@ class DataTransformer:
         self.n_workers = n_workers
         self.refresh()
 
-    def __default_preprocesses(self) -> None:
+    def _default_preprocesses(self) -> None:
         """默认数据集预处理程序。
         注意：此程序均为本地程序，不可被序列化（pickling）！
 
@@ -82,4 +82,4 @@ class DataTransformer:
         if hasattr(self, f'{self.module_type.__name__}_preprocesses'):
             exec(f'self.{self.module_type.__name__}_preprocesses()')
         else:
-            self.__default_preprocesses()
+            self._default_preprocesses()
