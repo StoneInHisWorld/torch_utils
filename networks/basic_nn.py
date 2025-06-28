@@ -26,13 +26,14 @@ class BasicNN(nn.Sequential):
         -- init_meth: 网络初始化方法。
         -- init_kwargs: 网络初始化方法所用参数。
         -- with_checkpoint: 是否使用检查点机制。
+        -- input_size: 本网络指定的输入形状，赋值为除批量维的维度。例如赋值为（通道数，长，宽）或者（序列长度，）等。
         """
         # 设置默认值
         init_meth = 'zero' if 'init_meth' not in kwargs.keys() else kwargs['init_meth']
         device = torch.device('cpu') if 'device' not in kwargs.keys() else kwargs['device']
         with_checkpoint = False if 'with_checkpoint' not in kwargs.keys() else kwargs['with_checkpoint']
         init_kwargs = {} if 'init_kwargs' not in kwargs.keys() else kwargs['init_kwargs']
-        self.input_size = None if 'input_size' not in kwargs.keys() else kwargs['input_size']
+        self.input_size = None if 'input_size' not in kwargs.keys() else (-1, *kwargs.pop('input_size'))
         # 设置状态标志
         self.ready = False
         # 初始化各模块
@@ -333,8 +334,9 @@ class BasicNN(nn.Sequential):
         """
         # 如果指定了输入形状，则进行形状检查
         if self.input_size:
-            assert x.shape[-2:] == self.input_size[
-                                   -2:], f'输入网络的张量形状{x.shape}与网络要求形状{self.input_size}不匹配！'
+            # 排除掉批量大小维度，只检查通道维和长宽
+            assert x.shape[1:] == self.input_size[1:], \
+                f'输入网络的张量形状{x.shape}与网络要求形状{self.input_size}不匹配！'
         # checkpoint检查
         if self.__checkpoint:
             x = checkpoint.checkpoint(
