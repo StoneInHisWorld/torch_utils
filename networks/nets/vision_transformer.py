@@ -24,7 +24,7 @@ class EncoderLayer(nn.Module):
         super(EncoderLayer, self).__init__()
         if add_pos_emb:
             # 加上分类符
-            self.position_embedding = AddPositionEmbs((emb_size + 1, num_hiddens))
+            self.position_embedding = AddPositionEmbs('bert', (emb_size + 1, num_hiddens))
         else:
             self.position_embedding = nn.Identity()
         self.classifier = classifier
@@ -40,19 +40,6 @@ class EncoderLayer(nn.Module):
         self.norm_layer = nn.LayerNorm([emb_size + 1, num_hiddens])
 
     def forward(self, inputs):
-        # if self.encoder is not None:
-        #     bs, c, h, w = inputs.shape
-        #     # 将序列长度移动到第1维，通道维移动到第2维
-        #     inputs = inputs.reshape([bs, h * w, c])
-        #
-        #     # If we want to add a class token, add it here.
-        #     if self.classifier in ['token', 'token_unpooled']:
-        #         # cls = self.param('cls', nn.initializers.zeros, (1, 1, c))
-        #         cls = torch.zeros(1, 1, c).repeat(bs, 1, 1)
-        #         # cls = self.ini.tile(cls, [bs, 1, 1])
-        #         inputs = torch.cat([cls, inputs], 1)
-        #
-        #     inputs = self.encoder(inputs)
         if len(inputs.shape) == 4:
             bs, c, h, w = inputs.shape
             # 将序列长度移动到第1维，通道维移动到第2维
@@ -74,13 +61,6 @@ class EncoderLayer(nn.Module):
         inputs = self.dropout(inputs)
         inputs = self.encoder(inputs)
         return self.norm_layer(inputs)
-
-        # if self.classifier == 'token':
-        #     # 0号位即为分类标签
-        #     inputs = inputs[:, 0]
-        # elif self.classifier == 'gap':
-        #     inputs = torch.mean(inputs, dim=list(range(1, len(inputs.shape) - 1)))  # (1,) or (1,2)
-        # return inputs
 
 
 class FetchClass(nn.Module):
@@ -107,68 +87,26 @@ class VisionTransformer(BasicNN):
     https://doi.org/10.48550/arXiv.2010.11929 提供的架构编写
     """
 
-    def __init__(self,
-                 which, in_channels,
-                 # resnet=None, classifier='token',
-                 # patch_size=16, patching='patching',
-                 # num_telayer=12, num_telayer_head=12,
-                 # ffn_num_hiddens=3072, representation_size=None,
-                 num_classes=None, *args, **kwargs
-                 ):
+    def __init__(self, which, in_channels, num_classes: int = None, **kwargs):
         # len_pic_seq：图片块序列长度
         # num_hiddens：词汇表中每个词汇长度
-        # if patching == 'patching':
-        #     patching = Patching2D(self.patch_size)
-        # input_size = (3, 224, 224) if 'input_size' not in kwargs.keys() else kwargs['input_size']
-        # input_channel, input_h, input_w = input_size
-        # # len_pic_seq = input_h // patch_size * (input_w // patch_size)
-        # # 获取resnet层
-        # resnet, output_channels, patch_size = self.find_a_resnet(resnet, input_channel)
-        # assert resnet in supported_resnets, f'不支持的ResNet类型{resnet}！支持的类型包括{supported_resnets}'
-        # if resnet == 'resnet50':
-        #     # resnet_width = int(64 * resnet_width)
-        #     resnet = torchvision.models.resnet50(num_classes=input_channel)
-        #     # resnet = nn.Sequential(
-        #     #     nn.Conv2d(input_channel, resnet_width, 7, 2, bias=False),
-        #     #     nn.GroupNorm(64, resnet_width),
-        #     #     nn.ReLU(),
-        #     #     nn.MaxPool2d(3, 2, )
-        #     # )
-        # else:
-        #     resnet = nn.Identity()
-        # 线性投影层
-        # num_hiddens = input_channel * patch_size ** 2
-
         # 将图片切块
-        input_size = (3, 224, 224) if 'input_size' not in kwargs.keys() else kwargs['input_size']
-        # input_channel, _, _ = input_size
-        self.__get_model_config(which, input_size)
+        self.input_size = (in_channels, 224, 224) if 'input_size' not in kwargs.keys() \
+            else kwargs.pop('input_size')
+        self.__get_model_config(which)
         # 获取ResNet层
         resnet, output_channels = self.find_a_resnet(in_channels)
         linear_projector = nn.Conv2d(
             output_channels, self.hidden_size,
             kernel_size=self.patches_size, stride=self.patches_size
         )
-        # # 嵌入层
-        # embedding = nn.Embedding(len_pic_seq, num_hiddens)
-        # 设置分类符号
-        # self.classifier = classifier
-        # if classifier in ['token', 'token_unpooled']:
-        #     self.init_cls = torch.zeros(1, 1, input_channel)
-        # embed_size = (input_size[1] // self.patches_size) * (input_size[2] // self.patches_size)
+        # 获取编码器
         encoder = EncoderLayer(
             self.classifier, self.hidden_size, self.tran_emb_size,
             self.tran_num_heads, self.tran_mlp_dim, self.tran_num_layers,
             self.tran_dropout_rate
         )
         fetch_class = FetchClass(self.classifier)
-        # # 编码器
-        # encoder = nn.TransformerEncoder(
-        #     nn.TransformerEncoderLayer(
-        #         num_hiddens, num_telayer_head, ffn_num_hiddens, batch_first=True
-        #     ), num_layers=num_telayer,
-        #     norm=nn.LayerNorm(num_hiddens)
-        # )
         # ？
         pre_logits = nn.Identity() if self.representation_size is None else \
             nn.Sequential(
@@ -177,36 +115,27 @@ class VisionTransformer(BasicNN):
         # 感知机头
         if num_classes:
             mlp_head = nn.Linear(
-                self.hidden_size if self.representation_size is None else \
-                    self.representation_size,
+                self.hidden_size if self.representation_size is None
+                else self.representation_size,
                 num_classes
             )
         else:
             mlp_head = nn.Identity()
+        kwargs = {'input_size': self.input_size, **kwargs}
         super(VisionTransformer, self).__init__(OrderedDict([
             ('resnet', resnet), ('linear_projector', linear_projector),
-            # ('patching', patching),
-            # ('embedding_layer', embedding),
             ('encoder', encoder), ('fetch_class', fetch_class),
             ('pre_logits', pre_logits), ('mlp_head', mlp_head)
-        ]), *args, **kwargs
-        )
+        ]), **kwargs)
+        # # 给父类对象赋值input_size
+        # self.input_size = (in_channels, 224, 224) if 'input_size' not in kwargs.keys() \
+        #     else kwargs['input_size']
 
     def find_a_resnet(self, in_channels):
         """根据参数指定来分配ResNet块
         :return ResNet网络，输出通道数
         """
         if self.resnet_type == 'resnet50':
-            # resnet_width = int(64 * resnet_width)
-            # resnet = torchvision.models.resnet50(
-            #     weights=torchvision.models.ResNet50_Weights.DEFAULT
-            # )
-            # resnet = nn.Sequential(
-            #     nn.Conv2d(input_channel, resnet_width, 7, 2, bias=False),
-            #     nn.GroupNorm(64, resnet_width),
-            #     nn.ReLU(),
-            #     nn.MaxPool2d(3, 2, )
-            # )
             resnet = ResNet50(in_channels, [3, 4, 9])
             del resnet.avgpool, resnet.flatten, resnet.output
             output_channels = resnet.in_channels
@@ -215,21 +144,21 @@ class VisionTransformer(BasicNN):
             output_channels = in_channels
         return resnet, output_channels
 
-    def __get_model_config(self, which, input_size):
+    def __get_model_config(self, which):
         assert which in supported_models, f'不支持的模型类型{which}，支持的模型类型包括{supported_models}'
         if which == 'r50_b16':
-            self.__get_r50_b16_config(input_size)
+            self.__get_r50_b16_config()
         elif which == 'b16':
-            self.__get_b16_config(input_size)
+            self.__get_b16_config()
         else:
             pass
 
-    def __get_b16_config(self, input_size):
+    def __get_b16_config(self):
         """指定ViT_B16的配置"""
         self.resnet_type = None
         self.patches_size = 16
         self.hidden_size = 768
-        self.tran_emb_size = (input_size[1] // self.patches_size) * (input_size[2] // self.patches_size)
+        self.tran_emb_size = (self.input_size[1] // self.patches_size) * (self.input_size[2] // self.patches_size)
         self.tran_mlp_dim = 3072
         self.tran_num_heads = 12
         self.tran_num_layers = 12
@@ -238,91 +167,14 @@ class VisionTransformer(BasicNN):
         self.classifier = 'token'
         self.representation_size = None
 
-    def __get_r50_b16_config(self, input_size):
+    def __get_r50_b16_config(self):
         """Returns the Resnet50 + ViT-B/16 configuration."""
-        self.__get_b16_config(input_size)
+        self.__get_b16_config()
         self.resnet_type = 'resnet50'
         self.tran_attention_dropout_rate = 0.1
         self.patches_size = 1
         self.resnet_num_layers = (3, 4, 9)
         self.resnet_width_factor = 1
-
-    # def forward(self, inputs):
-    #     # (Possibly partial) ResNet root.
-    #     # if self.resnet is not None:
-    #     #     width = int(64 * self.resnet.width_factor)
-    #     #
-    #     #     # Root block.
-    #     #     inputs = models_resnet.StdConv(
-    #     #         features=width,
-    #     #         kernel_size=(7, 7),
-    #     #         strides=(2, 2),
-    #     #         use_bias=False,
-    #     #         name='conv_root')(
-    #     #         inputs)
-    #     #     inputs = nn.GroupNorm(name='gn_root')(inputs)
-    #     #     inputs = nn.relu(inputs)
-    #     #     inputs = nn.max_pool(inputs, window_shape=(3, 3), strides=(2, 2), padding='SAME')
-    #     #
-    #     #     # ResNet stages.
-    #     #     if self.resnet.num_layers:
-    #     #         inputs = models_resnet.ResNetStage(
-    #     #             block_size=self.resnet.num_layers[0],
-    #     #             nout=width,
-    #     #             first_stride=(1, 1),
-    #     #             name='block1')(
-    #     #             inputs)
-    #     #         for i, block_size in enumerate(self.resnet.num_layers[1:], 1):
-    #     #             inputs = models_resnet.ResNetStage(
-    #     #                 block_size=block_size,
-    #     #                 nout=width * 2 ** i,
-    #     #                 first_stride=(2, 2),
-    #     #                 name=f'block{i + 1}')(
-    #     #                 inputs)
-    #
-    #     # We can merge s2d+emb into a single conv; it's the same.
-    #     inputs = self.linear_projector(inputs)
-    #
-    #     # Here, inputs is a grid of embeddings.
-    #
-    #     # (Possibly partial) Transformer.
-    #     if self.encoder is not None:
-    #         bs, c, h, w = inputs.shape
-    #         # 将序列长度移动到第1维，通道维移动到第2维
-    #         inputs = inputs.reshape([bs, h * w, c])
-    #
-    #         # If we want to add a class token, add it here.
-    #         if self.classifier in ['token', 'token_unpooled']:
-    #             # cls = self.param('cls', nn.initializers.zeros, (1, 1, c))
-    #             cls = torch.zeros(1, 1, c).repeat(bs, 1, 1)
-    #             # cls = self.ini.tile(cls, [bs, 1, 1])
-    #             inputs = torch.cat([cls, inputs], 1)
-    #
-    #         inputs = self.encoder(inputs)
-    #
-    #     if self.classifier == 'token':
-    #         # 0号位即为分类标签
-    #         inputs = inputs[:, 0]
-    #     elif self.classifier == 'gap':
-    #         inputs = torch.mean(inputs, dim=list(range(1, len(inputs.shape) - 1)))  # (1,) or (1,2)
-    #     elif self.classifier in ['unpooled', 'token_unpooled']:
-    #         pass
-    #     else:
-    #         raise ValueError(f'Invalid classifier={self.classifier}')
-    #     inputs = self.pre_logits(inputs)
-    #     # if self.representation_size is not None:
-    #     #     inputs = nn.Dense(features=self.representation_size, name='pre_logits')(inputs)
-    #     #     inputs = nn.tanh(inputs)
-    #     # else:
-    #     #     inputs = IdentityLayer(name='pre_logits')(inputs)
-    #     return self.mlp_head(inputs)
-    #     # if self.num_classes:
-    #     #     inputs = nn.Dense(
-    #     #         features=self.num_classes,
-    #     #         name='head',
-    #     #         kernel_init=nn.initializers.zeros,
-    #     #         bias_init=nn.initializers.constant(self.head_bias_init))(inputs)
-    #     # return inputs
 
 #
 # inputs = torch.rand([4, 3, 224, 224])
