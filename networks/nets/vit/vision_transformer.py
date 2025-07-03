@@ -3,81 +3,10 @@ from collections import OrderedDict
 import torch
 from torch import nn
 
-from layers.add_positionEmbeddings import AddPositionEmbs
 from networks.basic_nn import BasicNN
 from networks.nets.resnet import ResNet50
-
-supported_models = ['r50_b16', 'b16']
-supported_classifier = ['token', 'token_unpooled', 'gap', 'unpooled']
-supported_resnets = ['resnet50', None]
-
-
-class EncoderLayer(nn.Module):
-
-    def __init__(self, classifier,
-                 num_hiddens, emb_size, num_telayer_head,
-                 ffn_num_hiddens, num_telayer, dropout_rate,
-                 add_pos_emb=True
-                 ):
-        # 编码器
-        assert classifier in supported_classifier, f"无效的编码器分类符{classifier}，支持的分类符有{supported_classifier}"
-        super(EncoderLayer, self).__init__()
-        if add_pos_emb:
-            # 加上分类符
-            self.position_embedding = AddPositionEmbs('bert', (emb_size + 1, num_hiddens))
-        else:
-            self.position_embedding = nn.Identity()
-        self.classifier = classifier
-        self.encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                num_hiddens, num_telayer_head, ffn_num_hiddens, batch_first=True
-            ),
-            num_layers=num_telayer,
-            norm=nn.LayerNorm(num_hiddens)
-        )
-        self.dropout = nn.Dropout(dropout_rate)
-        # 加上分类符
-        self.norm_layer = nn.LayerNorm([emb_size + 1, num_hiddens])
-
-    def forward(self, inputs):
-        if len(inputs.shape) == 4:
-            bs, c, h, w = inputs.shape
-            # 将序列长度移动到第1维，通道维移动到第2维
-            inputs = inputs.permute(0, 2, 3, 1)
-            inputs = inputs.reshape([bs, h * w, c])
-        elif len(inputs.shape) == 3:
-            bs, h_w, c = inputs.shape
-            # # 将序列长度移动到第1维，通道维移动到第2维
-            # inputs = inputs.permute(0, 2, 3, 1)
-            # inputs = inputs.reshape([bs, h * w, c])
-        else:
-            raise ValueError(f"支持的输入形状是三维或四维，但得到的输入形状是{len(inputs.shape)}的！")
-
-        # 在此添加类别符
-        if self.classifier in ['token', 'token_unpooled']:
-            cls = torch.zeros(1, 1, c).repeat(bs, 1, 1)
-            inputs = torch.cat([cls, inputs], 1)
-        inputs = self.position_embedding(inputs)
-        inputs = self.dropout(inputs)
-        inputs = self.encoder(inputs)
-        return self.norm_layer(inputs)
-
-
-class FetchClass(nn.Module):
-
-    def __init__(self, which):
-        super(FetchClass, self).__init__()
-        # 编码器
-        assert which in supported_classifier, f"无效的编码器分类符{which}，支持的分类符有{supported_classifier}"
-        self.which = which
-
-    def forward(self, inputs):
-        if self.which == 'token':
-            # 0号位即为分类标签
-            inputs = inputs[:, 0]
-        elif self.which == 'gap':
-            inputs = torch.mean(inputs, dim=list(range(1, len(inputs.shape) - 1)))  # (1,) or (1,2)
-        return inputs
+from networks.nets.vit import supported_models
+from networks.nets.vit.dpdc import EncoderLayer, FetchClass
 
 
 class VisionTransformer(BasicNN):
@@ -88,6 +17,15 @@ class VisionTransformer(BasicNN):
     """
 
     def __init__(self, which, in_channels, num_classes: int = None, **kwargs):
+        """
+        VisionTransformer标准实现
+
+        :param which: 指定ViT的类型
+        :param in_channels: 指定ViT输入数据的通道数
+        :param num_classes: 指定输出向量通道数。若不指定则输出representation_size或hidden_size
+        :param kwargs: BasicNN基本参数。
+            在此处可以指定输入张量的形状input_size（长和宽），如不指定则默认为(224, 224)
+        """
         # len_pic_seq：图片块序列长度
         # num_hiddens：词汇表中每个词汇长度
         # 将图片切块
@@ -127,13 +65,12 @@ class VisionTransformer(BasicNN):
             ('encoder', encoder), ('fetch_class', fetch_class),
             ('pre_logits', pre_logits), ('mlp_head', mlp_head)
         ]), **kwargs)
-        # # 给父类对象赋值input_size
-        # self.input_size = (in_channels, 224, 224) if 'input_size' not in kwargs.keys() \
-        #     else kwargs['input_size']
 
     def find_a_resnet(self, in_channels):
         """根据参数指定来分配ResNet块
-        :return ResNet网络，输出通道数
+
+        :param in_channels: 指定ResNet的输入通道数
+        :return: ResNet网络，输出通道数
         """
         if self.resnet_type == 'resnet50':
             resnet = ResNet50(in_channels, [3, 4, 9])
@@ -146,12 +83,48 @@ class VisionTransformer(BasicNN):
 
     def __get_model_config(self, which):
         assert which in supported_models, f'不支持的模型类型{which}，支持的模型类型包括{supported_models}'
-        if which == 'r50_b16':
-            self.__get_r50_b16_config()
-        elif which == 'b16':
+        if which == 'b16':
             self.__get_b16_config()
+        elif which == 'ti16':
+            self.__get_ti16_config()
+        elif which == 's16':
+            self.__get_s16_config()
+        elif which == 'l16':
+            self.__get_l16_config()
+        elif which == 'h14':
+            self.__get_h14_config()
+        elif which == 'r50_b16':
+            self.__get_r50_b16_config()
         else:
             pass
+
+    def __get_ti16_config(self):
+        """指定ViT-Ti/16的配置"""
+        self.resnet_type = None
+        self.patches_size = 16
+        self.hidden_size = 192
+        self.tran_emb_size = (self.input_size[1] // self.patches_size) * (self.input_size[2] // self.patches_size)
+        self.tran_mlp_dim = 768
+        self.tran_num_heads = 3
+        self.tran_num_layers = 12
+        self.tran_attention_dropout_rate = 0.0
+        self.tran_dropout_rate = 0.0
+        self.classifier = 'token'
+        self.representation_size = None
+
+    def __get_s16_config(self):
+        """指定ViT-S/16的配置"""
+        self.resnet_type = None
+        self.patches_size = 16
+        self.hidden_size = 384
+        self.tran_emb_size = (self.input_size[1] // self.patches_size) * (self.input_size[2] // self.patches_size)
+        self.tran_mlp_dim = 1536
+        self.tran_num_heads = 6
+        self.tran_num_layers = 12
+        self.tran_attention_dropout_rate = 0.0
+        self.tran_dropout_rate = 0.0
+        self.classifier = 'token'
+        self.representation_size = None
 
     def __get_b16_config(self):
         """指定ViT_B16的配置"""
@@ -167,6 +140,34 @@ class VisionTransformer(BasicNN):
         self.classifier = 'token'
         self.representation_size = None
 
+    def __get_l16_config(self):
+        """指定ViT_L16的配置"""
+        self.resnet_type = None
+        self.patches_size = 16
+        self.hidden_size = 1024
+        self.tran_emb_size = (self.input_size[1] // self.patches_size) * (self.input_size[2] // self.patches_size)
+        self.tran_mlp_dim = 4096
+        self.tran_num_heads = 16
+        self.tran_num_layers = 24
+        self.tran_attention_dropout_rate = 0.0
+        self.tran_dropout_rate = 0.1
+        self.classifier = 'token'
+        self.representation_size = None
+
+    def __get_h14_config(self):
+        """指定ViT_h14的配置"""
+        self.resnet_type = None
+        self.patches_size = 14
+        self.hidden_size = 1280
+        self.tran_emb_size = (self.input_size[1] // self.patches_size) * (self.input_size[2] // self.patches_size)
+        self.tran_mlp_dim = 5120
+        self.tran_num_heads = 16
+        self.tran_num_layers = 32
+        self.tran_attention_dropout_rate = 0.0
+        self.tran_dropout_rate = 0.1
+        self.classifier = 'token'
+        self.representation_size = None
+
     def __get_r50_b16_config(self):
         """Returns the Resnet50 + ViT-B/16 configuration."""
         self.__get_b16_config()
@@ -176,8 +177,8 @@ class VisionTransformer(BasicNN):
         self.resnet_num_layers = (3, 4, 9)
         self.resnet_width_factor = 1
 
-#
+
 # inputs = torch.rand([4, 3, 224, 224])
-# transformer = VisionTransformer('b16', 3, num_classes=784)
-# inputs = transformer(inputs)
+# vit = VisionTransformer('h14', 3, num_classes=784)
+# inputs = vit(inputs)
 # print(inputs.shape)
