@@ -9,8 +9,6 @@ from layers.identity import Identity
 class Pix2Pix_D(BasicNN):
     """适用于图片翻译、转换任务的学习模型pix2pix的分辨器模块"""
 
-    input_size = (256, 256)
-
     def __init__(self, input_nc, ndf,
                  net_type='basic', n_layers_D=3, norm_type='batch',
                  **kwargs):
@@ -31,6 +29,7 @@ class Pix2Pix_D(BasicNN):
 
         [2] Phillip Isola, Jun-Yan Zhu, Tinghui Zhou and Alexei A. Efros.
         Image-to-Image Translation with Conditional Adversarial Networks[J]. CVF, 2017. 1125, 1134
+
         :param input_nc: 输入图片的通道数
         :param ndf: 第一卷积层的过滤层数
         :param net_type: 结构名称 -- basic | n_layers | pixel
@@ -48,6 +47,7 @@ class Pix2Pix_D(BasicNN):
             net = self.__getPixelD(input_nc, ndf, norm_layer=norm_layer)
         else:
             raise NotImplementedError(f'不支持的分辨器类型{net_type}!')
+        kwargs['input_size'] = (6, 256, 256) if kwargs.get('input_size') is None else kwargs.get('input_size')
         super(Pix2Pix_D, self).__init__(*net, **kwargs)
 
     def __get_norm_layer(self, type='instance'):
@@ -134,3 +134,4 @@ class Pix2Pix_D(BasicNN):
         ]
 
         return layers
+

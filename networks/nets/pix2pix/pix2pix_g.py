@@ -30,10 +30,6 @@ class UNet128Genarator(nn.Sequential):
             nn.BatchNorm2d(o, momentum=bn_momen)
         )
         ep_layer = lambda i, o: nn.Sequential(
-            # nn.ConvTranspose2d(i, i, kernel_size=kernel_size, stride=2, padding=1),
-            # nn.Conv2d(i, o, kernel_size=kernel_size + 1, stride=1, padding=2),
-            # nn.BatchNorm2d(o, momentum=bn_momen),
-            # nn.ReLU()
             nn.ReLU(True),
             nn.ConvTranspose2d(i, o, kernel_size=kernel_size, stride=2, padding=1),
             nn.BatchNorm2d(o, momentum=bn_momen),
@@ -63,6 +59,7 @@ class UNet128Genarator(nn.Sequential):
             nn.Conv2d(base_channel, out_channel, kernel_size=kernel_size + 1, stride=1, padding=2),
             nn.Tanh()
         ]
+        self.input_size = (input_channel, 128, 128)
         super(UNet128Genarator, self).__init__(
             *self.contracting_path, *self.expanding_path, *self.output_path
         )
@@ -105,10 +102,6 @@ class UNet256Genarator(nn.Sequential):
             nn.BatchNorm2d(o, momentum=bn_momen)
         )
         ep_layer = lambda i, o: nn.Sequential(
-            # nn.ConvTranspose2d(i, i, kernel_size=kernel_size, stride=2, padding=1),
-            # nn.Conv2d(i, o, kernel_size=kernel_size + 1, stride=1, padding=2),
-            # nn.BatchNorm2d(o, momentum=bn_momen),
-            # nn.ReLU()
             nn.ReLU(True),
             nn.ConvTranspose2d(i, o, kernel_size=kernel_size, stride=2, padding=1),
             nn.BatchNorm2d(o, momentum=bn_momen),
@@ -138,6 +131,7 @@ class UNet256Genarator(nn.Sequential):
             nn.Conv2d(base_channel, out_channel, kernel_size=kernel_size + 1, stride=1, padding=2),
             nn.Tanh()
         ]
+        self.input_size = (input_channel, 256, 256)
         super(UNet256Genarator, self).__init__(
             *self.contracting_path, *self.expanding_path, *self.output_path
         )
@@ -162,13 +156,13 @@ class ResNetGenerator(nn.Sequential):
     （参见https://github.com/jcjohnson/fast-neural-style）
     """
 
-    def __init__(self, input_nc, output_nc,
+    def __init__(self, input_channel, output_channel,
                  ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6,
                  padding_type='reflect'):
         """构造一个基于Resnet的生成器
 
-        :param input_nc: 输入图片的通道数
-        :param output_nc: 输出图片的通道数
+        :param input_channel: 输入图片的通道数
+        :param output_channel: 输出图片的通道数
         :param ngf: 最后卷积层的过滤层数
         :param use_dropout: 是否使用Dropout()层
         :param n_blocks: ResNet块的数量
@@ -182,7 +176,7 @@ class ResNetGenerator(nn.Sequential):
 
         model = [
             nn.ReflectionPad2d(3),
-            nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),
+            nn.Conv2d(input_channel, ngf, kernel_size=7, padding=0, bias=use_bias),
             norm_layer(ngf),
             nn.ReLU(True)
         ]
@@ -211,8 +205,9 @@ class ResNetGenerator(nn.Sequential):
                       norm_layer(int(ngf * mult / 2)),
                       nn.ReLU(True)]
         model += [nn.ReflectionPad2d(3)]
-        model += [nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        model += [nn.Conv2d(ngf, output_channel, kernel_size=7, padding=0)]
         model += [nn.Tanh()]
+        self.input_size = (input_channel, 256, 256)
         super(ResNetGenerator, self).__init__(*model)
 
 
@@ -234,14 +229,15 @@ class Pix2Pix_G(BasicNN):
         supported = ['u256', 'r9', 'u128']
         if version == 'u256':
             model = UNet256Genarator(*args, **kwargs)
-            kwargs['required_shape'] = (256, 256)
+            # kwargs['required_shape'] = (-1, 256, 256)
         elif version == 'u128':
             model = UNet128Genarator(*args, **kwargs)
-            kwargs['required_shape'] = (128, 128)
+            # kwargs['required_shape'] = (-1, 128, 128)
         elif version == 'r9':
             kwargs['n_blocks'] = 9
             model = ResNetGenerator(*args, **kwargs)
-            kwargs['required_shape'] = (256, 256)
+            # kwargs['required_shape'] = (-1, 256, 256)
         else:
             raise NotImplementedError(f'不支持的生成器版本{version}，支持的生成器版本包括{supported}')
+        kwargs['input_size'] = model.input_size
         super(Pix2Pix_G, self).__init__(model, **kwargs)
