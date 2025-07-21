@@ -46,9 +46,9 @@ class DynamicBlender(nn.Module):
             ]
             in_ch = out_ch
 
-        # 确保最终通道数为3
-        if in_ch != 3:
-            layers.append(nn.Conv2d(in_ch, 3, kernel_size=1))
+        # 确保最终通道数为output_channel
+        if in_ch != output_channel:
+            layers.append(nn.Conv2d(in_ch, output_channel, kernel_size=1))
 
         self.decoder = nn.Sequential(*layers)
 
