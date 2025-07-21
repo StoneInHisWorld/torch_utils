@@ -160,8 +160,8 @@ class Experiment:
             True, **log_msg,
             data_portion=self.__runtime_cfg["ds_kwargs"]['data_portion'],
             which_dataset=self.__runtime_cfg["ds_kwargs"]['which_dataset'],
-            f_req_sha=self.__runtime_cfg["ds_kwargs"]['f_req_sha'],
-            l_req_sha=self.__runtime_cfg["ds_kwargs"]['l_req_sha'],
+            f_req_sha=self.__runtime_cfg["ds_kwargs"]['f_req_shp'],
+            l_req_sha=self.__runtime_cfg["ds_kwargs"]['l_req_shp'],
         )
         if self.device != torch.device('cpu') and self.__runtime_cfg["cuda_memrecord"]:
             self.add_logMsg(
