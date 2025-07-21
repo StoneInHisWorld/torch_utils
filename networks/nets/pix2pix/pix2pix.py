@@ -1,11 +1,11 @@
 from collections import OrderedDict
+from typing import List, Tuple
 
 import torch
-import inspect
 
 import utils.func.torch_tools as ttools
-# from networks.basic_nn import BasicNN
 from networks.basic_nn import BasicNN
+from . import supported_ls_fns
 from networks.nets.pix2pix.pix2pix_d import Pix2Pix_D
 from networks.nets.pix2pix.pix2pix_g import Pix2Pix_G
 
@@ -26,15 +26,10 @@ class Pix2Pix(BasicNN):
                  direction='AtoB', isTrain=True,
                  **kwargs):
         r"""实现pix2pix模型，通过给定数据对学习输入图片到输出图片的映射。
-
         pix2pix不使用图片缓存。
-
         生成器目标函数为 :math:`\ell_G = G_GAN + \lambda_{L1}||G(A)-B||_1`
-
         分辨器目标函数为 :math:`\ell_D = 0.5 D_read + 0.5 D_fake`
-
         目前可指定的损失函数包括：pcc | cGAN
-
         训练过程中输出四个目标值，分别为G_GAN、G_L1、D_real、D_fake：
 
         - :math:`G_GAN`：生成器的GAN损失
@@ -57,25 +52,20 @@ class Pix2Pix(BasicNN):
         :param direction: 方向，'AtoB'意为从特征集预测到标签集，'BtoA'意为从标签集预测到特征集
         :param kwargs: BasicNN关键词参数
         """
-        # _construction_variables = locals()
-        # _parameters = inspect.signature(self.__init__).parameters
         self.direction = direction
         netG = Pix2Pix_G(*g_args, **g_kwargs)
 
-        kwargs['input_size'] = netG.input_size
+        kwargs['input_size'] = netG.input_size[1:]
         if isTrain:
             # 定义一个分辨器
             # conditional GANs需要输入和输出图片，因此分辨器的通道数为input_nc + output_nc
-            d_kwargs['input_size'] = None
+            d_kwargs['input_size'] = (2 * netG.input_size[1], *netG.input_size[-2:])
             netD = Pix2Pix_D(*d_args, **d_kwargs)
             super(Pix2Pix, self).__init__(OrderedDict([
                 ('netG', netG), ('netD', netD)
             ]), **kwargs)
         else:
             super(Pix2Pix, self).__init__(netG, **kwargs)
-
-        # self._construction_variables = _construction_variables
-        # self._construction_parameters = _parameters
 
     def forward(self, input):
         """前向传播
@@ -87,6 +77,8 @@ class Pix2Pix(BasicNN):
 
     def forward_backward(self, X, y, backward=True):
         # 前向传播
+        assert X.shape == y.shape, (f"Pix2Pix要求输入的标签集数据与特征集数据形状相同，"
+                                    f"然而得到的输入特征集形状为{X.shape}，标签集形状为{y.shape}")
         AtoB = self.direction == 'AtoB'
         X, y = [X, y] if AtoB else [y, X]
         pred = self(X)
@@ -121,6 +113,7 @@ class Pix2Pix(BasicNN):
     def _get_optimizer(self, *args):
         """获取pix2pix的优化器。
         目前只允许给netG，netD分配优化器，且每个网络只能分配一个。
+
         :param args: 各个优化器的类型以及关键字参数，如果指定数目少于2个，则会用论文中的参数填充。
         :return: 优化器序列，学习率名称序列
         """
@@ -131,6 +124,7 @@ class Pix2Pix(BasicNN):
         # 检查优化器参数
         optimizers = []
         for (type_s, kwargs), net in zip(args, [self.netG, self.netD]):
+            # 设置默认值
             if 'lr' not in kwargs.keys():
                 kwargs['lr'] = 0.2
             if 'betas' not in kwargs.keys():
@@ -139,24 +133,21 @@ class Pix2Pix(BasicNN):
         return optimizers, ['G_lrs', 'D_lrs']
 
     def _get_lr_scheduler(self, *args):
-        """Return a learning rate scheduler
+        """获取一个学习率规划器
 
-        Parameters:
-            optimizer          -- the optimizer of the network
-            opt (option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions．　
-                                  opt.lr_policy is the name of learning rate policy: linear | step | plateau | cosine
+        对于 "linear" 类的规划器，设定为在 “n_epochs” 世代内保持原有学习率，在此后的 “n_epochs_decay” 线性衰减至0。
+        对于其他的规划器(step, plateau以及cosine)，使用默认的Pytorch规划器
 
-        For 'linear', we keep the same learning rate for the first <opt.n_epochs> epochs
-        and linearly decay the rate to zero over the next <opt.n_epochs_decay> epochs.
-        For other schedulers (step, plateau, and cosine), we use the default PyTorch schedulers.
-        See https://pytorch.org/docs/stable/optim.html for more details.
+        :param args: 每个网络的优化器对应的学习率规划器的参数。
+            需要为可迭代对象，元素的个数等于本网络持有的优化器数目，每个元素按照位序为优化器分配学习率规划器。
+            args的每个元素均为一个二元组，[0]为规划器类型，[1]为规划器关键字参数
         """
         scheduler_s = []
         for (ss, kwargs), optimizer in zip(args, self.optimizer_s):
             if ss == 'linear':
                 epoch_count = 1 if 'epoch_count' not in kwargs.keys() else kwargs['epoch_count']
                 n_epochs_decay = 100 if 'n_epochs_decay' not in kwargs.keys() else kwargs['n_epochs_decay']
-                n_epochs = 100 if 'epoch_count' not in kwargs.keys() else kwargs['n_epochs']
+                n_epochs = 100 if 'n_epochs' not in kwargs.keys() else kwargs['n_epochs']
 
                 def lambda_rule(epoch):
                     lr_l = 1.0 - max(0, epoch + epoch_count - n_epochs) / float(n_epochs_decay + 1)
@@ -181,26 +172,29 @@ class Pix2Pix(BasicNN):
             scheduler_s.append(ttools.get_lr_scheduler(optimizer, ss, **kwargs))
         return scheduler_s
 
-    def _get_ls_fn(self, *args):
-        if len(args) == 0:
-            args = ('cGAN', {})
-        elif len(args) > 1:
-            raise NotImplementedError(f'Pix2Pix暂不支持指定多种损失函数')
-        ls_fns, loss_names, test_ls_names = [], [], []
-        supported = ['pcc', 'cGAN']
-        for (ss, kwargs) in args:
-            # 根据ss判断损失函数类型
-            if ss == 'cGAN':
-                ls_fn, ls_names, tls_names = self.cGAN_ls_fn(**kwargs)
-            elif ss == 'pcc':
-                ls_fn, ls_names, tls_names = self.pcc_ls_fn(**kwargs)
-            else:
-                raise NotImplementedError(f'Pix2Pix暂不支持本损失函数模式{ss}，目前支持{supported}')
-            ls_fns += list(ls_fn)
-            # 指定输出的训练损失类型
-            loss_names += ls_names
-            test_ls_names += tls_names
-        return ls_fns, loss_names, test_ls_names
+    def _get_ls_fn(self, train_ls_args: List[Tuple[str, dict]], test_ls_args: List[Tuple[str, dict]]):
+
+        def fetch(*args):
+            assert len(args) <= 1, f'Pix2Pix暂不支持指定多种损失函数'
+            if len(args) == 0:
+                args = ('cGAN', {})
+            ls_fn_s, ls_name_s = [], []
+            for (ss, kwargs) in args:
+                # 根据ss判断损失函数类型
+                if ss == 'cGAN':
+                    ls_fn, ls_name, tls_names = self.cGAN_ls_fn(**kwargs)
+                elif ss == 'pcc':
+                    ls_fn, ls_name, tls_names = self.pcc_ls_fn(**kwargs)
+                else:
+                    raise NotImplementedError(f'Pix2Pix暂不支持本损失函数模式{ss}，目前支持{supported_ls_fns}')
+                ls_fn_s += list(ls_fn)
+                # 指定输出的训练损失类型
+                ls_name_s += ls_name
+            return ls_fn_s, ls_name_s
+
+        train_ls_fn, train_ls_names = fetch(train_ls_args)
+        test_ls_fn, test_ls_names = fetch(test_ls_args)
+        return train_ls_fn, train_ls_names, test_ls_fn, test_ls_names
 
     def cGAN_ls_fn(self, **kwargs):
         # 处理关键词参数
@@ -316,3 +310,5 @@ class Pix2Pix(BasicNN):
             ['G_LS', 'G_GAN', 'G_PCC', 'D_LS', 'D_real', 'D_fake']
         test_ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_PCC']
         return ls_fn, loss_names, test_ls_names
+
+

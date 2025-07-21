@@ -1,6 +1,7 @@
 import functools
 import warnings
 from functools import reduce
+from itertools import zip_longest
 from typing import List, Tuple
 
 import torch
@@ -51,10 +52,50 @@ class BasicNN(nn.Sequential):
             warnings.warn('使用“检查点机制”虽然会减少前向传播的内存使用，但是会大大增加反向传播的计算量！')
         self.__checkpoint = with_checkpoint
 
-    def prepare_training(
-            self,
-            o_args=None, l_args=None, ls_args=None,
-    ):
+    # def prepare_training(
+    #         self,
+    #         o_args=None, l_args=None, ls_args=None,
+    # ):
+    #     """训练准备实现
+    #     获取优化器（对应学习率名称）、学习率规划器以及损失函数（训练、测试损失函数名称），储存在自身对象中。
+    #     :param o_args: 优化器参数列表。参数列表中每一项对应一个优化器设置，每一项签名均为(str, dict)，
+    #         str指示优化器类型，dict指示优化器构造关键字参数。
+    #     :param l_args: 学习率规划器参数列表。参数列表中每一项对应一个学习率规划器设置，每一项签名均为(str, dict)，
+    #         str指示学习率规划器类型，dict指示学习率规划器构造关键字参数。
+    #     :param ls_args: 损失函数参数列表。参数列表中每一项对应一个损失函数设置，每一项签名均为(str, dict)，
+    #         str指示损失函数类型，dict指示损失函数构造关键字参数。
+    #     :return: None
+    #     """
+    #     if o_args is None:
+    #         o_args = []
+    #     if l_args is None:
+    #         l_args = []
+    #     if ls_args is None:
+    #         ls_args = []
+    #     if len(o_args) == 0:
+    #         warnings.warn('优化器参数不足以构造足够的优化器，将用默认的Adam优化器进行填充！', UserWarning)
+    #         o_args = [('adam', {}), ]
+    #     self.optimizer_s, self.lr_names = self._get_optimizer(*o_args)
+    #     self.scheduler_s = self._get_lr_scheduler(*l_args)
+    #     # 如果不指定，则需要设定默认值
+    #     if len(ls_args) == 0:
+    #         warnings.warn('损失函数参数不足以构造足够的损失函数，将用默认的mse损失函数进行填充！', UserWarning)
+    #         ls_args = [('mse', {}), ]
+    #     # self.trainls_fn_s, self.loss_names, self.test_ls_names = self._get_ls_fn(*ls_args)
+    #     if len(ls_args) == 1:
+    #         ls_args = [ls_args[0], ls_args[0]]
+    #     assert len(ls_args) == 2, (f"收到了{len(ls_args)}组损失值计算参数，"
+    #                                f"无法判断哪组为训练损失函数参数，或是测试损失函数参数")
+    #     (self.train_ls_fn_s, self.train_ls_names, self.test_ls_fn_s,
+    #      self.test_ls_names) = self._get_ls_fn(*ls_args)
+    #     try:
+    #         # 设置梯度裁剪方法
+    #         self._gradient_clipping = self._gradient_clipping
+    #     except AttributeError:
+    #         self._gradient_clipping = None
+    #     self.ready = True
+
+    def prepare_training(self, o_args, l_args, ls_args):
         """训练准备实现
         获取优化器（对应学习率名称）、学习率规划器以及损失函数（训练、测试损失函数名称），储存在自身对象中。
         :param o_args: 优化器参数列表。参数列表中每一项对应一个优化器设置，每一项签名均为(str, dict)，
@@ -65,35 +106,39 @@ class BasicNN(nn.Sequential):
             str指示损失函数类型，dict指示损失函数构造关键字参数。
         :return: None
         """
-        # 如果不指定，则需要设定默认值
-        if o_args is None:
-            o_args = []
-        if l_args is None:
-            l_args = []
-        if ls_args is None:
-            ls_args = []
-        if len(o_args) == 0:
-            warnings.warn('优化器参数不足以构造足够的优化器，将用默认的Adam优化器进行填充！', UserWarning)
-            o_args = [('adam', {}), ]
-        self.optimizer_s, self.lr_names = self._get_optimizer(*o_args)
-        self.scheduler_s = self._get_lr_scheduler(*l_args)
-        # 如果不指定，则需要设定默认值
-        if len(ls_args) == 0:
-            warnings.warn('损失函数参数不足以构造足够的损失函数，将用默认的mse损失函数进行填充！', UserWarning)
-            ls_args = [('mse', {}), ]
-        # self.trainls_fn_s, self.loss_names, self.test_ls_names = self._get_ls_fn(*ls_args)
-        if len(ls_args) == 1:
-            ls_args = [ls_args[0], ls_args[0]]
-        assert len(ls_args) == 2, (f"收到了{len(ls_args)}组损失值计算参数，"
-                                   f"无法判断哪组为训练损失函数参数，或是测试损失函数参数")
-        (self.train_ls_fn_s, self.train_ls_names, self.test_ls_fn_s,
-         self.test_ls_names) = self._get_ls_fn(*ls_args)
-        try:
-            # 设置梯度裁剪方法
-            self._gradient_clipping = self._gradient_clipping
-        except AttributeError:
-            self._gradient_clipping = None
-        self.ready = True
+        # 每组参数定义了一系列列表，则说明是给基础子网络的参数。每个列表按顺序给基础子网络定义优化器，学习率规划器和损失函数
+        if isinstance(o_args[0], List) and isinstance(l_args[0], List) and isinstance(ls_args[0], List):
+            # 如果定义了多组参数（以列表的形式存储多组参数），则调用每个基本子网络准备函数
+            sub_bnns = filter(lambda m: isinstance(m, BasicNN), self.children())
+            o_args, l_args, ls_args = iter(o_args), iter(l_args), iter(ls_args)
+            for o, l, ls, sub_bnn in zip_longest(o_args, l_args, ls_args, sub_bnns, fillvalue=()):
+                if len(o) == 0:
+                    warnings.warn(f"未给{sub_bnn.__class__.__name__}指定优化器")
+                if len(l) == 0:
+                    warnings.warn(f"未给{sub_bnn.__class__.__name__}指定学习率规划器")
+                if len(ls) == 0:
+                    warnings.warn(f"未给{sub_bnn.__class__.__name__}指定损失函数")
+                sub_bnn.prepare_training(o, l, ls)
+            o_args, l_args, ls_args = next(o_args, ()), next(l_args, ()), next(ls_args, ())
+        elif isinstance(o_args[0], Tuple) and isinstance(l_args[0], Tuple) and isinstance(ls_args[0], Tuple):
+            # 如果为全元组，则说明本组参数是本基本网络的准备参数
+            self.optimizer_s, self.lr_names = self._get_optimizer(*o_args)
+            self.scheduler_s = self._get_lr_scheduler(*l_args)
+            assert len(ls_args) == 2, (f"只收到了{len(ls_args)}组损失值计算参数，无法判断哪组为"
+                                       f"{self.__class__.__name__}的训练损失函数参数，或是测试损失函数参数")
+            (self.train_ls_fn_s, self.train_ls_names, self.test_ls_fn_s, self.test_ls_names
+             ) = self._get_ls_fn(*ls_args)
+            try:
+                # 设置梯度裁剪方法
+                self._gradient_clipping = self._gradient_clipping
+            except AttributeError:
+                self._gradient_clipping = None
+            self.ready = True
+        else:
+            raise ValueError(
+                f"不支持的准备参数组合{type(o_args[0]).__name__}&{type(l_args[0]).__name__}&{type(ls_args[0]).__name__}！"
+                f"准备参数应为全列表，表示基本子网络的准备参数组；或者全元组，表示本基本网络的准备参数组。"
+            )
 
     def _get_optimizer(self, *args) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
         """获取网络优化器
@@ -156,8 +201,6 @@ class BasicNN(nn.Sequential):
                 functools.partial(ttools.sample_wise_ls_fn, unwrapped_fn=unwrapped_fn)
                 # lambda x, y: ttools.sample_wise_ls_fn(x, y, unwrapped_fn)
             )
-        # test_ls_names = train_ls_names.copy()
-        # return train_ls_fn_s, train_ls_names, test_ls_names
         return train_ls_fn_s, train_ls_names, test_ls_fn_s, test_ls_names
 
     def get_comment(self,
