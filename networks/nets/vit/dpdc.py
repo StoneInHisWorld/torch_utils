@@ -48,7 +48,7 @@ class EncoderLayer(nn.Module):
 
         # 在此添加类别符
         if self.classifier in ['token', 'token_unpooled']:
-            cls = torch.zeros(1, 1, c).repeat(bs, 1, 1)
+            cls = torch.zeros(1, 1, c, device=inputs.device).repeat(bs, 1, 1)
             inputs = torch.cat([cls, inputs], 1)
         inputs = self.position_embedding(inputs)
         inputs = self.dropout(inputs)
