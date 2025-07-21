@@ -226,6 +226,29 @@ def get_activation(which: str = 'relu', **kwargs):
         raise NotImplementedError(f"不支持的激活函数{which}, 当前支持的激活函数层包括{activations}")
 
 
+def get_norm_layer(which='instance', **kwargs):
+    """返回一个标准化层
+
+    对于批量标准化层，使用可学习的仿射参数并追踪动态数据（均值/stddev）
+    对于实例标准化层则不然。
+
+    Parameters:
+    :param which: 标准化层的类型: batch | instance | none
+    :return: 创建标准化层的函数，可以直接填入位置参数，辅以kwargs作为预填关键字参数
+    """
+    if which == 'batch':
+        norm_layer = functools.partial(nn.BatchNorm2d, **kwargs)
+    elif which == 'instance':
+        norm_layer = functools.partial(nn.InstanceNorm2d, **kwargs)
+    elif which == 'layer':
+        norm_layer = functools.partial(nn.LayerNorm, **kwargs)
+    elif which == 'none':
+        norm_layer = nn.Identity()
+    else:
+        raise NotImplementedError(f'不支持的标准化层{which}!')
+    return norm_layer
+
+
 def sample_wise_ls_fn(x, y, ls_fn):
     """计算每个样本的损失值的损失函数
     :param x: 特征集
