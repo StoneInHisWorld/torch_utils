@@ -62,11 +62,11 @@ class Pix2Pix(BasicNN):
         self.direction = direction
         netG = Pix2Pix_G(*g_args, **g_kwargs)
 
-        kwargs['input_size'] = netG.input_size
+        kwargs['input_size'] = netG.input_size[1:]
         if isTrain:
             # 定义一个分辨器
             # conditional GANs需要输入和输出图片，因此分辨器的通道数为input_nc + output_nc
-            d_kwargs['input_size'] = None
+            d_kwargs['input_size'] = (g_args[1] + g_args[2], *netG.input_size[2:])
             netD = Pix2Pix_D(*d_args, **d_kwargs)
             super(Pix2Pix, self).__init__(OrderedDict([
                 ('netG', netG), ('netD', netD)
@@ -182,12 +182,16 @@ class Pix2Pix(BasicNN):
         return scheduler_s
 
     def _get_ls_fn(self, *args):
-        if len(args) == 0:
-            args = ('cGAN', {})
-        elif len(args) > 1:
-            raise NotImplementedError(f'Pix2Pix暂不支持指定多种损失函数')
+        # if len(args) == 0:
+        #     args = ('cGAN', {})
+        # elif len(args) > 1:
+        #     raise NotImplementedError(f'Pix2Pix暂不支持指定多种损失函数')
+        # assert len(args) == 2, f"Pix2Pix要求损失函数参数组数量为2，而收到了{len(args)}组损失函数参数。" \
+        #                        f"不可指定多组或者不指定损失函数参数"
+        # assert args[0] == args[1], "Pix2Pix要求测试和训练的损失函数指定一致！"
         ls_fns, loss_names, test_ls_names = [], [], []
         supported = ['pcc', 'cGAN']
+        args = [args[0]]  # TODO: Pix2Pix暂时只支持定义一种损失函数参数
         for (ss, kwargs) in args:
             # 根据ss判断损失函数类型
             if ss == 'cGAN':
@@ -200,7 +204,8 @@ class Pix2Pix(BasicNN):
             # 指定输出的训练损失类型
             loss_names += ls_names
             test_ls_names += tls_names
-        return ls_fns, loss_names, test_ls_names
+        G_ls_fn, D_ls_fn = ls_fns
+        return ls_fns, loss_names, G_ls_fn, test_ls_names
 
     def cGAN_ls_fn(self, **kwargs):
         # 处理关键词参数
@@ -254,10 +259,10 @@ class Pix2Pix(BasicNN):
                 return ls, real_ls, fake_ls
 
         ls_fn = G_ls_fn, D_ls_fn
-        loss_names = ['G_LS', 'D_LS'] if reduced_form else \
+        ls_names = ['G_LS', 'D_LS'] if reduced_form else \
             ['G_LS', 'G_GAN', 'G_L1', 'D_LS', 'D_real', 'D_fake']
-        test_ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_L1']
-        return ls_fn, loss_names, test_ls_names
+        tls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_L1']
+        return ls_fn, ls_names, tls_names
 
     def pcc_ls_fn(self, **kwargs):
         # 处理关键词参数
