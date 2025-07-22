@@ -1,6 +1,6 @@
 import warnings
 from abc import abstractmethod
-from typing import List, Callable, Any, Generator
+from typing import List, Callable
 
 import torch
 
@@ -10,19 +10,15 @@ from data_related.datasets import LazyDataSet, DataSet
 from data_related.ds_operation import data_slicer
 from data_related.prediction_wrapper import PredictionWrapper
 from data_related.storage_dloader import StorageDataLoader
-from utils import itools, tstools, ControlPanel
-
-
-# def default_transit_fn(batch, **kwargs):
-#     return batch
+from utils import ControlPanel
 
 
 class SelfDefinedDataSet:
     # 数据基本信息
-    fea_channel = 1
-    lb_channel = 1
-    fea_mode = 'L'  # 读取二值图，读取图片速度将会大幅下降
-    lb_mode = '1'
+    f_channel = 1
+    l_channel = 1
+    f_mode = 'L'  # 读取二值图，读取图片速度将会大幅下降
+    l_mode = '1'
 
     def __init__(self, module: type, config: dict or ControlPanel,
                  is_train: bool = True):
@@ -48,8 +44,8 @@ class SelfDefinedDataSet:
         which = config['which_dataset']
         self.device = config['device']
         # 判断图片指定形状
-        self.f_req_sha = tuple(config['f_req_sha']) if config['f_req_sha'] else None
-        self.l_req_sha = tuple(config['l_req_sha']) if config['l_req_sha'] else None
+        self.f_req_shp = tuple(config['f_req_shp']) if config['f_req_shp'] else None
+        self.l_req_shp = tuple(config['l_req_shp']) if config['l_req_shp'] else None
         # 指定数据集服务的模型类型
         self.module = module
 
@@ -127,54 +123,6 @@ class SelfDefinedDataSet:
         """
         raise NotImplementedError('没有编写路径检查程序！')
 
-    # @abstractmethod
-    # def _get_fea_reader(self) -> Generator:
-    #     """根据根目录下的特征集索引进行存储访问的数据读取器
-    #
-    #     读取器只需要读取单个索引值。
-    #     为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，请通过yield的方式返回读取器。编程示例如下：
-    #
-    #     ```
-    #     def _get_fea_reader(self):
-    #         # 获取.tar数据集资源
-    #         tfile = tarfile.open(self.tarfile_name, 'r')
-    #         # 提供数据读取器
-    #         yield toolz.compose(*reversed([
-    #             tfile.extractfile,
-    #             functools.partial(read_img, mode=self.fea_mode),
-    #         ]))
-    #         # 进行资源回收
-    #         tfile.close()
-    #     ```
-    #
-    #     :return: 数据读取器生成器
-    #     """
-    #     raise NotImplementedError('没有指定特征集读取程序！')
-    #
-    # @abstractmethod
-    # def _get_lb_reader(self) -> Generator:
-    #     """根据根目录下的标签集索引进行存储访问的数据读取器
-    #
-    #     读取器只需要读取单个索引值。
-    #     为了避免对数据集成包，如压缩包等，进行频繁读取关闭回收资源等操作，请通过yield的方式返回读取器。编程示例如下：
-    #
-    #     ```
-    #     def _get_lb_reader(self):
-    #         # 获取.tar数据集资源
-    #         tfile = tarfile.open(self.tarfile_name, 'r')
-    #         # 提供数据读取器
-    #         yield toolz.compose(*reversed([
-    #             tfile.extractfile,
-    #             functools.partial(read_img, mode=self.fea_mode),
-    #         ]))
-    #         # 进行资源回收
-    #         tfile.close()
-    #     ```
-    #
-    #     :return: 数据读取器生成器
-    #     """
-    #     pass
-
     @abstractmethod
     def _get_fea_index(self, root) -> list:
         """读取根目录下的特征集索引
@@ -211,11 +159,16 @@ class SelfDefinedDataSet:
         else:
             return []
 
+    def refresh_preprocess(self):
+        self.transformer.refresh()
+
     def _to_dataset(self, i_cfn, collate_fn) -> list[LazyDataSet] or list[DataSet]:
         """根据自身模式，转换为合适的数据集，并对数据集进行预处理函数注册和执行。
         对于懒加载数据集，需要提供read_fn()，签名须为：
             read_fn(fea_index: Iterable[path], lb_index: Iterable[path]) -> Tuple[features: Iterable, labels: Iterable]
             数据加载器会自动提供数据读取路径index
+        PS: 懒加载数据集生成方式不支持特征集或标签集的单独懒加载模式
+
         :return: (训练数据集、测试数据集)，两者均为pytorch框架下数据集
         """
         gen_datasets = []
@@ -261,13 +214,6 @@ class SelfDefinedDataSet:
         Returns:
             训练模式返回（训练数据迭代器，测试数据迭代器），测试模式返回测试数据迭代器
         """
-        # train_ds, test_ds = self._to_dataset(i_cfn, collate_fn)
-        # train_portion = dl_kwargs.pop('train_portion', 0.8)
-        # transit_fn = transit_fn if transit_fn is not None else default_transit_fn
-        # 获取数据迭代器
-        # test_iter = dso.to_loader(
-        #     test_ds, batch_size, transit_fn, **dl_kwargs
-        # )
         ret = []
         if self.is_train:
             train_ds, test_ds = self._to_dataset(i_cfn, collate_fn)
@@ -290,54 +236,7 @@ class SelfDefinedDataSet:
         test_iter = dso.to_loader(
             test_ds, batch_size, transit_fn, **dl_kwargs
         )
-        #     return data_iter_generator, test_iter
-        # test_iter = dso.to_loader(
-        #     test_ds, batch_size, transit_fn, **dl_kwargs
-        # )
-        # return test_iter
         return [*ret, test_iter]
-
-    # def _set_wrap_fn(self, module: type):
-    #     """根据处理模型的类型，自动设置结果包装方法
-    #     此函数会对self.wrap_fn进行赋值
-    #
-    #     :param module: 用于处理本数据集的模型类型
-    #     """
-    #     if hasattr(self, f'{module.__name__}_wrap_fn'):
-    #         self.wrap_fn = getattr(self, f'{module.__name__}_wrap_fn')
-    #     else:
-    #         self.wrap_fn = self.default_wrap_fn
-
-    # def default_wrap_fn(self,
-    #                     inputs: torch.Tensor,
-    #                     predictions: torch.Tensor,
-    #                     labels: torch.Tensor,
-    #                     footnotes: list
-    #                     ) -> Any:
-    #     """默认结果包装方法
-    #     将输入、预测、标签张量转换成图片，并拼接配上脚注。
-    #
-    #     :param inputs: 输入张量
-    #     :param predictions: 预测张量
-    #     :param labels: 标签张量
-    #     :param footnotes: 脚注
-    #     :return: 包装完成的结果图
-    #     """
-    #     inp_s = tstools.tensor_to_img(inputs, self.fea_mode)
-    #     pre_s = tstools.tensor_to_img(predictions, self.lb_mode)
-    #     lb_s = tstools.tensor_to_img(labels, self.lb_mode)
-    #     del inputs, predictions, labels
-    #     # 制作输入、输出、标签对照图
-    #     ret = itools.concat_imgs(
-    #         *[
-    #             [(inp, f'input_{inp.size}'), (pre, f'prediction_{pre.size}'),
-    #              (lb, f'labels_{lb.size}')]
-    #             for inp, pre, lb in zip(inp_s, pre_s, lb_s)
-    #         ],
-    #         footnotes=footnotes, text_size=10, border_size=2, img_size=(192, 192),
-    #         required_shape=(1000, 1000)
-    #     )
-    #     return ret
 
     @abstractmethod
     def _get_transformer(self) -> DataTransformer:

@@ -18,7 +18,8 @@ class PredictionWrapper:
         self.module_type = module_type
         self.raw_ds = raw_ds
 
-    def wrap(self, prediciton_results, ret_ds, ret_ls_metric, **kwargs):
+    def wrap(self, prediciton_results,
+             ret_ds: bool = True, ret_ls_metric: bool = True, **kwargs):
         """对预测结果进行提取，根据网络类型调用包装后返回
         预测结果根据ret_ds, ret_ls_metric不同而有不同的结果，可以通过属性进行访问
 

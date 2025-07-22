@@ -42,8 +42,8 @@ if __name__ == '__main__':
             data_iter_generator, test_iter = data.to_dataloaders(
                 hps['k'], hps['batch_size'], transit_fn=transit_fn, **cp['dl_kwargs']
             )
-            fea_chan, fea_shape, lb_chan, lb_shape = (data.fea_channel, data.f_req_sha,
-                                                      data.lb_channel, data.l_req_sha)
+            fea_chan, fea_shape, lb_chan, lb_shape = (data.f_channel, data.f_req_shp,
+                                                      data.l_channel, data.l_req_shp)
             del data
 
             # TODO: 设置网络构建参数

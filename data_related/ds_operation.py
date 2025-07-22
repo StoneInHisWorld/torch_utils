@@ -149,6 +149,7 @@ def data_slicer(data_portion=1., shuffle=True, *args: Sized):
     args = list(zip(*args))
     if shuffle:
         random.shuffle(args)
+    assert int(data_portion * data_len) > 0, f"数据比例{data_portion}太小，数据集切片长度为{int(data_portion * data_len)}！"
     data_portion = int(data_portion * data_len)
     return zip(*args[: data_portion])  # 返回值总为元组
 

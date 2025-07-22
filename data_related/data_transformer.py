@@ -77,9 +77,14 @@ class DataTransformer:
             futures.append(self.l_preprocesses(lb))
         return futures
 
-    def refresh(self):
-        """刷新预处理程序，需要在每次预处理数据之前调用一次"""
+    def refresh(self, *args, **kwargs):
+        """刷新预处理程序，需要在每次预处理数据之前调用一次
+
+        :param args: 预处理程序所用位置参数
+        :param kwargs: 预处理程序所用关键字参数
+        """
         if hasattr(self, f'{self.module_type.__name__}_preprocesses'):
-            exec(f'self.{self.module_type.__name__}_preprocesses()')
+            getattr(self, f"{self.module_type.__name__}_preprocesses")(*args, **kwargs)
+            # exec(f'self.{self.module_type.__name__}_preprocesses()')
         else:
-            self._default_preprocesses()
+            self._default_preprocesses(*args, **kwargs)

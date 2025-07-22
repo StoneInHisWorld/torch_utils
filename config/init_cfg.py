@@ -17,35 +17,6 @@ def init_settings(path):
 
     :param path: 配置文件存储路径
     """
-    # default_settings = {
-    #     "data_portion": 0.1,
-    #     "train_portion": 0.8,
-    #     "random_seed": 42,
-    #     "plot_mute": True,
-    #     "plot_history": "save",
-    #     "print_net": False,
-    #     "save_net": "state",
-    #     "device": "cpu",
-    #     "lazy": False,
-    #     "shuffle": True,
-    #     "n_workers": 4,
-    #     "pin_memory": False,
-    #     "cuda_memrecord": False,
-    #     "prefetch_factor": 2,
-    #     "max_prefetch": 2,
-    #     "share_memory": False,
-    #     "bkg_gen": True,
-    #     "with_hook": False,
-    #     "hook_mute": True,
-    #     "bulk_preprocess": True,
-    #     "with_checkpoint": False,
-    #     "f_req_sha": (256, 256),
-    #     "l_req_sha": (256, 256),
-    #     "which_dataset": "which dataset?",
-    #     "log_root": "../../log",
-    #     "dataset_root": "where you put your datasets"
-    # }
-
     default_settings = {
         "random_seed": 42,
         "plot_mute": True,
@@ -70,8 +41,8 @@ def init_settings(path):
             "bulk_preprocess": False,
             "shuffle": True,
             "which_dataset": "which?",
-            "f_req_sha": [128, 128],
-            "l_req_sha": [128, 128],
+            "f_req_shp": [128, 128],
+            "l_req_shp": [128, 128],
             "lazy": False
         },
         "dl_kwargs": {
