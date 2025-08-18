@@ -108,8 +108,8 @@ class ITransformer(BasicNN):
         pred = (pred @ self.pixel_basis).squeeze()
         return pred, ls_es
 
-    def _get_ls_fn(self, *args):
-        train_ls_fn_s, train_ls_names, test_ls_fn_s, test_ls_names = super()._get_ls_fn(*args)
+    def _get_ls_fn(self, ls_args):
+        train_ls_fn_s, train_ls_names, test_ls_fn_s, test_ls_names = super()._get_ls_fn(*ls_args)
         """针对训练损失函数的特殊处理"""
         try:
             # 针对交叉熵损失的特别处理

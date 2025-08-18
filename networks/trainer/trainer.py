@@ -303,32 +303,33 @@ class Trainer:
         net = self.module
         criterion_a = self.criterion_a
         n_epochs = self.hps['epochs']
-        optimizer_s = net.optimizer_s
-        scheduler_s = net.scheduler_s
+        # optimizer_s = net.optimizer_s
+        # scheduler_s = net.scheduler_s
         # 损失项
-        loss_names = [f'train_{item}' for item in net.train_ls_names]
+        trls_names = [f'train_{item}' for item in net.train_ls_names]
         # 评价项
         criteria_names = [
             f'train_{ptools.get_computer_name(criterion)}' for criterion in criterion_a
         ]
         # 学习率项
         lr_names = net.lr_names
-        history = History(*(criteria_names + loss_names + lr_names))
+        history = History(*(criteria_names + trls_names + lr_names))
         # 世代迭代主循环
 
         for epoch in range(n_epochs):
             pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中……')
-            history.add(
-                lr_names, [
-                    [param['lr'] for param in optimizer.param_groups]
-                    for optimizer in optimizer_s
-                ]
-            )
+            # history.add(
+            #     lr_names, [
+            #         [param['lr'] for param in optimizer.param_groups]
+            #         for optimizer in optimizer_s
+            #     ]
+            # )
+            history.add(*net.get_lr_groups())
             # 记录批次训练损失总和，评价指标，样本数
-            metric = Accumulator(len(loss_names + criteria_names) + 1)
+            metric = Accumulator(len(trls_names + criteria_names) + 1)
             # 训练主循环
             for X, y in train_iter:
-                net.train()
+                # net.train()
                 pred, ls_es = net.forward_backward(X, y)
                 with torch.no_grad():
                     num_examples = X.shape[0]
@@ -341,13 +342,14 @@ class Trainer:
                         num_examples
                     )
                 pbar.update(1)
-            # 进行学习率更新
-            for scheduler in scheduler_s:
-                scheduler.step()
+            # # 进行学习率更新
+            # for scheduler in scheduler_s:
+            #     scheduler.step()
+            net.update_lr()
             valid_log = self.__valid(valid_iter)
             # 记录训练数据
             history.add(
-                criteria_names + loss_names + list(valid_log.keys()),
+                criteria_names + trls_names + list(valid_log.keys()),
                 [metric[i] / metric[-1] for i in range(len(metric) - 1)] +
                 list(valid_log.values())
             )
@@ -446,6 +448,7 @@ class Trainer:
         l_names = net.test_ls_names
         metric = Accumulator(len(criterion_a) + len(l_names) + 1)
         # 计算准确率和损失值
+        net.eval()
         for features, labels in valid_iter:
             preds, ls_es = net.forward_backward(features, labels, False)
             metric.add(
@@ -460,8 +463,9 @@ class Trainer:
         for i, computer in enumerate(criterion_a):
             log['valid_' + ptools.get_computer_name(computer)] = metric[i] / metric[-1]
         i += 1
-        for j, loss_name in enumerate(l_names):
-            log['valid_' + loss_name] = metric[i + j] / metric[-1]
+        for j, ln in enumerate(l_names):
+            log['valid_' + ln] = metric[i + j] / metric[-1]
+        net.train()
         return log
 
     def __train_with_multithreading(self, train_iter, valid_iter=None) -> History:

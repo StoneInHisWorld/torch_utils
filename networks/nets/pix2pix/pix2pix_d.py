@@ -1,9 +1,12 @@
 import functools
+from typing import List, Tuple
 
+import torch
 from torch import nn
 
 from networks.basic_nn import BasicNN
 from layers.identity import Identity
+from networks.nets.pix2pix import _get_ls_fn, _get_optimizer, _get_lr_scheduler, _backward_impl
 
 
 class Pix2Pix_D(BasicNN):
@@ -135,3 +138,45 @@ class Pix2Pix_D(BasicNN):
 
         return layers
 
+    def _get_ls_fn(self, ls_args: List[Tuple[str, dict]]):
+        if hasattr(self, "train_ls_fn_s"):
+            # 如果本网络已经指定了训练损失函数，则说明此时赋予的是测试损失函数
+            return _get_ls_fn(False, False, *ls_args)
+        else:
+            return _get_ls_fn(True, False, *ls_args)
+
+    def _get_optimizer(self, o_args):
+        return _get_optimizer(self, *o_args)
+
+    def _get_lr_scheduler(self, l_args):
+        return _get_lr_scheduler(self.optimizer_s[0], *l_args)
+
+    # def forward_backward(self, X, y, backward=True):
+    #     """
+    #     前向传播与反向传播函数。本函数不返回分辨器的预测值。
+    #
+    #     param X: 张量元组（X, pred），其中pred为生成器的预测值
+    #     """
+    #     optimizer = self.optimizer_s[0]
+    #     X, pred = X
+    #     if backward:
+    #         ls_fn = self.train_ls_fn_s[0]
+    #         self.requires_grad_(True)
+    #         optimizer.zero_grad()
+    #         ls = ls_fn(X, y, pred, self)
+    #         ls[0].backward()
+    #         optimizer.step()
+    #         self.requires_grad_(False)
+    #     else:
+    #         ls = None
+    #     return None, ls
+
+    def _forward_impl(self, X, y):
+        X, pred = X
+        if torch.is_grad_enabled():
+            return None, [*self.train_ls_fn_s[0](X, y, pred, self)]
+        else:
+            return None, []
+
+    def _backward_impl(self, *ls):
+        ls[0].backward()
