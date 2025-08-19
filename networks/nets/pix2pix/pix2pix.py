@@ -1,9 +1,9 @@
-import functools
+import warnings
 from collections import OrderedDict
+from typing import Iterable
 
 import torch
 
-import utils.func.torch_tools as ttools
 from networks.basic_nn import BasicNN
 from networks.nets.pix2pix.pix2pix_d import Pix2Pix_D
 from networks.nets.pix2pix.pix2pix_g import Pix2Pix_G
@@ -66,6 +66,37 @@ class Pix2Pix(BasicNN):
         else:
             super(Pix2Pix, self).__init__(netG, **kwargs)
 
+    def activate(self, is_train: bool,
+                 o_args: Iterable, l_args: Iterable, tr_ls_args: Iterable,
+                 ts_ls_args: Iterable):
+        super().activate(is_train, o_args, l_args, tr_ls_args, ts_ls_args)
+        if is_train:
+            if len(self.optimizer_s) > 0:
+                warnings.warn("pix2pix不接受优化器参数！将去除已赋值的优化器，并使用生成器和分辨器的学习率名称")
+                self.optimizer_s = []
+            self.lr_names = self.netG.lr_names + self.netD.lr_names
+            if len(self.scheduler_s) > 0:
+                warnings.warn("pix2pix不接受学习率规划器参数！将去除已赋值的学习率规划器")
+                self.scheduler_s = []
+            if len(self.train_ls_fn_s) > 0:
+                warnings.warn("pix2pix不接受训练损失函数参数！将去除已赋值的训练损失函数，并使用生成器和分辨器的训练损失函数名称")
+                self.train_ls_fn_s = []
+            self.train_ls_names = self.netG.train_ls_names + self.netD.train_ls_names
+        if len(self.test_ls_fn_s) > 0:
+            warnings.warn("pix2pix不接受测试损失函数参数！将去除已赋值的测试损失函数，并使用生成器和分辨器的测试损失函数名称")
+            self.test_ls_fn_s = []
+        self.test_ls_names = self.netG.test_ls_names
+
+    def get_lr_groups(self):
+        return self.lr_names, [
+            [param['lr'] for param in optimizer.param_groups]
+            for optimizer in self.netG.optimizer_s + self.netD.optimizer_s
+        ]
+
+    def update_lr(self):
+        for scheduler in self.netG.scheduler_s + self.netD.scheduler_s:
+            scheduler.step()
+
     def forward(self, input):
         """前向传播
         计算生成器的预测值。
@@ -84,7 +115,7 @@ class Pix2Pix(BasicNN):
         if backward:
             self.netD.requires_grad_(True)
             _, D_ls = self.netD.forward_backward((X, pred), y, backward=backward)
-            self.netG.requires_grad_(False)
+            self.netD.requires_grad_(False)
             _, G_ls = self.netG.forward_backward((X, pred, self.netD), y, backward=backward)
             ls_es = (*G_ls, *D_ls)
         else:
