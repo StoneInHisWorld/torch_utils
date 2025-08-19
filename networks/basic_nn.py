@@ -96,7 +96,6 @@ class BasicNN(nn.Sequential):
     #         self._gradient_clipping = None
     #     self.ready = True
 
-
     #
     # def prepare_training(self,
     #                      o_args=None, l_args=None,
@@ -299,12 +298,12 @@ class BasicNN(nn.Sequential):
                                                   "二元组的0号位为规划器类型字符串，1号位为规划器构造关键字参数")
             self.scheduler_s = self._get_lr_scheduler(l_args)
             assert isinstance(tr_ls_args, Iterable), ("训练损失函数参数需要为可迭代对象，其中的每个元素均为二元组，"
-                                                    "二元组的0号位为损失函数类型字符串，1号位为损失函数构造关键字参数")
+                                                      "二元组的0号位为损失函数类型字符串，1号位为损失函数构造关键字参数")
             self.train_ls_fn_s, self.train_ls_names = self._get_ls_fn(tr_ls_args)
-            assert isinstance(ts_ls_args, Iterable), ("测试损失函数参数需要为可迭代对象，其中的每个元素均为二元组，"
-                                                        "二元组的0号位为损失函数类型字符串，1号位为损失函数构造关键字参数")
         else:
             self.eval()
+        assert isinstance(ts_ls_args, Iterable), ("测试损失函数参数需要为可迭代对象，其中的每个元素均为二元组，"
+                                                  "二元组的0号位为损失函数类型字符串，1号位为损失函数构造关键字参数")
         self.test_ls_fn_s, self.test_ls_names = self._get_ls_fn(ts_ls_args)
         self._ready = True
         # # 训练损失
@@ -332,6 +331,7 @@ class BasicNN(nn.Sequential):
         #         # lambda x, y: ttools.sample_wise_ls_fn(x, y, unwrapped_fn)
         #     )
         # return train_ls_fn_s, train_ls_names, test_ls_fn_s, test_ls_names
+
     #
     # def get_comment(self,
     #                 inputs, predictions, labels,
@@ -517,7 +517,6 @@ class BasicNN(nn.Sequential):
         self._ready = False
         for bnn in filter(lambda m: isinstance(m, BasicNN), self.children()):
             bnn.deactivate()
-
 
     @property
     def ready(self):
