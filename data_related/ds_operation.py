@@ -190,7 +190,7 @@ def denormalize(data: torch.Tensor, mean=None, std=None, range=None) -> torch.Te
     :param data: 需要进行标准化的数据
     :param mean: 反标准化所用均值
     :param std: 反标准化所用标准差
-    :param range: 反归一化后，数据分布的区间。
+    :param range: 反归一化后，数据分布的区间。本参数需为一个二元组（d_min, d_max）
     :return: 反标准化后的数据
     """
     # 如果指定了均值和方差
