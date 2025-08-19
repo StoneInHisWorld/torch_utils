@@ -15,6 +15,7 @@ from .basic_nn import BasicNN
 def configure_network(module: BasicNN, is_train: bool, o_args=None, l_args=None, tr_ls_args=None, ts_ls_args=None):
     """训练准备实现
     获取优化器（对应学习率名称）、学习率规划器以及损失函数（训练、测试损失函数名称），储存在自身对象中。
+    获取顺序是先子网络，后主网络
     :param o_args: 优化器参数列表。参数列表中每一项对应一个优化器设置，每一项签名均为(str, dict)，
         str指示优化器类型，dict指示优化器构造关键字参数。
     :param l_args: 学习率规划器参数列表。参数列表中每一项对应一个学习率规划器设置，每一项签名均为(str, dict)，
@@ -66,8 +67,8 @@ def configure_network(module: BasicNN, is_train: bool, o_args=None, l_args=None,
     #             f"准备参数应为全列表，表示基本子网络的准备参数组；或者全元组，表示本基本网络的准备参数组。"
     #         )
     # 提取出本网络中的所有基础网络
-    for bnn, o, l, tr, ts in zip_longest(filter(lambda m: isinstance(m, BasicNN), module.modules()),
-                                            o_args, l_args, tr_ls_args, ts_ls_args, fillvalue=[]):
+    for bnn, o, l, tr, ts in zip_longest(filter(lambda m: isinstance(m, BasicNN), reversed(list(module.modules()))),
+                                         o_args, l_args, tr_ls_args, ts_ls_args, fillvalue=[]):
         bnn.activate(is_train, o, l, tr, ts)
 
 
