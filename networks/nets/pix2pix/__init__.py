@@ -1,5 +1,4 @@
 import functools
-from itertools import zip_longest
 
 from ... import check_prepare_args
 
@@ -30,7 +29,7 @@ def _get_ls_fn(is_train, GorD, *args):
     return ls_fn_s, ls_name_s
 
 
-def l1loss(X, y, computer = ttools.get_ls_fn('l1'), lambda_l1 = 100):
+def l1loss(X, y, computer=ttools.get_ls_fn('l1'), lambda_l1=100):
     return computer(X, y) * lambda_l1
 
 
@@ -89,7 +88,7 @@ def cGAN_ls_fn(is_train, GorD, **kwargs):
 
     if is_train:
         ls_fn = [functools.partial(cGAN_G_ls_fn, criterionGAN=criterionGAN, criterionL1=criterionL1,
-                                  size_averaged=size_averaged, reduced_form=reduced_form)] if GorD \
+                                   size_averaged=size_averaged, reduced_form=reduced_form)] if GorD \
             else [functools.partial(D_ls_fn, criterionGAN=criterionGAN, reduced_form=reduced_form)]
         if GorD:
             ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_L1']
@@ -97,7 +96,7 @@ def cGAN_ls_fn(is_train, GorD, **kwargs):
             ls_names = ['D_LS'] if reduced_form else ['D_LS', 'D_real', 'D_fake']
     else:
         ls_fn = [functools.partial(cGAN_G_ls_fn, criterionGAN=criterionGAN, criterionL1=criterionL1,
-                                  size_averaged=size_averaged, reduced_form=reduced_form)] if GorD \
+                                   size_averaged=size_averaged, reduced_form=reduced_form)] if GorD \
             else []
         if GorD:
             ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_L1']
@@ -107,7 +106,7 @@ def cGAN_ls_fn(is_train, GorD, **kwargs):
     return ls_fn, ls_names
 
 
-def pccloss(X, y, computer = ttools.get_ls_fn('pcc'), lambda_pcc = 100):
+def pccloss(X, y, computer=ttools.get_ls_fn('pcc'), lambda_pcc=100):
     return computer(X, y) * lambda_pcc
 
 
@@ -139,10 +138,9 @@ def pcc_ls_fn(is_train, GorD, **kwargs):
     # self.criterionGAN = lambda pred, target_is_real: criterionGAN(pred, target_is_real)
     criterionPCC = functools.partial(l1loss, computer=criterionPCC, lambda_l1=lambda_PCC)
 
-
     if is_train:
         ls_fn = [functools.partial(cGAN_G_ls_fn, criterionGAN=criterionGAN, criterionL1=criterionPCC,
-                                  size_averaged=size_averaged, reduced_form=reduced_form)] if GorD \
+                                   size_averaged=size_averaged, reduced_form=reduced_form)] if GorD \
             else [functools.partial(D_ls_fn, criterionGAN=criterionGAN, reduced_form=reduced_form)]
         if GorD:
             ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_PCC']
@@ -150,13 +148,14 @@ def pcc_ls_fn(is_train, GorD, **kwargs):
             ls_names = ['D_LS'] if reduced_form else ['D_LS', 'D_real', 'D_fake']
     else:
         ls_fn = [functools.partial(cGAN_G_ls_fn, criterionGAN=criterionGAN, criterionL1=criterionPCC,
-                                  size_averaged=size_averaged, reduced_form=reduced_form)] if GorD \
+                                   size_averaged=size_averaged, reduced_form=reduced_form)] if GorD \
             else []
         if GorD:
             ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_PCC']
         else:
             ls_names = []
     return ls_fn, ls_names
+
 
 def PCC_G_ls_fn(X, y, pred,
                 netD, criterionGAN, criterionPCC,
@@ -174,6 +173,7 @@ def PCC_G_ls_fn(X, y, pred,
     else:
         return gan_ls + pcc_ls, gan_ls, pcc_ls
 
+
 def cGAN_G_ls_fn(X, y, pred,
                  netD, criterionGAN, criterionL1,
                  size_averaged=True, reduced_form=False):
@@ -190,6 +190,7 @@ def cGAN_G_ls_fn(X, y, pred,
     else:
         return gan_ls + l1_ls, gan_ls, l1_ls
 
+
 def D_ls_fn(X, y, pred,
             netD, criterionGAN, reduced_form=False):
     fake_AB = torch.cat((X, pred), 1)
@@ -205,6 +206,7 @@ def D_ls_fn(X, y, pred,
         return ls,
     else:
         return ls, real_ls, fake_ls
+
 
 def _get_lr_scheduler(optimizer, *args):
     """获取一个学习率规划器
@@ -284,6 +286,7 @@ def _get_lr_scheduler(optimizer, *args):
     #     scheduler_s.append(ttools.get_lr_scheduler(optimizer, ss, **kwargs))
     # return scheduler_s
 
+
 def _get_optimizer(module, *args):
     """获取pix2pix的优化器。
     目前只允许给netG，netD分配优化器，且每个网络只能分配一个。
@@ -309,7 +312,9 @@ def _get_optimizer(module, *args):
     #     optimizers.append(ttools.get_optimizer(net, type_s, **kwargs))
     # return optimizers, ['G_lrs', 'D_lrs']
 
+
 def _backward_impl(main_ls):
     main_ls[0].backward()
+
 
 from .pix2pix import Pix2Pix
