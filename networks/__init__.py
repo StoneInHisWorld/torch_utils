@@ -69,6 +69,8 @@ def configure_network(module: BasicNN, is_train: bool, o_args=None, l_args=None,
     # 提取出本网络中的所有基础网络
     for bnn, o, l, tr, ts in zip_longest(filter(lambda m: isinstance(m, BasicNN), reversed(list(module.modules()))),
                                          o_args, l_args, tr_ls_args, ts_ls_args, fillvalue=[]):
+        if bnn == []:
+            raise ValueError(f"赋值的参数比赋值的网络数要多！可赋值的网络总共包括：{list(reversed(list(module.modules())))}")
         bnn.activate(is_train, o, l, tr, ts)
 
 
