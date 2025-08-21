@@ -49,10 +49,12 @@ class ITransformer(BasicNN):
             )
         else:
             pos_embedding = nn.Identity()
-        transformer = KVCacheTransformerBlock(in_len, out_len, d_model, auto_regressive=auto_regression, **tran_kwargs)
+        transformer = KVCacheTransformerBlock(
+            in_len, out_len, d_model,
+            auto_regressive=auto_regression, **tran_kwargs
+        )
         linear_projector = nn.Linear(d_model, out_pixel_range)
         self.pixel_basis = torch.arange(0, out_pixel_range).reshape(1, out_pixel_range, 1).to(torch.float32)
-        # self.patches_size = patches_size
         self.auto_reg = auto_regression
         super().__init__(OrderedDict([
             ("f_embedding", f_embedding),
@@ -108,58 +110,85 @@ class ITransformer(BasicNN):
         pred = (pred @ self.pixel_basis).squeeze()
         return pred, ls_es
 
+    # def _get_ls_fn(self, ls_args):
+    #     train_ls_fn_s, train_ls_names, test_ls_fn_s, test_ls_names = super()._get_ls_fn(*ls_args)
+    #     """针对训练损失函数的特殊处理"""
+    #     try:
+    #         # 针对交叉熵损失的特别处理
+    #         where = train_ls_names.index('ENTRO')
+    #         train_ls_fn_s[where] = functools.partial(
+    #             SEQ_ENTROLOSS, unwrapped_entroloss=train_ls_fn_s[where]
+    #         )
+    #     except ValueError:
+    #         pass
+    #     try:
+    #         # 针对均方差的特别处理
+    #         where = train_ls_names.index('MSE')
+    #         train_ls_fn_s[where] = functools.partial(
+    #             SEQ_MSE, unwrapped_mseloss=train_ls_fn_s[where], pixel_basis=self.pixel_basis
+    #         )
+    #     except ValueError:
+    #         pass
+    #     try:
+    #         # 针对均方差的特别处理
+    #         where = train_ls_names.index('L1')
+    #         train_ls_fn_s[where] = functools.partial(
+    #             SEQ_L1, unwrapped_mseloss=train_ls_fn_s[where], pixel_basis=self.pixel_basis
+    #         )
+    #     except ValueError:
+    #         pass
+    #     """针对测试损失函数的特别处理"""
+    #     try:
+    #         where = test_ls_names.index('ENTRO')
+    #         test_ls_fn_s[where] = functools.partial(
+    #             SEQ_ENTROLOSS, unwrapped_entroloss=test_ls_fn_s[where]
+    #         )
+    #     except ValueError:
+    #         pass
+    #     try:
+    #         # 针对均方差的特别处理
+    #         where = test_ls_names.index('MSE')
+    #         test_ls_fn_s[where] = functools.partial(
+    #             SEQ_MSE, unwrapped_mseloss=test_ls_fn_s[where], pixel_basis=self.pixel_basis
+    #         )
+    #     except ValueError:
+    #         pass
+    #     try:
+    #         # 针对均方差的特别处理
+    #         where = test_ls_names.index('L1')
+    #         test_ls_fn_s[where] = functools.partial(
+    #             SEQ_L1, unwrapped_mseloss=test_ls_fn_s[where], pixel_basis=self.pixel_basis
+    #         )
+    #     except ValueError:
+    #         pass
+    #     return train_ls_fn_s, train_ls_names, test_ls_fn_s, test_ls_names
+
     def _get_ls_fn(self, ls_args):
-        train_ls_fn_s, train_ls_names, test_ls_fn_s, test_ls_names = super()._get_ls_fn(*ls_args)
-        """针对训练损失函数的特殊处理"""
+        ls_fn_s, ls_names = super()._get_ls_fn(ls_args)
+        """针对损失函数的特殊处理"""
         try:
             # 针对交叉熵损失的特别处理
-            where = train_ls_names.index('ENTRO')
-            train_ls_fn_s[where] = functools.partial(
-                SEQ_ENTROLOSS, unwrapped_entroloss=train_ls_fn_s[where]
+            where = ls_names.index('ENTRO')
+            ls_fn_s[where] = functools.partial(SEQ_ENTROLOSS, unwrapped_entroloss=ls_fn_s[where])
+        except ValueError:
+            pass
+        try:
+            # 针对均方差的特别处理
+            where = ls_names.index('MSE')
+            ls_fn_s[where] = functools.partial(
+                SEQ_MSE, unwrapped_mseloss=ls_fn_s[where], pixel_basis=self.pixel_basis
             )
         except ValueError:
             pass
         try:
             # 针对均方差的特别处理
-            where = train_ls_names.index('MSE')
-            train_ls_fn_s[where] = functools.partial(
-                SEQ_MSE, unwrapped_mseloss=train_ls_fn_s[where], pixel_basis=self.pixel_basis
+            where = ls_names.index('L1')
+            ls_fn_s[where] = functools.partial(
+                SEQ_L1, unwrapped_mseloss=ls_fn_s[where], pixel_basis=self.pixel_basis
             )
         except ValueError:
             pass
-        try:
-            # 针对均方差的特别处理
-            where = train_ls_names.index('L1')
-            train_ls_fn_s[where] = functools.partial(
-                SEQ_L1, unwrapped_mseloss=train_ls_fn_s[where], pixel_basis=self.pixel_basis
-            )
-        except ValueError:
-            pass
-        """针对测试损失函数的特别处理"""
-        try:
-            where = test_ls_names.index('ENTRO')
-            test_ls_fn_s[where] = functools.partial(
-                SEQ_ENTROLOSS, unwrapped_entroloss=test_ls_fn_s[where]
-            )
-        except ValueError:
-            pass
-        try:
-            # 针对均方差的特别处理
-            where = test_ls_names.index('MSE')
-            test_ls_fn_s[where] = functools.partial(
-                SEQ_MSE, unwrapped_mseloss=test_ls_fn_s[where], pixel_basis=self.pixel_basis
-            )
-        except ValueError:
-            pass
-        try:
-            # 针对均方差的特别处理
-            where = test_ls_names.index('L1')
-            test_ls_fn_s[where] = functools.partial(
-                SEQ_L1, unwrapped_mseloss=test_ls_fn_s[where], pixel_basis=self.pixel_basis
-            )
-        except ValueError:
-            pass
-        return train_ls_fn_s, train_ls_names, test_ls_fn_s, test_ls_names
+        return ls_fn_s, ls_names
 
     def get_key_padding_mask(self, tokens):
         """
