@@ -91,7 +91,7 @@ class net_builder:
             input_size = trainer.input_size
             if isinstance(input_size, Iterable):
                 try:
-                    summary(net, input_size=(trainer.hps['batch_size'], *input_size))
+                    summary(net, input_size=(trainer.hps['batch_size'], *input_size), device=net.device)
                 except Exception as e:
                     msg = f"打印网络时遇到错误：{e}，只显示网络结构！"
                     warnings.warn(msg)
