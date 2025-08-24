@@ -2,15 +2,20 @@ import math
 
 from torch import nn as nn
 
+from utils.func.torch_tools import get_activation
+from networks import BasicNN
+from collections import OrderedDict
 
-class DynamicBlender(nn.Module):
+
+class DynamicBlender(BasicNN):
     """动态晕染器
     存有可学习参数，用于将稀疏采样的像素向量扩充至所需维度，并以二维形式组织
     """
 
     def __init__(self, input_size: int,
                  tgt_size: int = 224, start_size=7, start_channels=64,
-                 output_channel=3):
+                 output_channel=3, atv_str="relu", atv_kwargs={},
+                 **kwargs):
         """动态晕染器。存有可学习参数，用于将稀疏采样的像素向量扩充至所需维度，并以二维形式组织
 
         :param input_size: 指定输入向量维度
@@ -20,14 +25,16 @@ class DynamicBlender(nn.Module):
             然后在前向传播途中压缩成（批量大小，start_channels，start_size，start_size）
         :param start_channels: 指定扩充开始通道数。晕染器持有的反置卷积层会逐步压缩通道数，直到张量通道数为output_channel。
         :param output_channel: 指定输出张量的通道数
+        :param kwargs: BasicNN基本参数。
+            在此处可以指定输入张量的形状input_size（长和宽），如不指定则默认为(224, 224)
         :return: 晕染器可以作为可调用对象，返回形状为（批量大小，output_channels，tgt_size，tgt_size）的张量
         """
-        super().__init__()
+        activation = get_activation(atv_str, **atv_kwargs)
         # 计算线性层输出维度
         linear_dim = start_channels * start_size * start_size
 
-        self.input_size = (-1, input_size)
-        self.linear = nn.Linear(input_size, linear_dim)
+        # self.input_size = (-1, input_size)
+        linear = nn.Linear(input_size, linear_dim)
         self.initial_shape = (start_channels, start_size, start_size)
 
         # 计算需要上采样的次数
@@ -42,7 +49,7 @@ class DynamicBlender(nn.Module):
             layers += [
                 nn.ConvTranspose2d(in_ch, out_ch, kernel_size=4, stride=2, padding=1),
                 nn.BatchNorm2d(out_ch),
-                nn.ReLU()
+                activation
             ]
             in_ch = out_ch
 
@@ -50,7 +57,10 @@ class DynamicBlender(nn.Module):
         if in_ch != output_channel:
             layers.append(nn.Conv2d(in_ch, output_channel, kernel_size=1))
 
-        self.decoder = nn.Sequential(*layers)
+        decoder = nn.Sequential(*layers)
+        super().__init__(OrderedDict([
+            ('linear', linear), ("decoder", decoder)
+        ]), input_size=(input_size, ), **kwargs)
 
     def forward(self, x):
         x = self.linear(x)
