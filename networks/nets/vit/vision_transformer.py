@@ -1,6 +1,5 @@
 from collections import OrderedDict
 
-import torch
 from torch import nn
 
 from networks.basic_nn import BasicNN
