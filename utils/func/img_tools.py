@@ -3,7 +3,7 @@ from typing import Tuple, List
 
 import PIL.Image
 import numpy as np
-from PIL import Image as IMAGE, ImageDraw
+from PIL import Image as IMAGE, ImageDraw, ImageFont
 from PIL.Image import Image
 from tqdm import tqdm
 # from numba import jit
@@ -135,7 +135,9 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     """
     拼接图片。将输入图片拼接到白板上，并附以标签和脚注（目前仅支持一张图片一行脚注），一次性生成多张结果图。
     :param groups_of_imgs_labels_list: 图片-标签序列组。包含多个序列，每个序列中包含有粘贴到单个白板上的所有图片-标签对。
-    :param kwargs: 关键词参数。支持的参数包括：comment，单个白板的脚注；text_size，标签及脚注的文字大小；border_size，图片/标签/边界之间的宽度
+    :param kwargs: 关键词参数。
+        支持的参数包括：footnotes，单个白板的脚注；text_size，标签及脚注的文字大小；border_size，图片/标签/边界之间的宽度：
+        img_size，其中每张图片的大小；text_indent，文本行缩进；required_shape，输出组合图的大小。
     :return: 生成的结果图序列
     """
     footnotes = kwargs['footnotes'] if 'footnotes' in kwargs.keys() \
@@ -143,6 +145,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     text_size = kwargs['text_size'] if 'text_size' in kwargs.keys() else 15
     border_size = kwargs['border_size'] if 'border_size' in kwargs.keys() else 5
     img_size = kwargs['img_size'] if 'img_size' in kwargs.keys() else None
+    text_indent = kwargs['text_indent'] if 'text_indent' in kwargs.keys() else int(np.ceil(text_size / 3))
     required_shape = kwargs['required_shape'] if 'required_shape' in kwargs.keys() else None
     # 判断白板所用模式
     mode = '1'
@@ -168,12 +171,14 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
         text_color = 0
     else:
         raise NotImplementedError(f'暂未识别的图片模式组合{modes}，无法进行背景板颜色定义以及返图模式推断')
+    # 设置字体大小
+    font = ImageFont.truetype("arial.ttf", text_size)
 
     def _impl(footnotes: str = "",
               *imgs_and_labels: Tuple[Image, str]
               ) -> Image:
         """拼接图片和标签，再添加脚注形成单张图片"""
-        # 计算绘图窗格大小
+        # 计算绘图窗格大小，绘图窗格cube = cb
         if img_size:
             cb_height, cb_width = img_size
         else:
@@ -182,14 +187,16 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
         n_cube = len(imgs_and_labels)
         # 计算脚注空间
         n_ftn_lines = footnotes.count('\n') + 2  # 加上'COMMENT:'和内容
-        text_indent = int(np.ceil(text_size / 3))
+        # text_indent = int(np.ceil(text_size / 3))
         ftn_height = text_size * n_ftn_lines + text_indent * (n_ftn_lines - 1)
         ftn_width = int(max([len(l) for l in footnotes.split('\n')]) * text_size / 2.5)
         # 绘制白板
+        # 白板的宽度由 图片部分宽度 和 脚注部分宽度 的最大值决定
         wb_width = max(
             (n_cube + 1) * border_size + n_cube * cb_width,
             2 * border_size + ftn_width
         )
+        # 白板的高度由边界、图片标题、标题缩进、图片部分高度以及脚注高度决定
         wb_height = 3 * border_size + text_size + text_indent + cb_height + ftn_height
         # 制作输入、输出、标签对照图
         whiteboard = IMAGE.new(mode, (wb_width, wb_height), color=color)
@@ -201,7 +208,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
             # 添加图片标题
             draw.text(
                 ((i + 1) * border_size + i * cb_width, border_size),
-                label, fill=text_color
+                label, fill=text_color, font=font
             )
             # 拼接图片
             whiteboard.paste(
@@ -214,7 +221,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
         # 绘制脚注
         draw.text(
             (border_size, wb_height - ftn_height - border_size),
-            'COMMENT: \n' + footnotes, fill=text_color
+            'COMMENT: \n' + footnotes, fill=text_color, font=font
         )
         return whiteboard
 
