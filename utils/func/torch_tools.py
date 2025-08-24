@@ -124,8 +124,6 @@ def init_wb(func_str: str = "xavier", **kwargs):
         return None
     elif func_str == "normal":
         mean, std = kwargs.pop('mean', 0), kwargs.pop('std', 1)
-        # w_init = lambda m: init.normal_(m, mean, std)
-        # b_init = lambda m: init.normal_(m, mean, std)
         w_init = functools.partial(init.normal_, mean=mean, std=std)
         b_init = functools.partial(init.normal_, mean=mean, std=std)
     elif func_str == "xavier":
@@ -134,8 +132,6 @@ def init_wb(func_str: str = "xavier", **kwargs):
         w_init, b_init = init.zeros_, init.zeros_
     elif func_str == 'constant':
         w_value, b_value = kwargs.pop('w_value', 1), kwargs.pop('b_value', 0)
-        # w_init = lambda m: init.constant_(m, w_value)
-        # b_init = lambda m: init.constant_(m, b_value)
         w_init = functools.partial(init.constant_, val=w_value)
         b_init = functools.partial(init.constant_, val=b_value)
     elif func_str == 'trunc_norm':
