@@ -143,7 +143,6 @@ class BasicNN(nn.Sequential):
         :param kwargs: 初始化方法参数
         :return: None
         """
-        init_fn = ttools.init_wb(init_str, **kwargs)
         if init_str == "state":
             try:
                 where = kwargs['where']
@@ -172,6 +171,7 @@ class BasicNN(nn.Sequential):
             load(self)
             del load
         else:
+            init_fn = ttools.init_wb(init_str, **kwargs)
             self.apply(init_fn)
 
     def forward_backward(self, X, y, backward=True):
@@ -225,6 +225,7 @@ class BasicNN(nn.Sequential):
         :param ls: 损失值
         :return: None
         """
+        assert len(ls) > 0, "反向传播没有收到损失值！"
         zeros = torch.zeros(1, requires_grad=True, device=ls[0].device)
         total = reduce(lambda x, y: x + y, ls, zeros)
         total.backward()
