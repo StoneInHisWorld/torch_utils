@@ -36,18 +36,18 @@ class ControlPanel:
         :param net_type: 训练所用模型类
         :param cfg_root: 运行配置文件路径
         """
+        net_name = net_type.__name__.lower()
         # 生成运行动态配置
-        self.__rcp = os.path.join(cfg_root, f'settings.json')  # 运行配置json文件路径
+        self.__rcp = os.path.join(cfg_root, net_name, f'settings.json')  # 运行配置json文件路径
         # 读取运行配置
         ptools.check_path(self.__rcp, init_settings)
         self.__read_runtime_cfg()
         # 生成其他路径
-        net_name = net_type.__name__.lower()
-        self.__hcp = os.path.join(cfg_root, f'hp_control/{net_name}_hp.json')  # 网络训练超参数文件路径
+        self.__hcp = os.path.join(cfg_root, net_name, f'hyper_param_s.json')  # 网络训练超参数文件路径
         log_root = self.cfg_dict['log_root']
-        self.__lp = os.path.join(log_root, f'{net_name}_log.csv')  # 日志文件存储路径
-        self.__np = os.path.join(log_root, f'trained_net/{net_name}/')  # 训练成果网络存储路径
-        self.__pp = os.path.join(log_root, f'imgs/{net_name}/')  # 历史趋势图存储路径
+        self.__lp = os.path.join(log_root, net_name, f'{net_name}_log.csv')  # 日志文件存储路径
+        self.__np = os.path.join(log_root, net_name, f'trained_net/')  # 训练成果网络存储路径
+        self.__pp = os.path.join(log_root, net_name, f'imgs/')  # 历史趋势图存储路径
         # 路径检查
         ptools.check_path(self.__hcp, init_hps)
         ptools.check_path(self.__lp, init_log)
