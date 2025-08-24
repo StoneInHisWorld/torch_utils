@@ -326,11 +326,12 @@ class KVCacheMultiHeadAttention(nn.Module):
         self.num_heads = num_head
         self.batch_first = True
         self._qkv_same_embed_dim = True
+        self.auto_regressive = auto_regressive
 
         self.sa_head = nn.ModuleList([
             SelfAttention_KVCAH(
-                embed_size, head_size, bias, dropout, auto_regressive, **factory_kwargs)
-            if self_attn else KVStatic_KVCAH(
+                embed_size, head_size, bias, dropout, auto_regressive, **factory_kwargs
+            ) if self_attn else KVStatic_KVCAH(
                 embed_size, head_size, bias, dropout, auto_regressive, **factory_kwargs
             )
             for _ in range(num_head)
@@ -351,10 +352,15 @@ class KVCacheMultiHeadAttention(nn.Module):
         return out
 
     def refresh_head(self, batch_size, ql, kl, vl, device):
+        """
+        对自注意力头进行刷新
+        自注意力头在进行自回归预测的时候，需要进行KV缓存，因此需要在激活自回归预测同时处于预测状态的时候，每批次进行缓存更新
+        自注意力头在训练模式下，或者不需要自回归时，则需要设置自注意力掩码
+        """
         # if self.k_cache is None or self.v_cache is None:
         # 使用缓存大小初始化缓存
         for head in self.sa_head:
-            if not torch.is_grad_enabled():
+            if self.auto_regressive and not torch.is_grad_enabled():
                 head.refresh_cache(batch_size, kl, vl, device)
             else:
                 head.set_mask(ql, kl, device)

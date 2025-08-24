@@ -72,8 +72,8 @@ class KVCache_TransformerEncoderLayer(TransformerEncoderLayer):
             warnings.warn('KV缓存注意力机制中没有设置键填充掩码！')
         if is_causal:
             warnings.warn('KV缓存注意力机制中没有causal机制！')
-        # bs, l, _ = x.shape
-        # self.self_attn.refresh_head(bs, l, l, x.device)
+        bs, l, _ = x.shape
+        self.self_attn.refresh_head(bs, l, l, l, x.device)
         x = self.self_attn(x, x, x)
         # x = self.self_attn(x, x, x)[0]
         return self.dropout1(x)
