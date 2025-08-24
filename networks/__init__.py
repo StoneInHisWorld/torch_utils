@@ -67,11 +67,14 @@ def configure_network(module: BasicNN, is_train: bool, o_args=None, l_args=None,
     #             f"准备参数应为全列表，表示基本子网络的准备参数组；或者全元组，表示本基本网络的准备参数组。"
     #         )
     # 提取出本网络中的所有基础网络
+    print("依次对", end="")
     for bnn, o, l, tr, ts in zip_longest(filter(lambda m: isinstance(m, BasicNN), reversed(list(module.modules()))),
                                          o_args, l_args, tr_ls_args, ts_ls_args, fillvalue=[]):
+        print(bnn.__class__.__name__, end=" ")
         if bnn == []:
             raise ValueError(f"赋值的参数比赋值的网络数要多！可赋值的网络总共包括：{list(reversed(list(module.modules())))}")
         bnn.activate(is_train, o, l, tr, ts)
+    print("进行初始化")
 
 
 from .trainer import Trainer
