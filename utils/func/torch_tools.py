@@ -217,7 +217,7 @@ def get_activation(which: str = 'relu', **kwargs):
     elif which == 'tanh':
         return torch.nn.Tanh()
     elif which == 'gelu':
-        return torch.nn.GELU()
+        return torch.nn.GELU(**kwargs)
     else:
         raise NotImplementedError(f"不支持的激活函数{which}, 当前支持的激活函数层包括{activations}")
 
