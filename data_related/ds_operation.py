@@ -1,5 +1,5 @@
 import random
-from typing import Sized
+from typing import Sized, Tuple
 
 import numpy as np
 import torch
@@ -154,12 +154,12 @@ def data_slicer(data_portion=1., shuffle=True, *args: Sized):
     return zip(*args[: data_portion])  # 返回值总为元组
 
 
-def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
+def normalize(data: torch.Tensor, epsilon=1e-5) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     进行数据标准化。
-    :param data: 需要进行标准化的数据。
+    :param data: 需要进行标准化的数据。数据维度需为（批量大小，通道数目，……）
     :param epsilon: 防止分母为0的无穷小量。
-    :return: 标准化的数据
+    :return: 标准化的数据，标准化所用均值，标准化所用标准差
     """
     try:
         mean, std = [
@@ -173,9 +173,9 @@ def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
             raise e
     std += epsilon
     if 3 <= len(data.shape) <= 4:
-        return F.normalize(data, mean, std)
+        return F.normalize(data, mean, std), mean.squeeze(1), std.squeeze(1)
     elif len(data.shape) < 3:
-        return (data - mean) / std
+        return (data - mean) / std, mean.squeeze(1), std.squeeze(1)
     else:
         raise Exception(f'不支持的数据形状{data.shape}！只支持三维或者四维张量。')
 
