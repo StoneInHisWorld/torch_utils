@@ -147,6 +147,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     img_size = kwargs['img_size'] if 'img_size' in kwargs.keys() else None
     text_indent = kwargs['text_indent'] if 'text_indent' in kwargs.keys() else int(np.ceil(text_size / 3))
     required_shape = kwargs['required_shape'] if 'required_shape' in kwargs.keys() else None
+    font_path = kwargs.pop('font_path') if 'font_path' in kwargs.keys() else r"C:\Windows\Fonts\arial.ttf"
     # 判断白板所用模式
     mode = '1'
     modes = set()
@@ -172,7 +173,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     else:
         raise NotImplementedError(f'暂未识别的图片模式组合{modes}，无法进行背景板颜色定义以及返图模式推断')
     # 设置字体大小
-    font = ImageFont.truetype("arial.ttf", text_size)
+    font = ImageFont.truetype(font_path, text_size)
 
     def _impl(footnotes: str = "",
               *imgs_and_labels: Tuple[Image, str]
