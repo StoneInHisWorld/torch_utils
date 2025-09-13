@@ -22,11 +22,8 @@ class EncoderLayer(nn.Module):
             self.position_embedding = nn.Identity()
         self.classifier = classifier
         self.encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                num_hiddens, num_telayer_head, ffn_num_hiddens, batch_first=True
-            ),
-            num_layers=num_telayer,
-            norm=nn.LayerNorm(num_hiddens)
+            nn.TransformerEncoderLayer(num_hiddens, num_telayer_head, ffn_num_hiddens, batch_first=True),
+            num_layers=num_telayer, norm=nn.LayerNorm(num_hiddens)
         )
         self.dropout = nn.Dropout(dropout_rate)
         # 加上分类符
