@@ -1,6 +1,7 @@
 import time
 from datetime import datetime
 import warnings
+import gc
 
 import torch
 
@@ -111,12 +112,9 @@ class Experiment:
         """
         # 进行日志编写
         if exc_type is not None:
-            if exc_type != KeyboardInterrupt:
-                # 出现异常则记录
-                print(f'exc_type: {exc_type}')
-                print(f'exc_val: {exc_val}')
-                self.__hp.update({'exc_val': exc_val})
-            else:
+            if exc_type == MemoryError:
+                gc.collect()
+            elif exc_type == KeyboardInterrupt:
                 # 键盘中断则什么也不做
                 print('该组超参数实验被中断！')
                 try:
@@ -125,7 +123,10 @@ class Experiment:
                         time.sleep(1)
                     return True
                 except KeyboardInterrupt:
-                    raise KeyboardInterrupt('该组超参数实验被中断！')
+                    raise KeyboardInterrupt('实验被中断！')
+            # 出现异常则记录
+            print(f'\n出现{exc_type}异常\n描述为{exc_val}')
+            self.__hp.update({'exc_type': exc_type, 'exc_val': exc_val})
         # 记录时间信息
         time_span = time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start))
         self.__hp.update({
@@ -137,6 +138,7 @@ class Experiment:
             self.__write_log(**self.__hp)
         # 保存训练生成的网络
         self.__save_net()
+        return True
 
     def register_result(self,
                         net, history,
