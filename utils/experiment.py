@@ -138,7 +138,7 @@ class Experiment:
             self.__write_log(**self.__hp)
         # 保存训练生成的网络
         self.__save_net()
-        return True
+        # return True
 
     def register_result(self,
                         net, history,
