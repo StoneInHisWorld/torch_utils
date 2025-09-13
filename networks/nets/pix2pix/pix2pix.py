@@ -59,7 +59,7 @@ class Pix2Pix(BasicNN):
             # 定义一个分辨器
             # conditional GANs需要输入和输出图片，因此分辨器的通道数为input_nc + output_nc
             d_kwargs['input_size'] = (g_args[1] + g_args[2], *netG.input_size[2:])
-            netD = Pix2Pix_D(*d_args, **d_kwargs)
+            netD = Pix2Pix_D(g_args[1] + g_args[2], *d_args, **d_kwargs)
             super(Pix2Pix, self).__init__(OrderedDict([
                 ('netG', netG), ('netD', netD)
             ]), **kwargs)
