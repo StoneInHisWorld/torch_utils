@@ -68,11 +68,12 @@ def configure_network(module: BasicNN, is_train: bool, o_args=None, l_args=None,
     #         )
     # 提取出本网络中的所有基础网络
     print("依次对", end="")
-    for bnn, o, l, tr, ts in zip_longest(filter(lambda m: isinstance(m, BasicNN), reversed(list(module.modules()))),
-                                         o_args, l_args, tr_ls_args, ts_ls_args, fillvalue=[]):
+    bnn_s = list(filter(lambda m: isinstance(m, BasicNN), reversed(list(module.modules()))))
+    for bnn, o, l, tr, ts in zip_longest(bnn_s, o_args, l_args, tr_ls_args, ts_ls_args, fillvalue=[]):
         print(bnn.__class__.__name__, end=" ")
-        if bnn == []:
-            raise ValueError(f"赋值的参数比赋值的网络数要多！可赋值的网络总共包括：{list(reversed(list(module.modules())))}")
+        if not bnn:
+            raise ValueError(f"赋值的参数比赋值的网络数要多！"
+                             f"可赋值的网络总共包括：{', '.join(map(lambda m: m.__class__.__name__, bnn_s))}")
         bnn.activate(is_train, o, l, tr, ts)
     print("进行初始化")
 
