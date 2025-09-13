@@ -173,9 +173,9 @@ def normalize(data: torch.Tensor, epsilon=1e-5) -> Tuple[torch.Tensor, torch.Ten
             raise e
     std += epsilon
     if 3 <= len(data.shape) <= 4:
-        return F.normalize(data, mean, std), mean.squeeze(1), std.squeeze(1)
+        return F.normalize(data, mean, std), mean, std
     elif len(data.shape) < 3:
-        return (data - mean) / std, mean.squeeze(1), std.squeeze(1)
+        return (data - mean) / std, mean, std
     else:
         raise Exception(f'不支持的数据形状{data.shape}！只支持三维或者四维张量。')
 
