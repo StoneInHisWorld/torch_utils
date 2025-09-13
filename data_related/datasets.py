@@ -45,7 +45,7 @@ class DataSet(torch_ds):
         """
         start_time = time.perf_counter()
         self._features, self._labels = self.transformer.transform_data(self._features, self._labels)
-        data_device = {self._features.device, self._labels.device}
+        data_device = [self._features.device, self._labels.device]
         if self.device:
             print(f'\r正在进行数据迁移（{[d for d in data_device]}->{self.device}），'
                   f'如果不需要数据集整体迁移请将settings.json中的"ds_kwargs.device"设置为null')
