@@ -166,7 +166,7 @@ class BasicNN(nn.Sequential):
                     if child is not None:
                         child_prefix = prefix + name + '.'
                         load(child, child_prefix)
-                fn(module, prefix, **kwargs)
+                        fn(module, prefix, **kwargs)
 
             load(self)
             del load
