@@ -47,16 +47,16 @@ def split_data(dataset: DataSet or LazyDataSet, k, train=0.8, shuffle=True):
         raise ValueError(f'不正确的k值={k}，k值应该大于0，且为整数！')
 
 
-def default_transit_fn(batch, **kwargs):
-    """默认数据供给传输函数，本函数不进行任何操作。
-    DataLoader每次从内存取出数据后，都会调用本函数对批次进行预处理。
-    数据传输函数用于进行数据批量的设备迁移等操作。
-
-    :param batch: 需要预处理的数据批
-    :param kwargs: 预处理所用关键字参数
-    :return: 数据批次
-    """
-    return batch
+# def default_transit_fn(batch, **kwargs):
+#     """默认数据供给传输函数，本函数不进行任何操作。
+#     DataLoader每次从内存取出数据后，都会调用本函数对批次进行预处理。
+#     数据传输函数用于进行数据批量的设备迁移等操作。
+#
+#     :param batch: 需要预处理的数据批
+#     :param kwargs: 预处理所用关键字参数
+#     :return: 数据批次
+#     """
+#     return batch
 
 
 def to_loader(
