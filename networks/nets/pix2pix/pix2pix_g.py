@@ -229,20 +229,18 @@ class Pix2Pix_G(BasicNN):
         :param kwargs: 参见各个生成器的关键字参数
         """
         supported = ['u256', 'r9', 'u128']
+        device = kwargs.pop("device")
         if version == 'u256':
             model = UNet256Genarator(*args, **kwargs)
-            # kwargs['required_shape'] = (-1, 256, 256)
         elif version == 'u128':
             model = UNet128Genarator(*args, **kwargs)
-            # kwargs['required_shape'] = (-1, 128, 128)
         elif version == 'r9':
             kwargs['n_blocks'] = 9
             model = ResNetGenerator(*args, **kwargs)
-            # kwargs['required_shape'] = (-1, 256, 256)
         else:
             raise NotImplementedError(f'不支持的生成器版本{version}，支持的生成器版本包括{supported}')
-        kwargs['input_size'] = model.input_size
-        super(Pix2Pix_G, self).__init__(model, **kwargs)
+        assert "input_size" not in kwargs.keys(), f"{self.__class__.__name__}不支持赋值输入大小！"
+        super(Pix2Pix_G, self).__init__(model, device=device, input_size=model.input_size, **kwargs)
 
     def _get_ls_fn(self, ls_args):
         if hasattr(self, "train_ls_fn_s"):

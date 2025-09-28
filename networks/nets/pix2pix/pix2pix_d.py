@@ -50,7 +50,7 @@ class Pix2Pix_D(BasicNN):
             net = self.__getPixelD(input_nc, ndf, norm_layer=norm_layer)
         else:
             raise NotImplementedError(f'不支持的分辨器类型{net_type}!')
-        kwargs['input_size'] = (6, 256, 256) if kwargs.get('input_size') is None else kwargs.get('input_size')
+        # kwargs['input_size'] = (6, 256, 256) if kwargs.get('input_size') is None else kwargs.get('input_size')
         super(Pix2Pix_D, self).__init__(*net, **kwargs)
 
     def __get_norm_layer(self, type='instance'):

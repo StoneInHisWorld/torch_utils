@@ -52,12 +52,16 @@ class Pix2Pix(BasicNN):
         :param kwargs: BasicNN关键词参数
         """
         self.direction = direction
+        device = torch.device('cpu') if 'device' not in kwargs.keys() else kwargs['device']
+        g_kwargs.update({"device": device if "device" not in g_kwargs.keys() else g_kwargs["device"]})
+        d_kwargs.update({"device": device if "device" not in d_kwargs.keys() else d_kwargs["device"]})
         netG = Pix2Pix_G(*g_args, **g_kwargs)
 
         kwargs['input_size'] = netG.input_size[1:]
         if isTrain:
             # 定义一个分辨器
             # conditional GANs需要输入和输出图片，因此分辨器的通道数为input_nc + output_nc
+            assert "input_size" not in d_kwargs.keys(), f"{Pix2Pix_D.__name__}不支持赋值输入大小！"
             d_kwargs['input_size'] = (g_args[1] + g_args[2], *netG.input_size[2:])
             netD = Pix2Pix_D(g_args[1] + g_args[2], *d_args, **d_kwargs)
             super(Pix2Pix, self).__init__(OrderedDict([
