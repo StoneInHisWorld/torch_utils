@@ -35,7 +35,7 @@ class UNet128Genarator(nn.Sequential):
             nn.ReLU(True),
             nn.ConvTranspose2d(i, o, kernel_size=kernel_size, stride=2, padding=1),
             nn.BatchNorm2d(o, momentum=bn_momen),
-            nn.Dropout(dropout, True),
+            nn.Dropout(dropout, True)
         )
         base_channel = int(base_channel)
         self.contracting_path = [

@@ -230,28 +230,28 @@ class BasicNN(nn.Sequential):
         total = reduce(lambda x, y: x + y, ls, zeros)
         total.backward()
 
-    def get_clone_function(self):
-        parameter_group = {name: param for name, param in self._construction_parameters.items()}
-        args_group = [
-            k for k, _ in filter(
-                lambda p: p[1].kind == p[1].POSITIONAL_OR_KEYWORD or
-                          p[1].kind == p[1].POSITIONAL_ONLY or
-                          p[1].kind == p[1].VAR_POSITIONAL,
-                parameter_group.items()
-            )
-        ]
-        kwargs_group = [
-            k for k, _ in filter(
-                lambda p: p[1].kind == p[1].KEYWORD_ONLY or p[1].kind == p[1].VAR_KEYWORD,
-                parameter_group.items()
-            )
-        ]
-        kwargs = {}
-        for k in kwargs_group:
-            kwargs.update(self._construction_variables[k])
-        return [
-            self._construction_variables[k] for k in args_group
-        ], kwargs
+    # def get_clone_function(self):
+    #     parameter_group = {name: param for name, param in self._construction_parameters.items()}
+    #     args_group = [
+    #         k for k, _ in filter(
+    #             lambda p: p[1].kind == p[1].POSITIONAL_OR_KEYWORD or
+    #                       p[1].kind == p[1].POSITIONAL_ONLY or
+    #                       p[1].kind == p[1].VAR_POSITIONAL,
+    #             parameter_group.items()
+    #         )
+    #     ]
+    #     kwargs_group = [
+    #         k for k, _ in filter(
+    #             lambda p: p[1].kind == p[1].KEYWORD_ONLY or p[1].kind == p[1].VAR_KEYWORD,
+    #             parameter_group.items()
+    #         )
+    #     ]
+    #     kwargs = {}
+    #     for k in kwargs_group:
+    #         kwargs.update(self._construction_variables[k])
+    #     return [
+    #         self._construction_variables[k] for k in args_group
+    #     ], kwargs
 
     def get_lr_groups(self):
         return self.lr_names, [
@@ -271,9 +271,6 @@ class BasicNN(nn.Sequential):
                          "test_ls_names"]:
                 if hasattr(self, name):
                     delattr(self, name)
-            # del self.optimizer_s, self.scheduler_s, self.lr_names, \
-            #     self.train_ls_fn_s, self.train_ls_names, \
-            #     self.test_ls_fn_s, self.test_ls_names
         self._ready = False
         for bnn in filter(lambda m: isinstance(m, BasicNN), self.children()):
             bnn.deactivate()
