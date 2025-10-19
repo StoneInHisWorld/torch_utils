@@ -245,53 +245,15 @@ class Pix2Pix_G(BasicNN):
     def _get_ls_fn(self, ls_args):
         if hasattr(self, "train_ls_fn_s"):
             # 如果本网络已经指定了训练损失函数，则说明此时赋予的是测试损失函数
-            return _get_ls_fn(False, True, *ls_args)
+            return _get_ls_fn(False, self.__class__, *ls_args)
         else:
-            return _get_ls_fn(True, True, *ls_args)
-        # assert len(args) <= 1, f'Pix2Pix暂不支持指定多种损失函数'
-        # if len(args) == 0:
-        #     args = ('cGAN', {})
-        # ls_fn_s, ls_name_s = [], []
-        # for (ss, kwargs) in args:
-        #     # 根据ss判断损失函数类型
-        #     if ss == 'cGAN':
-        #         if hasattr(self, "train_ls_fn_s"):
-        #             ls_fn, ls_name = cGAN_ls_fn(False, True, **kwargs)
-        #         else:
-        #             ls_fn, ls_name = cGAN_ls_fn(False, True, **kwargs)
-        #     elif ss == 'pcc':
-        #         ls_fn, ls_name = self.pcc_ls_fn(**kwargs)
-        #     else:
-        #         raise NotImplementedError(f'Pix2Pix_G暂不支持本损失函数模式{ss}，目前支持{supported_ls_fns}')
-        #     ls_fn_s.append(ls_fn)
-        #     # 指定输出的训练损失类型
-        #     ls_name_s.append(ls_name)
-        # return ls_fn_s, ls_name_s
+            return _get_ls_fn(True, self.__class__, *ls_args)
 
     def _get_optimizer(self, o_args) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
         return _get_optimizer(self, *o_args)
 
     def _get_lr_scheduler(self, l_args):
-        return _get_lr_scheduler(self.optimizer_s[0], *l_args)
-
-    # def forward_backward(self, X, y, backward=True):
-    #     """
-    #     前向传播与反向传播函数。本函数不返回分辨器的预测值。
-    #
-    #     param X: 张量元组（X, pred），其中pred为生成器的预测值
-    #     """
-    #     optimizer = self.optimizer_s[0]
-    #     X, pred = X
-    #     if backward:
-    #         ls_fn = self.train_ls_fn_s[0]
-    #         optimizer.zero_grad()  # set G's gradients to zero
-    #         ls = ls_fn(X, y, pred)
-    #         ls[0].backward()
-    #         optimizer.step()  # update G's weights
-    #     else:
-    #         ls_fn = self.test_ls_fn_s[0]
-    #         ls = ls_fn(X, y, pred)
-    #     return None, ls
+        return _get_lr_scheduler(self.__class__, self.optimizer_s[0], *l_args)
 
     def _forward_impl(self, X, y):
         X, pred, netD = X

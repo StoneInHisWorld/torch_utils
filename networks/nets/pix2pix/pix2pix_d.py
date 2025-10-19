@@ -141,15 +141,15 @@ class Pix2Pix_D(BasicNN):
     def _get_ls_fn(self, ls_args: List[Tuple[str, dict]]):
         if hasattr(self, "train_ls_fn_s"):
             # 如果本网络已经指定了训练损失函数，则说明此时赋予的是测试损失函数
-            return _get_ls_fn(False, False, *ls_args)
+            return _get_ls_fn(False, self.__class__, *ls_args)
         else:
-            return _get_ls_fn(True, False, *ls_args)
+            return _get_ls_fn(True, self.__class__, *ls_args)
 
     def _get_optimizer(self, o_args):
         return _get_optimizer(self, *o_args)
 
     def _get_lr_scheduler(self, l_args):
-        return _get_lr_scheduler(self.optimizer_s[0], *l_args)
+        return _get_lr_scheduler(self.__class__, self.optimizer_s[0], *l_args)
 
     # def forward_backward(self, X, y, backward=True):
     #     """
