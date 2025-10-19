@@ -21,26 +21,17 @@ def default_transit_fn(
     :param kwargs: 预处理所用关键字参数
     :return: 数据批次
     """
-    # print('fetch!')
-    # device = kwargs['device']
-    # batch = (
-    #     batch[0].to(device, non_blocking=kwargs['non_blocking']),
-    #     batch[1].to(device, non_blocking=kwargs['non_blocking'])
-    # )
-    # if kwargs['share_memory']:
-    #     batch = batch[0].share_memory_(), batch[1].share_memory_()
-    # return indicated_transit_fn(batch)
     X, y = batch
     device = torch.device(device)
-    if X.device != device:
-        X = X.to(device, non_blocking=non_blocking)
-    if y.device != device:
-        y = y.to(device, non_blocking=non_blocking)
-    if share_memory:
-        X, y = X.share_memory_(), y.share_memory_()
     if indicated_transit_fn:
-        return indicated_transit_fn((X, y), **kwargs)
+        return indicated_transit_fn(batch, **kwargs)
     else:
+        if X.device != device:
+            X = X.to(device, non_blocking=non_blocking)
+        if y.device != device:
+            y = y.to(device, non_blocking=non_blocking)
+        if share_memory:
+            X, y = X.share_memory_(), y.share_memory_()
         return X, y
 
 
@@ -66,7 +57,6 @@ class DataLoader(DLoader):
         :param kwargs: pytorch.utils.data.DataLoader的额外参数
         """
         self.transit_kwargs = transit_kwargs
-        # self.transit_fn = dill.dumps(transit_fn)
         self.transit_fn = functools.partial(
             default_transit_fn, device, non_blocking, share_memory, transit_fn
         )
@@ -75,7 +65,6 @@ class DataLoader(DLoader):
         super().__init__(dataset, batch_size, **kwargs)
 
     def __iter__(self):
-        # transit_fn = dill.loads(self.transit_fn)
         unwrapped_generator = (
             self.transit_fn(batch, **self.transit_kwargs)
             for batch in super().__iter__()
