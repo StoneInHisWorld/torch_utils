@@ -1,5 +1,7 @@
 import functools
 
+from sympy import false
+
 from ... import check_prepare_args
 
 supported_ls_fns = ['pcc', 'cGAN']
@@ -7,15 +9,16 @@ supported_ls_fns = ['pcc', 'cGAN']
 import torch
 import utils.func.torch_tools as ttools
 
-
-def _get_ls_fn(is_train, GorD, *args):
+# TODO: Untested!
+def _get_ls_fn(is_train, module, *args):
     assert len(args) <= 1, f'Pix2Pix暂不支持指定多种损失函数'
     # 设置默认值
     if len(args) == 0:
         args = ('cGAN', {})
     ls_fn_s, ls_name_s = [], []
+    GorD = "G" in module.__name__
     for i_args in args:
-        ss, kwargs = check_prepare_args(*i_args)
+        ss, kwargs = check_prepare_args(module, *i_args)
         # 根据ss判断损失函数类型
         if ss == 'cGAN':
             ls_fn, ls_name = cGAN_ls_fn(is_train, GorD, **kwargs)
@@ -41,50 +44,12 @@ def cGAN_ls_fn(is_train, GorD, **kwargs):
     size_averaged = kwargs.pop('size_averaged', True)
     lambda_l1 = kwargs.pop('lambda_l1', 100.)
     device = kwargs.pop('device', torch.device('cpu'))
-    # except IndexError:
-    #     # 如果没有传递参数
-    #     gan_mode = 'lsgan'
-    #     reduced_form = False
-    #     lambda_l1 = 100.
-    #     kwargs = {}
-    #     size_averaged = True
     # GAN不接受size_averaged参数
     if not size_averaged and 'reduction' not in kwargs.keys():
         kwargs['reduction'] = 'none'
     criterionGAN = ttools.get_ls_fn('gan', gan_mode=gan_mode, device=device, **kwargs)
     criterionL1 = ttools.get_ls_fn('l1', **kwargs)
-    # criterionGAN = lambda pred, target_is_real: criterionGAN(pred, target_is_real)
-    # criterionL1 = lambda X, y: criterionL1(X, y) * lambda_l1
     criterionL1 = functools.partial(l1loss, computer=criterionL1, lambda_l1=lambda_l1)
-
-    # def G_ls_fn(X, y, pred):
-    #     # 首先，G(A)需要骗过分辨器
-    #     fake_AB = torch.cat((X, pred), 1)
-    #     pred_fake = self.netD(fake_AB)
-    #     gan_ls = self.criterionGAN(pred_fake, True)
-    #     l1_ls = self.criterionL1(pred, y)
-    #     if not size_averaged:
-    #         gan_ls = gan_ls.mean(dim=list(range(len(pred_fake.shape)))[1:])
-    #         l1_ls = l1_ls.mean(dim=list(range(len(pred.shape)))[1:])
-    #     if reduced_form:
-    #         return gan_ls + l1_ls
-    #     else:
-    #         return gan_ls + l1_ls, gan_ls, l1_ls
-    #
-    # def D_ls_fn(X, y, pred):
-    #     fake_AB = torch.cat((X, pred), 1)
-    #     pred_fake = self.netD(fake_AB.detach())
-    #     fake_ls = self.criterionGAN(pred_fake, False)
-    #     # 真实值
-    #     real_AB = torch.cat((X, y), 1)
-    #     pred_real = self.netD(real_AB)
-    #     real_ls = self.criterionGAN(pred_real, True)
-    #     # 组合损失值并计算梯度，0.5是两个预测值的权重
-    #     ls = (fake_ls + real_ls) * 0.5
-    #     if reduced_form:
-    #         return ls
-    #     else:
-    #         return ls, real_ls, fake_ls
 
     if is_train:
         ls_fn = [functools.partial(cGAN_G_ls_fn, criterionGAN=criterionGAN, criterionL1=criterionL1,
@@ -102,7 +67,6 @@ def cGAN_ls_fn(is_train, GorD, **kwargs):
             ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_L1']
         else:
             ls_names = []
-        # ls_names = ['G_LS'] if reduced_form else ['G_LS', 'G_GAN', 'G_L1']
     return ls_fn, ls_names
 
 
@@ -112,19 +76,6 @@ def pccloss(X, y, computer=ttools.get_ls_fn('pcc'), lambda_pcc=100):
 
 def pcc_ls_fn(is_train, GorD, **kwargs):
     # 处理关键词参数
-    # try:
-    #     # kwargs = args[0]
-    #     gan_mode = kwargs.pop('gan_mode', 'lsgan')
-    #     reduced_form = kwargs.pop('reduced_form', False)
-    #     size_averaged = kwargs.pop('size_averaged', True)
-    #     lambda_PCC = kwargs.pop('lambda_pcc', 1.)
-    # except IndexError:
-    #     # 如果没有传递参数
-    #     gan_mode = 'lsgan'
-    #     reduced_form = False
-    #     lambda_PCC = 1.
-    #     kwargs = {}
-    #     size_averaged = True
     gan_mode = kwargs.pop('gan_mode', 'lsgan')
     reduced_form = kwargs.pop('reduced_form', False)
     size_averaged = kwargs.pop('size_averaged', True)
@@ -135,7 +86,6 @@ def pcc_ls_fn(is_train, GorD, **kwargs):
         kwargs['reduction'] = 'none'
     criterionGAN = ttools.get_ls_fn('gan', gan_mode=gan_mode, device=device, **kwargs)
     criterionPCC = ttools.get_ls_fn('pcc', **kwargs)
-    # self.criterionGAN = lambda pred, target_is_real: criterionGAN(pred, target_is_real)
     criterionPCC = functools.partial(l1loss, computer=criterionPCC, lambda_l1=lambda_PCC)
 
     if is_train:
@@ -208,7 +158,7 @@ def D_ls_fn(X, y, pred,
         return ls, real_ls, fake_ls
 
 
-def _get_lr_scheduler(optimizer, *args):
+def _get_lr_scheduler(module, optimizer, *args):
     """获取一个学习率规划器
 
     对于 "linear" 类的规划器，设定为在 “n_epochs” 世代内保持原有学习率，在此后的 “n_epochs_decay” 线性衰减至0。
@@ -224,7 +174,7 @@ def _get_lr_scheduler(optimizer, *args):
     elif len(args) > 1:
         raise ValueError(f"Pix2Pix的子模块只支持一组学习率规划器参数，然而却收到了{len(args)}组！")
     else:
-        ss, kwargs = check_prepare_args(*args[0])
+        ss, kwargs = check_prepare_args(module.__class__, *args[0])
     # 设置默认值
     if ss == 'linear':
         epoch_count = 1 if 'epoch_count' not in kwargs.keys() else kwargs['epoch_count']
@@ -254,37 +204,6 @@ def _get_lr_scheduler(optimizer, *args):
         eta_min = 0 if 'eta_min' not in kwargs.keys() else kwargs['eta_min']
         kwargs.update({'T_max': T_max, 'eta_min': eta_min})
     return [ttools.get_lr_scheduler(optimizer, ss, **kwargs)]
-    # scheduler_s = []
-    # for (ss, kwargs), optimizer in zip_longest(args, optimizer, fillvalue=(None, None)):
-    #     if ss is None or optimizer == (None, None):
-    #         break
-    #     if ss == 'linear':
-    #         epoch_count = 1 if 'epoch_count' not in kwargs.keys() else kwargs['epoch_count']
-    #         n_epochs_decay = 100 if 'n_epochs_decay' not in kwargs.keys() else kwargs['n_epochs_decay']
-    #         n_epochs = 100 if 'n_epochs' not in kwargs.keys() else kwargs['n_epochs']
-    #
-    #         def lambda_rule(epoch):
-    #             lr_l = 1.0 - max(0, epoch + epoch_count - n_epochs) / float(n_epochs_decay + 1)
-    #             return lr_l
-    #
-    #         ss = 'lambda'
-    #         kwargs['lr_lambda'] = lambda_rule
-    #     elif ss == 'step':
-    #         step_size = 50 if 'step_size' not in kwargs.keys() else kwargs['step_size']
-    #         gamma = 0.1 if 'gamma' not in kwargs.keys() else kwargs['gamma']
-    #         kwargs.update({'step_size': step_size, 'gamma': gamma})
-    #     elif ss == 'plateau':
-    #         mode = 'min' if 'mode' not in kwargs.keys() else kwargs['mode']
-    #         factor = 0.2 if 'factor' not in kwargs.keys() else kwargs['factor']
-    #         threshold = 0.01 if 'threshold' not in kwargs.keys() else kwargs['threshold']
-    #         patience = 5 if 'patience' not in kwargs.keys() else kwargs['patience']
-    #         kwargs.update({'mode': mode, 'factor': factor, 'threshold': threshold, 'patience': patience})
-    #     elif ss == 'cosine':
-    #         T_max = 100 if 'T_max' not in kwargs.keys() else kwargs['T_max']
-    #         eta_min = 0 if 'eta_min' not in kwargs.keys() else kwargs['eta_min']
-    #         kwargs.update({'T_max': T_max, 'eta_min': eta_min})
-    #     scheduler_s.append(ttools.get_lr_scheduler(optimizer, ss, **kwargs))
-    # return scheduler_s
 
 
 def _get_optimizer(module, *args):
@@ -294,23 +213,9 @@ def _get_optimizer(module, *args):
     :param args: 各个优化器的类型以及关键字参数，如果指定数目少于2个，则会用论文中的参数填充。
     :return: 优化器序列，学习率名称序列
     """
-    # # 如果指定参数少于2个，则使用默认值填充至2个
-    # if len(args) < 2:
-    #     # 如果优化器类型指定太少，则使用默认值补充
-    #     args = (*args, *[('adam', {}) for _ in range(2 - len(args))])
     assert len(args) == 1, f"{module.__class__.__name__}只接受一组优化器参数，然而收到了{len(args)}组参数！"
-    type_s, kwargs = check_prepare_args(*args[0])
+    type_s, kwargs = check_prepare_args(module.__class__, *args[0])
     return [ttools.get_optimizer(module, type_s, **kwargs)], [f"{module.__class__.__name__[-1]}_LRs"]
-    # # 检查优化器参数
-    # optimizers = []
-    # for (type_s, kwargs), net in zip(args, [self.netG, self.netD]):
-    #     # 设置默认值
-    #     if 'lr' not in kwargs.keys():
-    #         kwargs['lr'] = 0.2
-    #     if 'betas' not in kwargs.keys():
-    #         kwargs['betas'] = (0.1, 0.999)
-    #     optimizers.append(ttools.get_optimizer(net, type_s, **kwargs))
-    # return optimizers, ['G_lrs', 'D_lrs']
 
 
 def _backward_impl(main_ls):
