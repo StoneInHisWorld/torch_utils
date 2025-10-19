@@ -62,7 +62,7 @@ class BasicNN(nn.Sequential):
         """
         optimizer_s, lr_names = [], []
         for i, i_args in enumerate(o_args):
-            type_s, kwargs = check_prepare_args(*i_args)
+            type_s, kwargs = check_prepare_args(self.__class__, *i_args)
             optimizer_s.append(ttools.get_optimizer(self, type_s, **kwargs))
             lr_names.append(f'LR_{i}')
         return optimizer_s, lr_names
@@ -77,7 +77,7 @@ class BasicNN(nn.Sequential):
         """
         schedulers = []
         for optimizer, i_args in zip(self.optimizer_s, l_args):
-            type_s, kwargs = check_prepare_args(*i_args)
+            type_s, kwargs = check_prepare_args(self.__class__, *i_args)
             schedulers.append(ttools.get_lr_scheduler(optimizer, type_s, **kwargs))
         return schedulers
 
@@ -92,7 +92,7 @@ class BasicNN(nn.Sequential):
         """
         fn_s, name_s = [], []
         for i_args in ls_args:
-            type_s, kwargs = check_prepare_args(*i_args)
+            type_s, kwargs = check_prepare_args(self.__class__, *i_args)
             # 根据参数获取损失函数
             name_s.append(type_s.upper())
             size_averaged = kwargs.pop('size_averaged', True)
