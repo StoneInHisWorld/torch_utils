@@ -2,10 +2,12 @@ from itertools import zip_longest
 from typing import Iterable
 
 
-def check_prepare_args(*args):
-    assert len(args) == 2, f"准备元组参数长度需要为2，分别为类型字符串和构造关键字参数。收到的参数数量为{len(args)}！"
+def check_prepare_args(who: type, *args):
+    assert len(args) == 2, (f"准备元组参数长度需要为2，分别为类型字符串和构造关键字参数。"
+                            f"{who.__name__}收到的参数数量为{len(args)}！")
     assert isinstance(args[0], str) and isinstance(args[1], dict), \
-        f"准备元组参数分别为类型字符串和构造关键字参数，收到的参数类型为{type(args[0])}和{type(args[1])}！"
+        (f"准备元组参数分别为类型字符串和构造关键字参数，"
+         f"{who.__name__}收到的参数类型为{type(args[0])}和{type(args[1])}！")
     return args
 
 
