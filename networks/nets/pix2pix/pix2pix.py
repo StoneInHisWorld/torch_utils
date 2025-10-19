@@ -76,18 +76,22 @@ class Pix2Pix(BasicNN):
         super().activate(is_train, o_args, l_args, tr_ls_args, ts_ls_args)
         if is_train:
             if len(self.optimizer_s) > 0:
-                warnings.warn("pix2pix不接受优化器参数！将去除已赋值的优化器，并使用生成器和分辨器的学习率名称")
+                warnings.warn(f"{self.__class__.__name__}不接受优化器参数！"
+                              f"将去除已赋值的优化器，并使用生成器和分辨器的学习率名称")
                 self.optimizer_s = []
             self.lr_names = self.netG.lr_names + self.netD.lr_names
             if len(self.scheduler_s) > 0:
-                warnings.warn("pix2pix不接受学习率规划器参数！将去除已赋值的学习率规划器")
+                warnings.warn(f"{self.__class__.__name__}不接受学习率规划器参数！"
+                              f"将去除已赋值的学习率规划器")
                 self.scheduler_s = []
             if len(self.train_ls_fn_s) > 0:
-                warnings.warn("pix2pix不接受训练损失函数参数！将去除已赋值的训练损失函数，并使用生成器和分辨器的训练损失函数名称")
+                warnings.warn(f"{self.__class__.__name__}不接受训练损失函数参数！"
+                              f"将去除已赋值的训练损失函数，并使用生成器和分辨器的训练损失函数名称")
                 self.train_ls_fn_s = []
             self.train_ls_names = self.netG.train_ls_names + self.netD.train_ls_names
         if len(self.test_ls_fn_s) > 0:
-            warnings.warn("pix2pix不接受测试损失函数参数！将去除已赋值的测试损失函数，并使用生成器和分辨器的测试损失函数名称")
+            warnings.warn(f"{self.__class__.__name__}不接受测试损失函数参数！"
+                          f"将去除已赋值的测试损失函数，并使用生成器和分辨器的测试损失函数名称")
             self.test_ls_fn_s = []
         self.test_ls_names = self.netG.test_ls_names
 
