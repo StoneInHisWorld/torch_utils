@@ -15,7 +15,7 @@ class Decoder(BasicNN):
 
     @abstractmethod
     def __init__(self, *args, **kwargs):
-        raise NotImplementedError("Decoder解码器类是抽象类，需要继承之后才能使用")
+        super().__init__(*args, **kwargs)
 
     @abstractmethod
     def init_state(self, enc_outputs, *args):
