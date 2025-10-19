@@ -65,10 +65,10 @@ class SelfDefinedDataSet:
         self.reader = self._get_reader()
         if not self.bulk_preprocess:
             print(f'已选择单例预处理，将会在数据读取后立即进行预处理。本数据集将不会存储原始数据！')
+            assert is_train, '测试模式下不允许单例预处理，否则将无法访问原始数据'
             if config['lazy']:
                 warnings.warn('懒加载和单例预处理冲突，优先选择单例预处理！')
                 config['lazy'] = False
-            assert is_train, '测试模式下不允许单例预处理，否则将无法访问原始数据'
         else:
             print("已选择批量预处理，将会在转化成数据迭代器前进行预处理")
         if is_train:
@@ -103,13 +103,13 @@ class SelfDefinedDataSet:
         else:
             print(f'测试集长度为{len(self._test_f)}')
         print("******************************************")
-        # 获取特征集、标签集及其索引集的预处理程序
-        if not self.bulk_preprocess:
-            # 整理读取和预处理过后的数据，并清空预处理程序
-            self._train_f = torch.vstack(self._train_f)
-            self._train_l = torch.vstack(self._train_l)
-            self._test_f = torch.vstack(self._test_f)
-            self._test_l = torch.vstack(self._test_l)
+        # # 获取特征集、标签集及其索引集的预处理程序
+        # if not self.bulk_preprocess:
+        #     # 整理读取和预处理过后的数据，并清空预处理程序
+        #     self._train_f = torch.vstack(self._train_f)
+        #     self._train_l = torch.vstack(self._train_l)
+        #     self._test_f = torch.vstack(self._test_f)
+        #     self._test_l = torch.vstack(self._test_l)
 
     @abstractmethod
     def _check_path(self, root: str, which: str) -> [str, str, str, str]:
