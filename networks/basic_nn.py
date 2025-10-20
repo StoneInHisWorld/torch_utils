@@ -40,9 +40,6 @@ class BasicNN(nn.Sequential):
         # 初始化各模块
         super(BasicNN, self).__init__(*args)
         self._init_submodules(init_meth, **init_kwargs)
-        # self.optimizer_s = None
-        # self.scheduler_s = None
-        # self.train_ls_fn_s = None
         self._gradient_clipping = None
         # 设备迁移
         self.apply(lambda m: m.to(device))
@@ -219,45 +216,19 @@ class BasicNN(nn.Sequential):
             ls_fn_s = self.test_ls_fn_s
         return pred, [ls_fn(pred, y) for ls_fn in ls_fn_s]
 
-    def _backward_impl(self, *ls):
+    def _backward_impl(self, *ls_es):
         """反向传播实现
         可重载本函数实现定制的反向传播，默认对所有损失求和并反向传播
-        :param ls: 损失值
+        :param ls_es: 损失值
         :return: None
         """
-        assert len(ls) > 0, "反向传播没有收到损失值！"
-        zeros = torch.zeros(1, requires_grad=True, device=ls[0].device)
-        total = reduce(lambda x, y: x + y, ls, zeros)
+        assert len(ls_es) > 0, "反向传播没有收到损失值！"
+        zeros = torch.zeros(1, requires_grad=True, device=ls_es[0].device)
+        total = reduce(lambda x, y: x + y, ls_es, zeros)
         total.backward()
 
-    # def get_clone_function(self):
-    #     parameter_group = {name: param for name, param in self._construction_parameters.items()}
-    #     args_group = [
-    #         k for k, _ in filter(
-    #             lambda p: p[1].kind == p[1].POSITIONAL_OR_KEYWORD or
-    #                       p[1].kind == p[1].POSITIONAL_ONLY or
-    #                       p[1].kind == p[1].VAR_POSITIONAL,
-    #             parameter_group.items()
-    #         )
-    #     ]
-    #     kwargs_group = [
-    #         k for k, _ in filter(
-    #             lambda p: p[1].kind == p[1].KEYWORD_ONLY or p[1].kind == p[1].VAR_KEYWORD,
-    #             parameter_group.items()
-    #         )
-    #     ]
-    #     kwargs = {}
-    #     for k in kwargs_group:
-    #         kwargs.update(self._construction_variables[k])
-    #     return [
-    #         self._construction_variables[k] for k in args_group
-    #     ], kwargs
-
     def get_lr_groups(self):
-        return self.lr_names, [
-            [param['lr'] for param in optimizer.param_groups]
-            for optimizer in self.optimizer_s
-        ]
+        return self.lr_names, [optimizer.defaults['lr'] for optimizer in self.optimizer_s]
 
     def update_lr(self):
         for scheduler in self.scheduler_s:

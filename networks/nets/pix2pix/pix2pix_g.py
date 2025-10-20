@@ -263,5 +263,5 @@ class Pix2Pix_G(BasicNN):
             ls_fn = self.test_ls_fn_s[0]
         return None, [*ls_fn(X, y, pred, netD)]
 
-    def _backward_impl(self, *ls):
-        ls[0].backward()
+    def _backward_impl(self, *ls_es):
+        ls_es[0].backward()
