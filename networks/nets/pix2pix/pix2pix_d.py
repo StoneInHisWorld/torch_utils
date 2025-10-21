@@ -151,26 +151,6 @@ class Pix2Pix_D(BasicNN):
     def _get_lr_scheduler(self, l_args):
         return _get_lr_scheduler(self.__class__, self.optimizer_s[0], *l_args)
 
-    # def forward_backward(self, X, y, backward=True):
-    #     """
-    #     前向传播与反向传播函数。本函数不返回分辨器的预测值。
-    #
-    #     param X: 张量元组（X, pred），其中pred为生成器的预测值
-    #     """
-    #     optimizer = self.optimizer_s[0]
-    #     X, pred = X
-    #     if backward:
-    #         ls_fn = self.train_ls_fn_s[0]
-    #         self.requires_grad_(True)
-    #         optimizer.zero_grad()
-    #         ls = ls_fn(X, y, pred, self)
-    #         ls[0].backward()
-    #         optimizer.step()
-    #         self.requires_grad_(False)
-    #     else:
-    #         ls = None
-    #     return None, ls
-
     def _forward_impl(self, X, y):
         X, pred = X
         if torch.is_grad_enabled():
@@ -178,5 +158,5 @@ class Pix2Pix_D(BasicNN):
         else:
             return None, []
 
-    def _backward_impl(self, *ls):
-        ls[0].backward()
+    def _backward_impl(self, *ls_es):
+        ls_es[0].backward()

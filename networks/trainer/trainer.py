@@ -17,6 +17,9 @@ from utils.accumulator import Accumulator
 from utils.func import pytools as ptools
 from utils.history import History
 
+def add_lr_to_history(net, history):
+    lr_names, lrs = net.get_lr_groups()
+    history.add([f"{ln}_lrs" for ln in lr_names], lrs)
 
 class Trainer:
     """神经网络训练器对象，提供所有针对神经网络的操作，包括训练、验证、测试、预测"""
@@ -51,6 +54,9 @@ class Trainer:
         self.hps = hps
         self.runtime_cfg = runtime_cfg
         self.criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
+        if len(self.criterion_a) == 0:
+            raise ValueError(f"训练器没有拿到训练指标方法!"
+                             f"请检查自定义数据集类SelfDefinedDataSet中对于{module_class.__name__}的评价指标赋值。")
         self.pbar = None
 
     def train(self, data_iter) -> History:
@@ -102,67 +108,6 @@ class Trainer:
         history = train_fn(*train_args)
         pbar.close()
         return history
-
-    # @prepare('predict')
-    # def predict(self, wrap_fn=None, save_path=None):
-    #     """预测方法。
-    #     对于数据迭代器中的每一batch数据，保存输入数据、预测数据、标签集、准确率、损失值数据，并打包返回。
-    #     :param ls_fn_args: 损失函数序列的关键词参数
-    #     :param data_iter: 预测数据迭代器。
-    #     :param criterion_a: 计算准确度所使用的函数序列，该函数需要求出每个样本的准确率。签名需为：acc_func(Y_HAT, Y) -> float or torch.Tensor
-    #     :param wrap_fn: 对所有数据进行打包的方法。如不指定，则直接返回预测数据。签名需为：unwrap_fn(inputs, predictions, labels, metrics, losses) -> Any
-    #     :return: 打包好的数据集
-    #     """
-    #     # 提取训练器参数
-    #     net = self.module
-    #     criterion_a = self.criterion_a
-    #     pbar = self.pbar
-    #     # 如果传递了包装方法
-    #     if wrap_fn is not None:
-    #         # 将本次预测所产生的全部数据打包并返回。
-    #         inputs, predictions, labels, metrics, losses = [], [], [], [], []
-    #         # 对每个批次进行预测，并进行评价指标和损失值的计算
-    #         for fe_batch, lb_batch in pbar:
-    #             result = net.forward_backward(fe_batch, lb_batch, False)
-    #             pre_batch, ls_es = result
-    #             inputs.append(fe_batch)
-    #             predictions.append(pre_batch)
-    #             labels.append(lb_batch)
-    #             metrics_to_be_appended = [
-    #                 criterion(pre_batch, lb_batch, size_averaged=False)
-    #                 for criterion in criterion_a
-    #             ]
-    #             metrics.append(torch.vstack(metrics_to_be_appended).T)
-    #             losses.append(torch.vstack(ls_es).T)
-    #         pbar.set_description('结果计算完成')
-    #         # 将所有批次的数据堆叠在一起
-    #         inputs = torch.cat(inputs, dim=0)
-    #         predictions = torch.cat(predictions, dim=0)
-    #         labels = torch.cat(labels, dim=0)
-    #         metrics = torch.cat(metrics, dim=0)
-    #         losses = torch.cat(losses, dim=0)
-    #         # 获取输出结果需要的注解
-    #         comments = net.get_comment(
-    #             inputs, predictions, labels,
-    #             metrics, [ptools.get_computer_name(criterion) for criterion in criterion_a],
-    #             losses
-    #         )
-    #         # 将注解与所有数据打包，输出
-    #         predictions = wrap_fn(inputs, predictions, labels, comments)
-    #     else:
-    #         # 如果不需要打包数据，则直接返回预测数据集
-    #         predictions = []
-    #         for fe_batch, lb_batch in pbar:
-    #             predictions.append(net(fe_batch))
-    #         predictions = torch.cat(predictions, dim=0)
-    #     # # 如果指定了保存路径，则保存预测结果
-    #     # if save_path:
-    #     #     ptools.check_path(save_path)
-    #     #     with tqdm(predictions, unit='张', position=0, desc=f"正在保存结果……",
-    #     #               mininterval=1, leave=True, ncols=80) as pbar:
-    #     #         for i, res in enumerate(pbar):
-    #     #             res.save(os.path.join(save_path, f'{i}.png'), format='PNG', dpi=(400, 400), compress_level=0)
-    #     return predictions
 
     @prepare('predict')
     def predict(self, ret_ls_metric=True, ret_ds=True):
@@ -244,27 +189,22 @@ class Trainer:
         # 评价项
         criteria_names = [f'train_{ptools.get_computer_name(criterion)}' for criterion in criterion_a]
         # 学习率项
-        lr_names = net.lr_names
+        lr_names = [f'{lr}_lrs' for lr in net.lr_names]
         history = History(*(criteria_names + loss_names + lr_names))
         for epoch in range(n_epochs):
             pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中……')
-            history.add(
-                lr_names, [
-                    [param['lr'] for param in optimizer.param_groups]
-                    for optimizer in optimizer_s
-                ]
-            )
+            add_lr_to_history(net, history)
             # 记录批次训练损失总和，评价指标，样本数
             metric = Accumulator(len(loss_names + criteria_names) + 1)
             # 训练主循环
             for X, y in train_iter:
                 net.train()
-                pred, ls_es = net.forward_backward(X, y)
+                preds, ls_es = net.forward_backward(X, y)
                 with torch.no_grad():
-                    num_examples = X.shape[0]
+                    num_examples = len(preds)
                     correct_s = []
                     for criterion in criterion_a:
-                        correct = criterion(pred, y)
+                        correct = criterion(preds, y)
                         correct_s.append(correct)
                     metric.add(
                         *correct_s, *[ls * num_examples for ls in ls_es],
@@ -303,36 +243,25 @@ class Trainer:
         net = self.module
         criterion_a = self.criterion_a
         n_epochs = self.hps['epochs']
-        # optimizer_s = net.optimizer_s
-        # scheduler_s = net.scheduler_s
         # 损失项
         trls_names = [f'train_{item}' for item in net.train_ls_names]
         # 评价项
-        criteria_names = [
-            f'train_{ptools.get_computer_name(criterion)}' for criterion in criterion_a
-        ]
+        criteria_names = [f'train_{ptools.get_computer_name(criterion)}' for criterion in criterion_a]
         # 学习率项
-        lr_names = net.lr_names
+        lr_names = [f'{lr}_lrs' for lr in net.lr_names]
         history = History(*(criteria_names + trls_names + lr_names))
         # 世代迭代主循环
-
         for epoch in range(n_epochs):
             pbar.set_description(f'世代{epoch + 1}/{n_epochs} 训练中……')
-            # history.add(
-            #     lr_names, [
-            #         [param['lr'] for param in optimizer.param_groups]
-            #         for optimizer in optimizer_s
-            #     ]
-            # )
-            history.add(*net.get_lr_groups())
+            # history.add(*net.get_lr_groups())
+            add_lr_to_history(net, history)
             # 记录批次训练损失总和，评价指标，样本数
             metric = Accumulator(len(trls_names + criteria_names) + 1)
             # 训练主循环
             for X, y in train_iter:
-                # net.train()
                 pred, ls_es = net.forward_backward(X, y)
                 with torch.no_grad():
-                    num_examples = X.shape[0]
+                    num_examples = len(pred)
                     correct_s = []
                     for criterion in criterion_a:
                         correct = criterion(pred, y)
@@ -342,9 +271,7 @@ class Trainer:
                         num_examples
                     )
                 pbar.update(1)
-            # # 进行学习率更新
-            # for scheduler in scheduler_s:
-            #     scheduler.step()
+            # 进行学习率更新
             net.update_lr()
             valid_log = self.__valid(valid_iter)
             # 记录训练数据
@@ -416,10 +343,10 @@ class Trainer:
         # 计算准确率和损失值
         for features, labels in test_iter:
             preds, ls_es = net.forward_backward(features, labels, False)
+            num_samples = len(preds)
             metric.add(
                 *[criterion(preds, labels) for criterion in criterion_a],
-                *[ls * len(features) for ls in ls_es],
-                len(features)
+                *[ls * num_samples for ls in ls_es], len(preds)
             )
             pbar.update(1)
         # 生成测试日志
@@ -451,10 +378,10 @@ class Trainer:
         net.eval()
         for features, labels in valid_iter:
             preds, ls_es = net.forward_backward(features, labels, False)
+            num_samples = len(preds)
             metric.add(
                 *[criterion(preds, labels) for criterion in criterion_a],
-                *[ls * len(features) for ls in ls_es],
-                len(features)
+                *[ls * num_samples for ls in ls_es], num_samples
             )
             pbar.update(1)
         # 生成测试日志
@@ -468,99 +395,100 @@ class Trainer:
         net.train()
         return log
 
-    def __train_with_multithreading(self, train_iter, valid_iter=None) -> History:
-        """多进程训练实现
-        :param train_iter: 训练数据迭代器
-        :param valid_iter: 验证数据迭代器
-        :param pbar: 进度条
-        :return: 训练历史记录
-        """
-        # 提取训练器参数
-        pbar = self.pbar
-        n_epochs = self.hps['epochs']
-        history = None
-
-        pbar.set_description('\r正在创建队列和事件对象……')
-        # 使用进程池处理训练进程和记录进程
-        pbar_Q = PQueue()
-        data_Q = PQueue()
-        eval_Q = PQueue()
-        log_Q = PQueue()
-        end_env = PEvent()
-        # 将无法pickle的对象进行特殊序列化
-        pbar.set_description('\r正在开启子进程……')
-        # self.module = dill.dumps(self.module)
-        del self.pbar
-        # 生成子进程并开启
-        process_pool = []
-        try:
-            data_subprocess = Process(
-                target=data_iter_impl,
-                args=(n_epochs, dill.dumps(train_iter), data_Q, end_env)
-            )
-            process_pool = [data_subprocess]
-            data_subprocess.start()
-            pbar.set_description('\r数据加载子进程已开启')
-            train_subprocess = Process(
-                target=train_impl,
-                args=(dill.dumps(self), pbar_Q, eval_Q, log_Q, data_Q, end_env)
-            )
-            process_pool += [train_subprocess]
-            train_subprocess.start()
-            pbar.set_description('\r训练子进程已开启')
-            # 如果self携带有网络，则将网络对象解绑以减少内存消耗
-            module = self.module
-            self.module = None
-            eval_subprocess = Process(
-                target=eval_impl,
-                args=(module.train_ls_names, self.criterion_a, pbar_Q, eval_Q, log_Q, end_env)
-            )
-            process_pool += [eval_subprocess]
-            # 日志进程
-            if valid_iter:
-                log_subprocess = Process(
-                    target=vlog_impl,
-                    args=(self, dill.dumps(valid_iter), pbar_Q, log_Q, end_env)
-                )
-            else:
-                log_subprocess = Process(
-                    target=tlog_impl,
-                    args=(self, pbar_Q, log_Q, end_env)
-                )
-            process_pool += [log_subprocess]
-            for p in process_pool:
-                if not p.is_alive():
-                    p.start()
-            pbar.set_description('\r全部子进程已开启')
-            self.module = module
-            # 接受进度条队列消息
-            while True:
-                item = pbar_Q.get()
-                if item is None:
-                    break
-                elif isinstance(item, Exception):
-                    raise InterruptedError('训练过程中某处触发了异常，请根据上条Trackback信息进行排查！')
-                elif isinstance(item, int):
-                    pbar.update(item)
-                elif isinstance(item, str):
-                    pbar.set_description(item)
-                elif isinstance(item, History):
-                    history = item
-                    break
-                else:
-                    raise ValueError(f'不识别的信号{item}')
-            for p in process_pool:
-                if p.is_alive():
-                    p.join()
-        except Exception as e:
-            for p in process_pool:
-                if p.is_alive():
-                    p.terminate()
-            raise e
-        self.pbar = pbar
-        if history is None:
-            raise RuntimeError('历史记录对象丢失！')
-        return history
+    #
+    # def __train_with_multithreading(self, train_iter, valid_iter=None) -> History:
+    #     """多进程训练实现
+    #     :param train_iter: 训练数据迭代器
+    #     :param valid_iter: 验证数据迭代器
+    #     :param pbar: 进度条
+    #     :return: 训练历史记录
+    #     """
+    #     # 提取训练器参数
+    #     pbar = self.pbar
+    #     n_epochs = self.hps['epochs']
+    #     history = None
+    #
+    #     pbar.set_description('\r正在创建队列和事件对象……')
+    #     # 使用进程池处理训练进程和记录进程
+    #     pbar_Q = PQueue()
+    #     data_Q = PQueue()
+    #     eval_Q = PQueue()
+    #     log_Q = PQueue()
+    #     end_env = PEvent()
+    #     # 将无法pickle的对象进行特殊序列化
+    #     pbar.set_description('\r正在开启子进程……')
+    #     # self.module = dill.dumps(self.module)
+    #     del self.pbar
+    #     # 生成子进程并开启
+    #     process_pool = []
+    #     try:
+    #         data_subprocess = Process(
+    #             target=data_iter_impl,
+    #             args=(n_epochs, dill.dumps(train_iter), data_Q, end_env)
+    #         )
+    #         process_pool = [data_subprocess]
+    #         data_subprocess.start()
+    #         pbar.set_description('\r数据加载子进程已开启')
+    #         train_subprocess = Process(
+    #             target=train_impl,
+    #             args=(dill.dumps(self), pbar_Q, eval_Q, log_Q, data_Q, end_env)
+    #         )
+    #         process_pool += [train_subprocess]
+    #         train_subprocess.start()
+    #         pbar.set_description('\r训练子进程已开启')
+    #         # 如果self携带有网络，则将网络对象解绑以减少内存消耗
+    #         module = self.module
+    #         self.module = None
+    #         eval_subprocess = Process(
+    #             target=eval_impl,
+    #             args=(module.train_ls_names, self.criterion_a, pbar_Q, eval_Q, log_Q, end_env)
+    #         )
+    #         process_pool += [eval_subprocess]
+    #         # 日志进程
+    #         if valid_iter:
+    #             log_subprocess = Process(
+    #                 target=vlog_impl,
+    #                 args=(self, dill.dumps(valid_iter), pbar_Q, log_Q, end_env)
+    #             )
+    #         else:
+    #             log_subprocess = Process(
+    #                 target=tlog_impl,
+    #                 args=(self, pbar_Q, log_Q, end_env)
+    #             )
+    #         process_pool += [log_subprocess]
+    #         for p in process_pool:
+    #             if not p.is_alive():
+    #                 p.start()
+    #         pbar.set_description('\r全部子进程已开启')
+    #         self.module = module
+    #         # 接受进度条队列消息
+    #         while True:
+    #             item = pbar_Q.get()
+    #             if item is None:
+    #                 break
+    #             elif isinstance(item, Exception):
+    #                 raise InterruptedError('训练过程中某处触发了异常，请根据上条Trackback信息进行排查！')
+    #             elif isinstance(item, int):
+    #                 pbar.update(item)
+    #             elif isinstance(item, str):
+    #                 pbar.set_description(item)
+    #             elif isinstance(item, History):
+    #                 history = item
+    #                 break
+    #             else:
+    #                 raise ValueError(f'不识别的信号{item}')
+    #         for p in process_pool:
+    #             if p.is_alive():
+    #                 p.join()
+    #     except Exception as e:
+    #         for p in process_pool:
+    #             if p.is_alive():
+    #                 p.terminate()
+    #         raise e
+    #     self.pbar = pbar
+    #     if history is None:
+    #         raise RuntimeError('历史记录对象丢失！')
+    #     return history
 
     def train_with_profiler(self, data_iter, log_path):
         # 提取训练器参数
