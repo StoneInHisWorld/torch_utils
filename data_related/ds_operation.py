@@ -82,10 +82,10 @@ def to_loader(
     :param kwargs: pytorch.utils.data.DataLoader的额外参数
     :return: 数据集加载器
     """
-    # if transit_fn is None:
-    #     transit_fn = default_transit_fn
     if transit_kwargs is None:
         transit_kwargs = {}
+    assert isinstance(max_prefetch, int), "数据集加载器的max_prefetch最大预先加载数需为整型int!" \
+                                          "请检查settings.json文件夹中的dl_kwargs赋值是否合法"
     if isinstance(dataset, LazyDataSet):
         # 懒加载需要保存有数据集预处理方法
         return LazyDataLoader(
