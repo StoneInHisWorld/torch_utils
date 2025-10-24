@@ -11,6 +11,7 @@ from .func import pytools as ptools
 
 from jsonref import JsonRef
 
+
 def resolve_jsonref(obj):
     """用于处理JsonRef对象"""
     if isinstance(obj, JsonRef):
