@@ -137,6 +137,7 @@ class prepare:
                 # 执行本体函数
                 with torch.no_grad():
                     result = func(*args, **kwargs)
+                self.__after_valid(args[0])
             elif self.what == 'test':
                 args = self.__prepare_test(*args)
                 # 执行本体函数
@@ -216,6 +217,16 @@ class prepare:
         if hasattr(trainer, 'pbar'):
             trainer.pbar.set_description('验证中……')
         return trainer, *args
+
+    @staticmethod
+    def __after_valid(trainer):
+        """进行验证准备
+        设置神经网络模式以及更新进度条
+
+        :param args: 需要传递的第一个参数为trainer对象
+        :return: args
+        """
+        trainer.module.train()
 
     @staticmethod
     def __prepare_test(*args):
