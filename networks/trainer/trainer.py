@@ -1,25 +1,26 @@
 import os.path
 
-import dill
 import torch
-from torch.multiprocessing import Event as PEvent
-from torch.multiprocessing import Process
-from torch.multiprocessing import SimpleQueue as PQueue
 from tqdm import tqdm
 
 from networks import BasicNN
 from networks.decorators import prepare
 from networks.trainer.__hook_impl import hook
 from networks.trainer.__profiler_impl import profiling_impl
-from networks.trainer.__subprocess_impl import data_iter_impl, train_impl, eval_impl, vlog_impl, \
-    tlog_impl
+from networks.trainer.__subprocess_impl import train_valid_impl
 from utils.accumulator import Accumulator
 from utils.func import pytools as ptools
 from utils.history import History
 
+
 def add_lr_to_history(net, history):
     lr_names, lrs = net.get_lr_groups()
     history.add([f"{ln}_lrs" for ln in lr_names], lrs)
+
+
+def is_multiprocessing(n_workers):
+    return n_workers >= 3
+
 
 class Trainer:
     """神经网络训练器对象，提供所有针对神经网络的操作，包括训练、验证、测试、预测"""
@@ -88,7 +89,7 @@ class Trainer:
             else:
                 raise ValueError(f"无法识别的数据迭代器，其提供的长度为{len(data_iter)}")
             # 判断是否要进行多线程训练
-            if not ptools.is_multiprocessing(n_workers):
+            if not is_multiprocessing(n_workers):
                 # 不启用多线程训练
                 if valid_iter is not None:
                     # 进行训练和验证
@@ -98,7 +99,7 @@ class Trainer:
                     train_fn, train_args = self.__train, (train_iter,)
             else:
                 # 启用多进程训练
-                train_fn, train_args = self.__train_with_multithreading, (train_iter, valid_iter)
+                train_fn, train_args = self.__train_and_valid_with_preprocessing, (train_iter, valid_iter)
         # 设置进度条
         pbar = tqdm(
             total=pbar_len, unit='批', position=0,
@@ -395,100 +396,80 @@ class Trainer:
         net.train()
         return log
 
-    #
-    # def __train_with_multithreading(self, train_iter, valid_iter=None) -> History:
-    #     """多进程训练实现
-    #     :param train_iter: 训练数据迭代器
-    #     :param valid_iter: 验证数据迭代器
-    #     :param pbar: 进度条
-    #     :return: 训练历史记录
-    #     """
-    #     # 提取训练器参数
-    #     pbar = self.pbar
-    #     n_epochs = self.hps['epochs']
-    #     history = None
-    #
-    #     pbar.set_description('\r正在创建队列和事件对象……')
-    #     # 使用进程池处理训练进程和记录进程
-    #     pbar_Q = PQueue()
-    #     data_Q = PQueue()
-    #     eval_Q = PQueue()
-    #     log_Q = PQueue()
-    #     end_env = PEvent()
-    #     # 将无法pickle的对象进行特殊序列化
-    #     pbar.set_description('\r正在开启子进程……')
-    #     # self.module = dill.dumps(self.module)
-    #     del self.pbar
-    #     # 生成子进程并开启
-    #     process_pool = []
-    #     try:
-    #         data_subprocess = Process(
-    #             target=data_iter_impl,
-    #             args=(n_epochs, dill.dumps(train_iter), data_Q, end_env)
-    #         )
-    #         process_pool = [data_subprocess]
-    #         data_subprocess.start()
-    #         pbar.set_description('\r数据加载子进程已开启')
-    #         train_subprocess = Process(
-    #             target=train_impl,
-    #             args=(dill.dumps(self), pbar_Q, eval_Q, log_Q, data_Q, end_env)
-    #         )
-    #         process_pool += [train_subprocess]
-    #         train_subprocess.start()
-    #         pbar.set_description('\r训练子进程已开启')
-    #         # 如果self携带有网络，则将网络对象解绑以减少内存消耗
-    #         module = self.module
-    #         self.module = None
-    #         eval_subprocess = Process(
-    #             target=eval_impl,
-    #             args=(module.train_ls_names, self.criterion_a, pbar_Q, eval_Q, log_Q, end_env)
-    #         )
-    #         process_pool += [eval_subprocess]
-    #         # 日志进程
-    #         if valid_iter:
-    #             log_subprocess = Process(
-    #                 target=vlog_impl,
-    #                 args=(self, dill.dumps(valid_iter), pbar_Q, log_Q, end_env)
-    #             )
-    #         else:
-    #             log_subprocess = Process(
-    #                 target=tlog_impl,
-    #                 args=(self, pbar_Q, log_Q, end_env)
-    #             )
-    #         process_pool += [log_subprocess]
-    #         for p in process_pool:
-    #             if not p.is_alive():
-    #                 p.start()
-    #         pbar.set_description('\r全部子进程已开启')
-    #         self.module = module
-    #         # 接受进度条队列消息
-    #         while True:
-    #             item = pbar_Q.get()
-    #             if item is None:
-    #                 break
-    #             elif isinstance(item, Exception):
-    #                 raise InterruptedError('训练过程中某处触发了异常，请根据上条Trackback信息进行排查！')
-    #             elif isinstance(item, int):
-    #                 pbar.update(item)
-    #             elif isinstance(item, str):
-    #                 pbar.set_description(item)
-    #             elif isinstance(item, History):
-    #                 history = item
-    #                 break
-    #             else:
-    #                 raise ValueError(f'不识别的信号{item}')
-    #         for p in process_pool:
-    #             if p.is_alive():
-    #                 p.join()
-    #     except Exception as e:
-    #         for p in process_pool:
-    #             if p.is_alive():
-    #                 p.terminate()
-    #         raise e
-    #     self.pbar = pbar
-    #     if history is None:
-    #         raise RuntimeError('历史记录对象丢失！')
-    #     return history
+    def __train_and_valid_with_preprocessing(self, train_iter, valid_iter) -> History:
+        """多进程训练实现
+        :param train_iter: 训练数据迭代器
+        :param valid_iter: 验证数据迭代器
+        :return: 训练历史记录
+        """
+
+        from torch.multiprocessing import Queue
+        from torch.multiprocessing import Process, Pipe
+        from threading import Thread
+
+        # 提取训练器参数
+        pbar = self.pbar
+        del self.pbar
+        n_epochs = self.hps['epochs']
+
+        pbar.set_description('\r正在创建队列和事件对象……')
+        # 进程通信队列
+        tdata_q = Queue(int(self.runtime_cfg['train_prefetch']))  # 传递训练数据队列
+        vdata_q = Queue(int(self.runtime_cfg['valid_prefetch']))  # 传递验证数据队列
+        pbar_q = Queue()  # 传递进度条更新消息队列
+        epoch_q = Queue()  # 传递世代更新消息队列
+
+        def update_pbar():
+            msg = pbar_q.get()
+            while msg:
+                assert isinstance(msg, int) or isinstance(msg, str), "进度条更新只接受数字或字符串更新！"
+                if isinstance(msg, int):
+                    pbar.update(msg)
+                else:
+                    pbar.set_description(msg)
+                msg = pbar_q.get()
+
+        # 生成子进程用于创建网络、执行网络更新并记录数据
+        # 搭建输出结果通信管道
+        parent_conn, child_conn = Pipe(duplex=False)
+        # 创建子线程进行训练和验证操作，并更新进度条
+        tv_subp = Process(target=train_valid_impl, args=(
+            self, tdata_q, vdata_q, pbar_q, epoch_q, child_conn
+        ))
+        pbar_update_thread = Thread(target=update_pbar)  # 更新进度条
+        # 开启两个子进程
+        pbar_update_thread.start()
+        tv_subp.start()
+        # 获取所有的数据，并且发送给训练进程
+        for epoch in range(n_epochs):
+            # 通知子进程新的世代开始了
+            epoch_q.put(epoch)
+            pbar.set_description(f'获取世代{epoch + 1}/{n_epochs}的训练数据……')
+            # 不断从训练数据集迭代器中取训练数据
+            for X, y in train_iter:
+                tdata_q.put((X.detach(), y.detach()))
+            # 通知训练进程，当前世代的数据已经传递完毕
+            tdata_q.put(None)
+            pbar.set_description(f'获取世代{epoch + 1}/{n_epochs}的验证数据……')
+            # 从验证迭代器中取验证数据
+            for X, y in valid_iter:
+                vdata_q.put((X.detach(), y.detach()))
+            # 通知验证进程，当前世代的数据已经传递完毕
+            vdata_q.put(None)
+            pbar.set_description(f'世代{epoch + 1}/{n_epochs} 数据获取完毕，等待网络消耗剩下的数据')
+        # 使用None通知子进程数据已经获取完毕
+        tdata_q.put(None)
+        vdata_q.put(None)
+        epoch_q.put(None)
+        # 处理随机顺序返回的结果
+        ret = [parent_conn.recv(), parent_conn.recv()]
+        if isinstance(ret[0], History) and isinstance(ret[1], BasicNN):
+            history, self.module = ret
+        elif isinstance(ret[0], BasicNN) and isinstance(ret[1], History):
+            self.module, history = ret
+        else:
+            raise ValueError(f"多进程管道接收到了异常的数据类型，为{type(ret[0])}和{type(ret[1])}")
+        return history
 
     def train_with_profiler(self, data_iter, log_path):
         # 提取训练器参数
