@@ -10,26 +10,27 @@ from .__hook_impl import hook
 
 @prepare('train')
 @hook()
-def train_valid_impl(trainer, tdata_q, vdata_q, pbar_q, epoch_q, result_conn):
+def train_valid_impl(trainer, tdata_pc, vdata_pc, pbar_q, epoch_pc, result_conn):
     net = trainer.module
-    # 传递训练数据的队列
-    tlog_q = Queue()  # 训练数据
-    vlog_q = Queue()  # 验证数据
-    lrlog_q = Queue()  # 学习率
-    log_epoch_q = Queue()  # 世代更新队列
+    # 传递训练数据的管道
+    ctx = torch.multiprocessing.get_context("spawn")
+    tlog_pc, tlog_cc = ctx.Pipe(False)  # 训练数据
+    vlog_pc, vlog_cc = ctx.Pipe(False)  # 验证数据
+    lr_pc, lr_cc = ctx.Pipe(False)  # 学习率
+    log_epoch_pc, log_epoch_cc = ctx.Pipe(False)  # 世代更新队列
     # 创建记录进程，处理评价指标的计算以及记录，损失值、学习率的记录的事项
     log_subp = Process(target=log_impl,
         args=(trainer.criterion_a, net.train_ls_names, net.test_ls_names, net.lr_names,
-              lrlog_q, tlog_q, vlog_q, log_epoch_q, pbar_q, result_conn)
+              lr_pc, tlog_pc, vlog_pc, log_epoch_pc, pbar_q, result_conn)
     )
     log_subp.start()
     # 通过队列获取世代更新消息。这里不能写成while q.get(): 因为这里的世代数会等于0
-    epoch = epoch_q.get()
+    epoch = epoch_pc.recv()
     while epoch is not None:
-        batch = tdata_q.get()  # TODO: 请参考DynamicDIMPLE是如何处理传输过来的张量全0的情况
+        batch = tdata_pc.recv()
         pbar_q.put(f"世代{epoch}训练开始")
-        log_epoch_q.put(epoch)
-        n_batch = 0
+        log_epoch_cc.send(epoch)
+        # n_batch = 0
         # print(f"拿到世代{epoch}的{n_batch}批次的训练数据")
         while batch is not None:
             """"训练实现"""
@@ -41,27 +42,28 @@ def train_valid_impl(trainer, tdata_q, vdata_q, pbar_q, epoch_q, result_conn):
             # print(f"世代{epoch}的{n_batch}批次前反向传播已经完成")
             # 数据传递给记录进程，进行评价指标计算、历史记录更新（损失值、评价指标、学习率）
             log_data = pred_s.detach().clone(), y.detach().clone(), [l.detach().clone() for l in ls_es]
-            tlog_q.put(log_data)
+            tlog_cc.send(log_data)
             # print(f"世代{epoch}的{n_batch}批次训练结果已经发送")
             # 获取下一批量数据
-            batch = tdata_q.get()
-            n_batch += 1
+            batch = tdata_pc.recv()
+            # n_batch += 1
             # if batch is not None:
             #     print(f"拿到世代{epoch}的{n_batch}批次的训练数据")
-        lrlog_q.put(net.get_lr_groups())
+        lr_cc.send(net.get_lr_groups())
         # print(f"世代{epoch}的学习率组已经发送")
         # 更新优化器学习率
         net.update_lr()
-        tlog_q.put(None)
+        tlog_cc.send(None)
         pbar_q.put(f"世代{epoch}训练完毕")
+        # print(f"世代{epoch}训练完毕")
         # 验证
-        __valid_impl(trainer, vdata_q, vlog_q, pbar_q, epoch)
-        epoch = epoch_q.get()
+        __valid_impl(trainer, vdata_pc, vlog_cc, pbar_q, epoch)
+        epoch = epoch_pc.recv()
     # 记录最后一次学习率，并通知学习率已经记录完毕
-    log_epoch_q.put(None)
-    lrlog_q.put(None)
+    log_epoch_cc.send(None)
+    lr_cc.send(None)
     # 使用None来通知记录进程“训练已经结束”
-    tlog_q.put(None)
+    tlog_cc.send(None)
     pbar_q.put(None)
     result_conn.send(net)
     log_subp.join()
@@ -69,7 +71,7 @@ def train_valid_impl(trainer, tdata_q, vdata_q, pbar_q, epoch_q, result_conn):
 
 @torch.no_grad()
 @prepare('valid')
-def __valid_impl(trainer, vdata_q, vlog_q, pbar_q, epoch):
+def __valid_impl(trainer, vdata_pc, vlog_cc, pbar_q, epoch):
     """验证函数实现
     每次取出验证数据供给器中的下一批次数据进行前向传播，之后计算评价指标和损失，生成验证日志。
 
@@ -79,26 +81,28 @@ def __valid_impl(trainer, vdata_q, vlog_q, pbar_q, epoch):
     # 提取出验证所需参数
     net = trainer.module
     # 固定网络
-    batch = vdata_q.get()
-    n_batch = 0
+    batch = vdata_pc.recv()
+    # n_batch = 0
+    # print(f"拿到世代{epoch}的{n_batch}批次的验证数据")
     pbar_q.put(f"世代{epoch}验证开始")
     while batch is not None:
         X, y = batch  # epoch应该每次都相同
         pred_s, ls_es = net.forward_backward(X, y, False)
         # 数据传递给记录进程，进行评价指标计算、历史记录更新（损失值、评价指标、学习率）
         log_data = pred_s.detach().clone(), y.detach().clone(), [l.detach().clone() for l in ls_es]
-        vlog_q.put(log_data)
+        vlog_cc.send(log_data)
         # print(f"世代{epoch}的{n_batch}批次的验证数据已经发送")
         # 获取下一批数据
-        batch = vdata_q.get()
-        n_batch += 1
+        batch = vdata_pc.recv()
+        # n_batch += 1
         # print(f"拿到世代{epoch}的{n_batch}批次的验证数据")
-    vlog_q.put(None)
+    vlog_cc.send(None)
     pbar_q.put(f"世代{epoch}验证完毕")
+    # print(f"世代{epoch}验证完毕")
 
 
 def log_impl(criteria_fns, trls_names, tels_names, lr_names,
-             lrlog_q, tlog_q, vlog_q, epoch_q, pbar_q, result_conn):
+             lrlog_pc, tlog_pc, vlog_pc, epoch_pc, pbar_q, result_conn):
     """管理整个训练过程的历史记录"""
     # 评价项名称
     tcf_names = [f'train_{ptools.get_computer_name(cfn)}' for cfn in criteria_fns]
@@ -112,11 +116,11 @@ def log_impl(criteria_fns, trls_names, tels_names, lr_names,
 
     # 创建线程进行学习率的记录
     def add_lr_to_history():
-        data = lrlog_q.get()
+        data = lrlog_pc.recv()
         while data:
             lr_names, lrs = data
             history.add([f"{ln}_lrs" for ln in lr_names], lrs)
-            data = lrlog_q.get()
+            data = lrlog_pc.recv()
 
     lrlog_thread = Thread(add_lr_to_history)
     lrlog_thread.start()
@@ -124,16 +128,16 @@ def log_impl(criteria_fns, trls_names, tels_names, lr_names,
     tmetric_acc = Accumulator(len(trls_names + criteria_fns) + 1)
     vmetric_acc = Accumulator(len(trls_names + criteria_fns) + 1)
     # 接收世代更新消息。这里不能写成while q.get(): 因为这里的世代数会等于0
-    epoch = epoch_q.get()
+    epoch = epoch_pc.recv()
     # print(f"开始记录世代{epoch}")
     while epoch is not None:
         # 创建训练数据记录线程
         tmetric_acc.reset()
-        tlog_thread = Thread(__log_impl, epoch, "训练", tlog_q, criteria_fns, tmetric_acc, pbar_q)
+        tlog_thread = Thread(__log_impl, epoch, "训练", tlog_pc, criteria_fns, tmetric_acc, pbar_q)
         tlog_thread.start()
         # 创建验证数据记录线程
         vmetric_acc.reset()
-        vlog_thread = Thread(__log_impl, epoch, "验证", vlog_q, criteria_fns, vmetric_acc, pbar_q)
+        vlog_thread = Thread(__log_impl, epoch, "验证", vlog_pc, criteria_fns, vmetric_acc, pbar_q)
         vlog_thread.start()
         # 等待数据记录完毕
         tlog_thread.join()
@@ -148,19 +152,18 @@ def log_impl(criteria_fns, trls_names, tels_names, lr_names,
             ]
         )
         pbar_q.put(f"世代{epoch}记录完毕")
-        epoch = epoch_q.get()
+        epoch = epoch_pc.recv()
     pbar_q.put(None)
     result_conn.send(history)
     result_conn.close()
-    # print("历史记录发送完毕")
 
 @torch.no_grad()
-def __log_impl(epoch, which, log_q, criteria_fns, metric_acc, pbar_q):
+def __log_impl(epoch, which, log_pc, criteria_fns, metric_acc, pbar_q):
     """管理训练过程单个世代
     :param metric_acc: 主进程提供的数据累加器，只用于累加训练指标、损失值和样本数
     """
-    n_data = 0
-    data = log_q.get()
+    # n_data = 0
+    data = log_pc.recv()
     # print(f"线程拿到了第{epoch}世代的{n_data}批次的{which}数据")
     while data is not None:
         """训练数据记录"""
@@ -173,26 +176,7 @@ def __log_impl(epoch, which, log_q, criteria_fns, metric_acc, pbar_q):
         )
         pbar_q.put(1)
         # print(f"线程记录了第{epoch}世代的{n_data}批次的{which}数据")
-        data = log_q.get()
-        n_data += 1
+        data = log_pc.recv()
+        # n_data += 1
         # print(f"线程拿到了第{epoch}世代的{n_data}批次的{which}数据")
-    # print(f"世代{epoch}的{which}记录线程退出")
     pbar_q.put(f"世代{epoch}{which}记录完毕")
-
-
-# @torch.no_grad()
-# def __vlog_impl(vlog_q, ls_names, criteria_fns, pbar_q):
-#     # 评价项名称
-#     cfn_names = [f'valid_{ptools.get_computer_name(cfn)}'
-#                  for cfn in criteria_fns]
-#     # 验证的指标累加器
-#     metric_acc = Accumulator(len(ls_names + cfn_names) + 1)
-#     while True:
-#         """验证数据记录"""
-#         pred_s, y, ls_es = vlog_q.get()
-#         num_samples = len(pred_s)
-#         metric_acc.add(
-#             *[cfn(pred_s, y) for cfn in criteria_fns],
-#             *[ls * num_samples for ls in ls_es], num_samples
-#         )
-#         pbar_q.put(1)
