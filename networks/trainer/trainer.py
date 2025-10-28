@@ -1,4 +1,3 @@
-import os.path
 
 import torch
 from tqdm import tqdm
@@ -11,6 +10,7 @@ from networks.trainer.__subprocess_impl import train_valid_impl
 from utils.accumulator import Accumulator
 from utils.func import pytools as ptools
 from utils.history import History
+from threading import Thread
 
 
 def add_lr_to_history(net, history):
@@ -402,11 +402,6 @@ class Trainer:
         :param valid_iter: 验证数据迭代器
         :return: 训练历史记录
         """
-
-        from torch.multiprocessing import Queue
-        from torch.multiprocessing import Process, Pipe
-        from threading import Thread
-
         # 提取训练器参数
         pbar = self.pbar
         del self.pbar
@@ -414,10 +409,11 @@ class Trainer:
 
         pbar.set_description('\r正在创建队列和事件对象……')
         # 进程通信队列
-        tdata_q = Queue(int(self.runtime_cfg['train_prefetch']))  # 传递训练数据队列
-        vdata_q = Queue(int(self.runtime_cfg['valid_prefetch']))  # 传递验证数据队列
-        pbar_q = Queue()  # 传递进度条更新消息队列
-        epoch_q = Queue()  # 传递世代更新消息队列
+        ctx = torch.multiprocessing.get_context("spawn")
+        tdata_q = ctx.Queue(int(self.runtime_cfg['train_prefetch']))  # 传递训练数据队列
+        vdata_q = ctx.Queue(int(self.runtime_cfg['valid_prefetch']))  # 传递验证数据队列
+        pbar_q = ctx.Queue()  # 传递进度条更新消息队列
+        epoch_q = ctx.Queue()  # 传递世代更新消息队列
 
         def update_pbar():
             msg = pbar_q.get()
@@ -431,9 +427,9 @@ class Trainer:
 
         # 生成子进程用于创建网络、执行网络更新并记录数据
         # 搭建输出结果通信管道
-        parent_conn, child_conn = Pipe(duplex=False)
+        parent_conn, child_conn = ctx.Pipe(duplex=False)
         # 创建子线程进行训练和验证操作，并更新进度条
-        tv_subp = Process(target=train_valid_impl, args=(
+        tv_subp = ctx.Process(target=train_valid_impl, args=(
             self, tdata_q, vdata_q, pbar_q, epoch_q, child_conn
         ))
         pbar_update_thread = Thread(target=update_pbar)  # 更新进度条
@@ -447,13 +443,13 @@ class Trainer:
             pbar.set_description(f'获取世代{epoch + 1}/{n_epochs}的训练数据……')
             # 不断从训练数据集迭代器中取训练数据
             for X, y in train_iter:
-                tdata_q.put((X.detach(), y.detach()))
+                tdata_q.put((X, y))
             # 通知训练进程，当前世代的数据已经传递完毕
             tdata_q.put(None)
             pbar.set_description(f'获取世代{epoch + 1}/{n_epochs}的验证数据……')
             # 从验证迭代器中取验证数据
             for X, y in valid_iter:
-                vdata_q.put((X.detach(), y.detach()))
+                vdata_q.put((X, y))
             # 通知验证进程，当前世代的数据已经传递完毕
             vdata_q.put(None)
             pbar.set_description(f'世代{epoch + 1}/{n_epochs} 数据获取完毕，等待网络消耗剩下的数据')
