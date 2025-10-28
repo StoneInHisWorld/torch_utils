@@ -1,4 +1,5 @@
 import time
+import os
 
 import torch
 from torch.profiler import ProfilerActivity
@@ -10,7 +11,7 @@ from utils.history import History
 
 
 @prepare('train')
-def profiling_impl(n_epochs, os, log_path, trainer, data_iter):
+def profiling_impl(n_epochs, log_path, trainer, data_iter):
     # 提取训练器参数
     net = trainer.module
     criterion_a = trainer.criterion_a

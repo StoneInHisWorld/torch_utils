@@ -53,3 +53,4 @@ def configure_network(module: BasicNN, is_train: bool, o_args=None, l_args=None,
 
 
 from .trainer import Trainer
+from .nets import *
