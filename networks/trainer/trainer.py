@@ -147,18 +147,26 @@ class Trainer:
                 ]).T)
                 loss_pool.append(torch.vstack(ls_es).T)
         pbar.set_description('结果计算完成')
-        # 将所有批次的数据堆叠在一起
-        ret = [torch.cat(predictions, dim=0)]
+        # # 将所有批次的数据堆叠在一起
+        # ret = [torch.cat(predictions, dim=0)]
+        # if ret_ds:
+        #     ret.append(torch.cat(inputs, dim=0))
+        #     ret.append(torch.cat(labels, dim=0))
+        # if ret_ls_metric:
+        #     ret.append(torch.cat(metrics, dim=0))
+        #     ret.append(torch.cat(loss_pool, dim=0))
+        #     ret.append([
+        #         ptools.get_computer_name(criterion) for criterion in criterion_a
+        #     ])
+        #     ret.append(net.test_ls_names)
+        # return ret
+        ret = [predictions]
         if ret_ds:
-            ret.append(torch.cat(inputs, dim=0))
-            ret.append(torch.cat(labels, dim=0))
+            ret += [inputs, labels]
         if ret_ls_metric:
-            ret.append(torch.cat(metrics, dim=0))
-            ret.append(torch.cat(loss_pool, dim=0))
-            ret.append([
+            ret += [metrics, loss_pool, [
                 ptools.get_computer_name(criterion) for criterion in criterion_a
-            ])
-            ret.append(net.test_ls_names)
+            ], net.test_ls_names]
         return ret
 
     @prepare('train')
@@ -403,6 +411,7 @@ class Trainer:
         :param valid_iter: 验证数据迭代器
         :return: 训练历史记录
         """
+        from __subprocess_impl import train_valid_impl
         # 提取训练器参数
         pbar = self.pbar
         del self.pbar
@@ -563,7 +572,6 @@ class Trainer:
         pbar.bar_format = None  # 使用默认的进度条格式
         pbar.set_description('\r正在创建队列和事件对象……')
         # 进程通信队列
-        # TODO：改成双工Pipe实现
         ctx = torch.multiprocessing.get_context("spawn")
         tdata_pc, tdata_cc = ctx.Pipe(False)  # 传递训练数据队列
         vdata_pc, vdata_cc = ctx.Pipe(False)  # 传递验证数据队列
