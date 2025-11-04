@@ -99,8 +99,8 @@ class Trainer:
             else:
                 # 启用多进程训练
                 # train_fn, train_args = self.__train_and_valid_with_preprocessing, (train_iter, valid_iter)
-                # train_fn, train_args = self.__new_train_and_valid_with_preprocessing, (train_iter, valid_iter)
-                train_fn, train_args = self.__pipe_train_and_valid_with_preprocessing, (train_iter, valid_iter)
+                train_fn, train_args = self.__new_train_and_valid_with_preprocessing, (train_iter, valid_iter)
+                # train_fn, train_args = self.__pipe_train_and_valid_with_preprocessing, (train_iter, valid_iter)
         # 设置进度条
         pbar = tqdm(
             total=pbar_len, unit='批', position=0, desc=f'正在进行训练准备……', 
