@@ -190,7 +190,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
         n_ftn_lines = footnotes.count('\n') + 2  # 加上'COMMENT:'和内容
         # text_indent = int(np.ceil(text_size / 3))
         ftn_height = text_size * n_ftn_lines + text_indent * (n_ftn_lines - 1)
-        ftn_width = int(max([len(l) for l in footnotes.split('\n')]) * text_size / 2.5)
+        ftn_width = int(max([len(l) for l in footnotes.split('\n')]) * text_size / 2)
         # 绘制白板
         # 白板的宽度由 图片部分宽度 和 脚注部分宽度 的最大值决定
         wb_width = max(

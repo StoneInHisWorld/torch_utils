@@ -15,18 +15,7 @@ activations = ['sigmoid', 'relu', 'lrelu', 'tanh']
 lr_schedulers = ["lambda", "step", 'constant', 'multistep', 'cosine', 'plateau']
 
 
-def try_gpu(i=0):
-    """
-    获取一个GPU
-    :param i: GPU编号
-    :return: 第i号GPU。若GPU不可用，则返回CPU
-    """
-    if cuda.device_count() >= i + 1:
-        return torch.device(f"cuda:{i}")
-    return torch.device("cpu")
-
-
-def get_optimizer(net: torch.nn.Module, optim_str='adam', lr=0.1, w_decay=0., **kwargs):
+def get_optimizer(net: torch.nn.Module, optim_str, lr, w_decay, **kwargs):
     if optim_str == "asgd":
         # 使用随机平均梯度下降优化器
         return torch.optim.ASGD(
@@ -87,7 +76,7 @@ def get_optimizer(net: torch.nn.Module, optim_str='adam', lr=0.1, w_decay=0., **
         raise NotImplementedError(f"不支持优化器{optim_str}, 支持的优化器包括{optimizers}")
 
 
-def get_ls_fn(ls_str: str = "mse", **kwargs):
+def get_ls_fn(ls_str, **kwargs):
     """获取损失函数。
     此处返回的损失函数不接收size_average参数，若需要非批量平均化的损失值，请指定reduction='none'
     :param ls_str: 损失函数对应字符串
@@ -112,7 +101,7 @@ def get_ls_fn(ls_str: str = "mse", **kwargs):
         raise NotImplementedError(f"不支持损失函数{ls_str}, 支持的损失函数包括{loss_es}")
 
 
-def init_wb(func_str: str = "xavier", **kwargs):
+def init_wb(func_str, **kwargs):
     """获取初始化方法
     根据func_str返回初始化权重、偏移参数的函数，返回的是方法局部函数。
 
@@ -175,7 +164,7 @@ def init_wb(func_str: str = "xavier", **kwargs):
     return _init_impl
 
 
-def get_lr_scheduler(optimizer, which: str = 'step', **kwargs):
+def get_lr_scheduler(optimizer, which, **kwargs):
     """获取学习率规划器
     :param optimizer: 指定规划器的学习率优化器对象。
     :param which: 使用哪种类型的规划器
@@ -202,7 +191,7 @@ def get_lr_scheduler(optimizer, which: str = 'step', **kwargs):
         raise NotImplementedError(f"不支持的学习率规划器{which}, 当前支持的初始化方式包括{lr_schedulers}")
 
 
-def get_activation(which: str = 'relu', **kwargs):
+def get_activation(which, **kwargs):
     """获取激活函数
     :param which: 使用哪种类型的激活函数
     :param kwargs: 指定激活函数的关键词参数
@@ -222,7 +211,7 @@ def get_activation(which: str = 'relu', **kwargs):
         raise NotImplementedError(f"不支持的激活函数{which}, 当前支持的激活函数层包括{activations}")
 
 
-def get_norm_layer(which='instance', **kwargs):
+def get_norm_layer(which, **kwargs):
     """返回一个标准化层
 
     对于批量标准化层，使用可学习的仿射参数并追踪动态数据（均值/stddev）
