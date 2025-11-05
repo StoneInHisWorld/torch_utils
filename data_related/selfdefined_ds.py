@@ -141,6 +141,43 @@ class SelfDefinedDataSet:
         """
         raise NotImplementedError('没有编写标签集索引读取程序！')
 
+    # TODO: 设置验证集和测试集的索引获取方法，需要提供默认方法来兼容以前编写的代码和降低编写自定义数据集的编写难度
+    @abstractmethod
+    def _get_valid_fea_index(self, root) -> list:
+        """读取根目录下的特征集索引
+
+        :param root: 数据集根目录
+        :return 提取出的索引列表
+        """
+        raise NotImplementedError('没有编写验证集中的特征集索引读取程序！')
+
+    @abstractmethod
+    def _get_valid_lb_index(self, root) -> list:
+        """读取根目录下的标签集索引
+
+        :param root: 数据集根目录
+        :return 提取出的索引列表
+        """
+        raise NotImplementedError('没有编写验证集中的标签集索引读取程序！')
+
+    @abstractmethod
+    def _get_test_fea_index(self, root) -> list:
+        """读取根目录下的特征集索引
+
+        :param root: 数据集根目录
+        :return 提取出的索引列表
+        """
+        raise NotImplementedError('没有编写验证集中的特征集索引读取程序！')
+
+    @abstractmethod
+    def _get_test_lb_index(self, root) -> list:
+        """读取根目录下的标签集索引
+
+        :param root: 数据集根目录
+        :return 提取出的索引列表
+        """
+        raise NotImplementedError('没有编写验证集中的标签集索引读取程序！')
+
     def get_criterion_a(self) -> List[
         Callable[
             [torch.Tensor, torch.Tensor, bool],

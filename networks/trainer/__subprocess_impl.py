@@ -27,6 +27,7 @@ def train_valid_impl(trainer, tdata_q, vdata_q, pbar_q, epoch_q, result_conn):
     epoch = epoch_q.get()
     while epoch is not None:
         batch = tdata_q.get()  # TODO: 请参考DynamicDIMPLE是如何处理传输过来的张量全0的情况
+        pbar_q.put(f"世代{epoch}训练开始")
         log_epoch_q.put(epoch)
         n_batch = 0
         # print(f"拿到世代{epoch}的{n_batch}批次的训练数据")
@@ -52,9 +53,9 @@ def train_valid_impl(trainer, tdata_q, vdata_q, pbar_q, epoch_q, result_conn):
         # 更新优化器学习率
         net.update_lr()
         tlog_q.put(None)
-        # print(f"世代{epoch}训练完毕")
+        pbar_q.put(f"世代{epoch}训练完毕")
         # 验证
-        __valid_impl(trainer, vdata_q, vlog_q, epoch)
+        __valid_impl(trainer, vdata_q, vlog_q, pbar_q, epoch)
         epoch = epoch_q.get()
     # 记录最后一次学习率，并通知学习率已经记录完毕
     log_epoch_q.put(None)
@@ -68,7 +69,7 @@ def train_valid_impl(trainer, tdata_q, vdata_q, pbar_q, epoch_q, result_conn):
 
 @torch.no_grad()
 @prepare('valid')
-def __valid_impl(trainer, vdata_q, vlog_q, epoch):
+def __valid_impl(trainer, vdata_q, vlog_q, pbar_q, epoch):
     """验证函数实现
     每次取出验证数据供给器中的下一批次数据进行前向传播，之后计算评价指标和损失，生成验证日志。
 
@@ -80,7 +81,7 @@ def __valid_impl(trainer, vdata_q, vlog_q, epoch):
     # 固定网络
     batch = vdata_q.get()
     n_batch = 0
-    # print(f"拿到世代{epoch}的{n_batch}批次的验证数据")
+    pbar_q.put(f"世代{epoch}验证开始")
     while batch is not None:
         X, y = batch  # epoch应该每次都相同
         pred_s, ls_es = net.forward_backward(X, y, False)
@@ -93,7 +94,7 @@ def __valid_impl(trainer, vdata_q, vlog_q, epoch):
         n_batch += 1
         # print(f"拿到世代{epoch}的{n_batch}批次的验证数据")
     vlog_q.put(None)
-    # print(f"世代{epoch}验证完毕")
+    pbar_q.put(f"世代{epoch}验证完毕")
 
 
 def log_impl(criteria_fns, trls_names, tels_names, lr_names,
@@ -128,11 +129,11 @@ def log_impl(criteria_fns, trls_names, tels_names, lr_names,
     while epoch is not None:
         # 创建训练数据记录线程
         tmetric_acc.reset()
-        tlog_thread = Thread(__log_impl, epoch, "train", tlog_q, criteria_fns, tmetric_acc, pbar_q)
+        tlog_thread = Thread(__log_impl, epoch, "训练", tlog_q, criteria_fns, tmetric_acc, pbar_q)
         tlog_thread.start()
         # 创建验证数据记录线程
         vmetric_acc.reset()
-        vlog_thread = Thread(__log_impl, epoch, "valid", vlog_q, criteria_fns, vmetric_acc, pbar_q)
+        vlog_thread = Thread(__log_impl, epoch, "验证", vlog_q, criteria_fns, vmetric_acc, pbar_q)
         vlog_thread.start()
         # 等待数据记录完毕
         tlog_thread.join()
@@ -140,21 +141,18 @@ def log_impl(criteria_fns, trls_names, tels_names, lr_names,
         vlog_thread.join()
         # print(f"世代{epoch}验证数据计算完毕")
         # 统计验证数据并加入到历史记录中
-        # print(history_keys)
-        # print([
-        #         *[tmetric_acc[i] / tmetric_acc[-1] for i in range(len(tmetric_acc) - 1)],
-        #         *[vmetric_acc[i] / vmetric_acc[-1] for i in range(len(vmetric_acc) - 1)]
-        # ])
         history.add(
             list(filter(lambda k: "_lrs" not in k, history_keys)), [
                 *[tmetric_acc[i] / tmetric_acc[-1] for i in range(len(tmetric_acc) - 1)],
                 *[vmetric_acc[i] / vmetric_acc[-1] for i in range(len(vmetric_acc) - 1)]
             ]
         )
-        # print(f"世代{epoch}记录完毕")
+        pbar_q.put(f"世代{epoch}记录完毕")
         epoch = epoch_q.get()
+    pbar_q.put(None)
     result_conn.send(history)
     result_conn.close()
+    # print("历史记录发送完毕")
 
 @torch.no_grad()
 def __log_impl(epoch, which, log_q, criteria_fns, metric_acc, pbar_q):
@@ -179,6 +177,7 @@ def __log_impl(epoch, which, log_q, criteria_fns, metric_acc, pbar_q):
         n_data += 1
         # print(f"线程拿到了第{epoch}世代的{n_data}批次的{which}数据")
     # print(f"世代{epoch}的{which}记录线程退出")
+    pbar_q.put(f"世代{epoch}{which}记录完毕")
 
 
 # @torch.no_grad()

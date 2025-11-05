@@ -207,7 +207,7 @@ class BasicNN(nn.Sequential):
         若要更改optimizer.zero_grad()以及backward()的顺序，请直接重载forward_backward()！
         :param X: 特征集
         :param y: 标签集
-        :return: （预测值， （损失值集合））
+        :return: （预测值，（损失值集合））
         """
         pred = self(X)
         if torch.is_grad_enabled():
