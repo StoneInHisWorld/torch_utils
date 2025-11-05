@@ -98,6 +98,8 @@ class Trainer:
                     # 进行训练
                     train_fn, train_args = self.__train, (train_iter,)
             else:
+                assert "train_prefetch" in self.runtime_cfg.keys(), 'setting.json中没有找到"train_prefetch"参数!'
+                assert "valid_prefetch" in self.runtime_cfg.keys(), 'setting.json中没有找到"valid_prefetch"参数!'
                 # 启用多进程训练
                 train_fn, train_args = self.__train_and_valid_with_preprocessing, (train_iter, valid_iter)
         # 设置进度条
@@ -447,13 +449,15 @@ class Trainer:
             pbar.set_description(f'获取世代{epoch + 1}/{n_epochs}的训练数据……')
             # 不断从训练数据集迭代器中取训练数据
             for X, y in train_iter:
-                tdata_q.put((X.detach(), y.detach()))
+                # X, y = X.detach(), y.detach()
+                tdata_q.put((X, y))
             # 通知训练进程，当前世代的数据已经传递完毕
             tdata_q.put(None)
             pbar.set_description(f'获取世代{epoch + 1}/{n_epochs}的验证数据……')
             # 从验证迭代器中取验证数据
             for X, y in valid_iter:
-                vdata_q.put((X.detach(), y.detach()))
+                # X, y = X.detach(), y.detach()
+                vdata_q.put((X, y))
             # 通知验证进程，当前世代的数据已经传递完毕
             vdata_q.put(None)
             pbar.set_description(f'世代{epoch + 1}/{n_epochs} 数据获取完毕，等待网络消耗剩下的数据')
