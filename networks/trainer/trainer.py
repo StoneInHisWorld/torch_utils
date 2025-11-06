@@ -141,11 +141,11 @@ class Trainer:
                 inputs.append(fe_batch)
                 labels.append(lb_batch)
             if ret_ls_metric:
-                metrics.append(torch.vstack([
+                metrics.append([
                     criterion(pre_batch, lb_batch, size_averaged=False)
                     for criterion in criterion_a
-                ]).T)
-                loss_pool.append(torch.vstack(ls_es).T)
+                ])
+                loss_pool.append(ls_es)
         pbar.set_description('结果计算完成')
         # # 将所有批次的数据堆叠在一起
         # ret = [torch.cat(predictions, dim=0)]
