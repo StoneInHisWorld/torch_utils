@@ -38,9 +38,13 @@ class PredictionWrapper:
         if ret_ls_metric:
             (self.metrics, self.ls_es, self.critera_names,
              self.ls_names) = prediciton_results[-4:]
-        wrapped_results = getattr(
-            self, f'{self.module_type.__name__}_wrap_fn'
-        )(**kwargs)
+        try:
+            wrapped_results = getattr(
+                self, f'{self.module_type.__name__}_wrap_fn'
+            )(**kwargs)
+        except AttributeError:
+            raise NotImplementedError(f"没有为{self.module_type.__name__}定制结果包装程序！"
+                                      f"请在{self.__class__.__name__}类中创建{self.module_type.__name__}_wrap_fn()方法！")
         del self.predictions
         if ret_ds:
             del self.inputs, self.labels
