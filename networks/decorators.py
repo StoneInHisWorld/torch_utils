@@ -237,7 +237,7 @@ class prepare:
         :return: args
         """
         trainer, *args = args
-        # net = trainer.module
+        net = trainer.module
         # # 进行测试准备，获取损失函数
         # with warnings.catch_warnings():
         #     # 忽视优化器参数不足警告
@@ -249,8 +249,8 @@ class prepare:
         #         o_args, l_args, tr_ls_args = [()], [()], [()]
         #     net.prepare_training(o_args, l_args, tr_ls_args, ts_ls_args)
         # del net.optimizer_s, net.scheduler_s, net.train_ls_fn_s, net.train_ls_names
-        # # 设置神经网络模式
-        # net.eval()
+        # 设置神经网络模式
+        net.eval()
         configure_network(trainer.module, False, ts_ls_args=trainer.prepare_args[3])
         return trainer, *args
 
@@ -292,8 +292,8 @@ class prepare:
             data_iter, unit='批', position=0, desc=f'正在计算结果……',
             mininterval=1, ncols=80
         )
-        # # 设置神经网络模式
-        # net.eval()
+        # 设置神经网络模式
+        net.eval()
         configure_network(trainer.module, False, ts_ls_args=trainer.prepare_args[3])
         return trainer, *args
 
