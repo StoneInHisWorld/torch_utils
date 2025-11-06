@@ -103,7 +103,7 @@ class Trainer:
                 # train_fn, train_args = self.__pipe_train_and_valid_with_preprocessing, (train_iter, valid_iter)
         # 设置进度条
         pbar = tqdm(
-            total=pbar_len, unit='批', position=0, desc=f'正在进行训练准备……', 
+            total=pbar_len, unit='批', position=0, desc=f'正在进行训练准备……',
             mininterval=1, ncols=100, bar_format=""
         )
         self.pbar = pbar  # 多进程运行需要删除此属性，此举防止pbar被回收
@@ -486,7 +486,7 @@ class Trainer:
         :return: 训练历史记录
         """
         from networks.trainer.__subprocess_impl import train_valid_impl
-        
+
         # 提取训练器参数
         pbar = self.pbar
         del self.pbar
@@ -562,8 +562,8 @@ class Trainer:
         :param valid_iter: 验证数据迭代器
         :return: 训练历史记录
         """
-        from networks.trainer.__pipe_subprocess_impl import train_valid_impl 
-        
+        from networks.trainer.__pipe_subprocess_impl import train_valid_impl
+
         # 提取训练器参数
         pbar = self.pbar
         del self.pbar

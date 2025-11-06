@@ -87,5 +87,5 @@ class DataTransformer:
             getattr(self, f"{self.module_type.__name__}_preprocesses")(*args, **kwargs)
             # exec(f'self.{self.module_type.__name__}_preprocesses()')
         else:
-            raise ValueError(f"没有为{self.module_type.__name__}定制预处理程序！"
-                             f"请在{self.__class__.__name__}类中创建{self.module_type.__name__}_preprocesses()方法！")
+            raise NotImplementedError(f"没有为{self.module_type.__name__}定制预处理程序！"
+                                      f"请在{self.__class__.__name__}类中创建{self.module_type.__name__}_preprocesses()方法！")
