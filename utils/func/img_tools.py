@@ -173,7 +173,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     else:
         raise NotImplementedError(f'暂未识别的图片模式组合{modes}，无法进行背景板颜色定义以及返图模式推断')
     # 设置字体大小
-    font = ImageFont.truetype(font_path, text_size)
+    # font = ImageFont.truetype(font_path, text_size)
 
     def _impl(footnotes: str = "",
               *imgs_and_labels: Tuple[Image, str]
@@ -209,7 +209,8 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
             # 添加图片标题
             draw.text(
                 ((i + 1) * border_size + i * cb_width, border_size),
-                label, fill=text_color, font=font
+                label, fill=text_color
+                # , font=font
             )
             # 拼接图片
             whiteboard.paste(
@@ -222,7 +223,8 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
         # 绘制脚注
         draw.text(
             (border_size, wb_height - ftn_height - border_size),
-            'COMMENT: \n' + footnotes, fill=text_color, font=font
+            'COMMENT: \n' + footnotes, fill=text_color
+            # , font=font
         )
         return whiteboard
 
