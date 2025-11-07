@@ -1,10 +1,12 @@
 import functools
+from typing import List
 
 import torch
 from torch import nn
 
+from layers.resnet_blocks import ResnetBlock
 from networks.basic_nn import BasicNN
-from layers.resnet_block import ResnetBlock
+from networks.nets.pix2pix import _get_ls_fn, _get_lr_scheduler, _get_optimizer, _backward_impl
 
 
 class UNet128Genarator(nn.Sequential):
@@ -30,14 +32,10 @@ class UNet128Genarator(nn.Sequential):
             nn.BatchNorm2d(o, momentum=bn_momen)
         )
         ep_layer = lambda i, o: nn.Sequential(
-            # nn.ConvTranspose2d(i, i, kernel_size=kernel_size, stride=2, padding=1),
-            # nn.Conv2d(i, o, kernel_size=kernel_size + 1, stride=1, padding=2),
-            # nn.BatchNorm2d(o, momentum=bn_momen),
-            # nn.ReLU()
             nn.ReLU(True),
             nn.ConvTranspose2d(i, o, kernel_size=kernel_size, stride=2, padding=1),
             nn.BatchNorm2d(o, momentum=bn_momen),
-            nn.Dropout(dropout, True),
+            nn.Dropout(dropout, True)
         )
         base_channel = int(base_channel)
         self.contracting_path = [
@@ -63,6 +61,7 @@ class UNet128Genarator(nn.Sequential):
             nn.Conv2d(base_channel, out_channel, kernel_size=kernel_size + 1, stride=1, padding=2),
             nn.Tanh()
         ]
+        self.input_size = (input_channel, 128, 128)
         super(UNet128Genarator, self).__init__(
             *self.contracting_path, *self.expanding_path, *self.output_path
         )
@@ -105,10 +104,6 @@ class UNet256Genarator(nn.Sequential):
             nn.BatchNorm2d(o, momentum=bn_momen)
         )
         ep_layer = lambda i, o: nn.Sequential(
-            # nn.ConvTranspose2d(i, i, kernel_size=kernel_size, stride=2, padding=1),
-            # nn.Conv2d(i, o, kernel_size=kernel_size + 1, stride=1, padding=2),
-            # nn.BatchNorm2d(o, momentum=bn_momen),
-            # nn.ReLU()
             nn.ReLU(True),
             nn.ConvTranspose2d(i, o, kernel_size=kernel_size, stride=2, padding=1),
             nn.BatchNorm2d(o, momentum=bn_momen),
@@ -138,6 +133,7 @@ class UNet256Genarator(nn.Sequential):
             nn.Conv2d(base_channel, out_channel, kernel_size=kernel_size + 1, stride=1, padding=2),
             nn.Tanh()
         ]
+        self.input_size = (input_channel, 256, 256)
         super(UNet256Genarator, self).__init__(
             *self.contracting_path, *self.expanding_path, *self.output_path
         )
@@ -162,13 +158,13 @@ class ResNetGenerator(nn.Sequential):
     （参见https://github.com/jcjohnson/fast-neural-style）
     """
 
-    def __init__(self, input_nc, output_nc,
+    def __init__(self, input_channel, output_channel,
                  ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6,
                  padding_type='reflect'):
         """构造一个基于Resnet的生成器
 
-        :param input_nc: 输入图片的通道数
-        :param output_nc: 输出图片的通道数
+        :param input_channel: 输入图片的通道数
+        :param output_channel: 输出图片的通道数
         :param ngf: 最后卷积层的过滤层数
         :param use_dropout: 是否使用Dropout()层
         :param n_blocks: ResNet块的数量
@@ -182,7 +178,7 @@ class ResNetGenerator(nn.Sequential):
 
         model = [
             nn.ReflectionPad2d(3),
-            nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),
+            nn.Conv2d(input_channel, ngf, kernel_size=7, padding=0, bias=use_bias),
             norm_layer(ngf),
             nn.ReLU(True)
         ]
@@ -211,8 +207,9 @@ class ResNetGenerator(nn.Sequential):
                       norm_layer(int(ngf * mult / 2)),
                       nn.ReLU(True)]
         model += [nn.ReflectionPad2d(3)]
-        model += [nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        model += [nn.Conv2d(ngf, output_channel, kernel_size=7, padding=0)]
         model += [nn.Tanh()]
+        self.input_size = (input_channel, 256, 256)
         super(ResNetGenerator, self).__init__(*model)
 
 
@@ -232,16 +229,39 @@ class Pix2Pix_G(BasicNN):
         :param kwargs: 参见各个生成器的关键字参数
         """
         supported = ['u256', 'r9', 'u128']
+        device = kwargs.pop("device")
         if version == 'u256':
             model = UNet256Genarator(*args, **kwargs)
-            kwargs['required_shape'] = (256, 256)
         elif version == 'u128':
             model = UNet128Genarator(*args, **kwargs)
-            kwargs['required_shape'] = (128, 128)
         elif version == 'r9':
             kwargs['n_blocks'] = 9
             model = ResNetGenerator(*args, **kwargs)
-            kwargs['required_shape'] = (256, 256)
         else:
             raise NotImplementedError(f'不支持的生成器版本{version}，支持的生成器版本包括{supported}')
-        super(Pix2Pix_G, self).__init__(model, **kwargs)
+        assert "input_size" not in kwargs.keys(), f"{self.__class__.__name__}不支持赋值输入大小！"
+        super(Pix2Pix_G, self).__init__(model, device=device, input_size=model.input_size, **kwargs)
+
+    def _get_ls_fn(self, ls_args):
+        if hasattr(self, "train_ls_fn_s"):
+            # 如果本网络已经指定了训练损失函数，则说明此时赋予的是测试损失函数
+            return _get_ls_fn(False, self.__class__, *ls_args)
+        else:
+            return _get_ls_fn(True, self.__class__, *ls_args)
+
+    def _get_optimizer(self, o_args) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
+        return _get_optimizer(self, *o_args)
+
+    def _get_lr_scheduler(self, l_args):
+        return _get_lr_scheduler(self.__class__, self.optimizer_s[0], *l_args)
+
+    def _forward_impl(self, X, y):
+        X, pred, netD = X
+        if torch.is_grad_enabled():
+            ls_fn = self.train_ls_fn_s[0]
+        else:
+            ls_fn = self.test_ls_fn_s[0]
+        return None, [*ls_fn(X, y, pred, netD)]
+
+    def _backward_impl(self, *ls_es):
+        ls_es[0].backward()

@@ -6,7 +6,7 @@ import pandas as pd
 import matplotlib
 import pandas.errors
 
-matplotlib.use('Agg')
+# matplotlib.use('TkAgg')
 
 from matplotlib import pyplot as plt
 
@@ -69,11 +69,19 @@ def plot_history(history,
     """
     # 获取子图标题以计算趋势图行列数
     history = sorted(history)
-    subplots_titles = sorted(list(set([
-        label.replace('train_', "").replace('valid_', '').upper()
-        for label, _ in history
-    ])))
+
+    def filter_common_label(lb):
+        if "_lrs" in lb:
+            return "LRs"
+        else:
+            return lb.replace('train_', "").replace('valid_', '').upper()
+
+    subplots_titles = sorted(list(set([filter_common_label(label) for label, _ in history])))
     n_cols = int(np.ceil(len(subplots_titles) / max_nrows))
+    if mute:
+        matplotlib.use('Agg')
+    else:
+        matplotlib.use('TkAgg')
     # 设置整张图片的属性
     fig, axes = plt.subplots(
         min(max_nrows, len(subplots_titles)), n_cols,
@@ -93,7 +101,7 @@ def plot_history(history,
         axi.set_ylabel(subplots_title)
     # 绘制日志内容
     for label, log in history:
-        l_type = label.replace('train_', "").replace('valid_', '').upper()
+        l_type = filter_common_label(label)
         index = subplots_titles.index(l_type)
         try:
             axes[index].plot(range(1, len(log) + 1), log, label=label)
@@ -112,9 +120,10 @@ def plot_history(history,
         if not os.path.exists(os.path.split(savefig_as)[0]):
             os.makedirs(os.path.split(savefig_as)[0])
         plt.savefig(savefig_as)
-        print('已保存历史趋势图')
-    if not mute:
-        plt.show()
+        print(f'已保存历史趋势图于{savefig_as}')
+    # if not mute:
+    #     plt.show()
+    plt.show()
     if not accumulative:
         plt.close(fig)
         plt.clf()

@@ -1,5 +1,5 @@
 import random
-from typing import Sized
+from typing import Sized, Tuple
 
 import numpy as np
 import torch
@@ -47,23 +47,24 @@ def split_data(dataset: DataSet or LazyDataSet, k, train=0.8, shuffle=True):
         raise ValueError(f'不正确的k值={k}，k值应该大于0，且为整数！')
 
 
-def default_transit_fn(batch, **kwargs):
-    """默认数据供给传输函数，本函数不进行任何操作。
-    DataLoader每次从内存取出数据后，都会调用本函数对批次进行预处理。
-    数据传输函数用于进行数据批量的设备迁移等操作。
+# def default_transit_fn(batch, **kwargs):
+#     """默认数据供给传输函数，本函数不进行任何操作。
+#     DataLoader每次从内存取出数据后，都会调用本函数对批次进行预处理。
+#     数据传输函数用于进行数据批量的设备迁移等操作。
+#
+#     :param batch: 需要预处理的数据批
+#     :param kwargs: 预处理所用关键字参数
+#     :return: 数据批次
+#     """
+#     return batch
 
-    :param batch: 需要预处理的数据批
-    :param kwargs: 预处理所用关键字参数
-    :return: 数据批次
-    """
-    return batch
 
-
-def to_loader(dataset: DataSet or LazyDataSet,
-              batch_size: int = 1,
-              transit_fn=None, transit_kwargs=None,
-              bkg_gen=True, max_prefetch=3,
-              **kwargs):
+def to_loader(
+        dataset: DataSet or LazyDataSet, batch_size: int = 1, transit_fn=None,
+        transit_kwargs=None, bkg_gen=True, max_prefetch=3, device=torch.device('cpu'),
+        non_blocking=True, share_memory=True,  # 数据迁移参数
+        **kwargs
+):
     """根据数据集类型转化为数据集加载器。
     为了适配多进程处理，Dataset对象在转化为DataLoader对象前，会删除所携带的预处理方法。
 
@@ -81,10 +82,10 @@ def to_loader(dataset: DataSet or LazyDataSet,
     :param kwargs: pytorch.utils.data.DataLoader的额外参数
     :return: 数据集加载器
     """
-    if transit_fn is None:
-        transit_fn = default_transit_fn
     if transit_kwargs is None:
         transit_kwargs = {}
+    assert isinstance(max_prefetch, int), "数据集加载器的max_prefetch最大预先加载数需为整型int!" \
+                                          "请检查settings.json文件夹中的dl_kwargs赋值是否合法"
     if isinstance(dataset, LazyDataSet):
         # 懒加载需要保存有数据集预处理方法
         return LazyDataLoader(
@@ -98,9 +99,12 @@ def to_loader(dataset: DataSet or LazyDataSet,
         # if hasattr(dataset, 'transformer')
         # del dataset.transformer
         return DataLoader(
-            dataset, transit_fn, transit_kwargs, batch_size,
-            bkg_gen, max_prefetch, collate_fn=dataset.collate_fn, **kwargs
+            dataset, transit_fn, transit_kwargs,
+            bkg_gen, max_prefetch, device, non_blocking, share_memory,
+            batch_size, collate_fn=dataset.collate_fn, **kwargs
         )
+    else:
+        raise TypeError('接收到的dataset并非LazyDataSet或是DataSet类型！')
 
 
 def k_fold_split(dataset: DataSet or LazyDataSet, k: int = 10, shuffle: bool = True):
@@ -145,16 +149,17 @@ def data_slicer(data_portion=1., shuffle=True, *args: Sized):
     args = list(zip(*args))
     if shuffle:
         random.shuffle(args)
+    assert int(data_portion * data_len) > 0, f"数据比例{data_portion}太小，数据集切片长度为{int(data_portion * data_len)}！"
     data_portion = int(data_portion * data_len)
     return zip(*args[: data_portion])  # 返回值总为元组
 
 
-def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
+def normalize(data: torch.Tensor, epsilon=1e-5) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     进行数据标准化。
-    :param data: 需要进行标准化的数据。
+    :param data: 需要进行标准化的数据。数据维度需为（批量大小，通道数目，……）
     :param epsilon: 防止分母为0的无穷小量。
-    :return: 标准化的数据
+    :return: 标准化的数据，标准化所用均值，标准化所用标准差
     """
     try:
         mean, std = [
@@ -167,12 +172,12 @@ def normalize(data: torch.Tensor, epsilon=1e-5) -> torch.Tensor:
         else:
             raise e
     std += epsilon
-    if len(data.shape) == 4:
-        return F.normalize(data, mean, std)
+    if 3 <= len(data.shape) <= 4:
+        return F.normalize(data, mean, std), mean, std
     elif len(data.shape) < 3:
-        return (data - mean) / std
+        return (data - mean) / std, mean, std
     else:
-        raise Exception(f'不支持的数据形状{data.shape}！')
+        raise Exception(f'不支持的数据形状{data.shape}！只支持三维或者四维张量。')
 
 
 def denormalize(data: torch.Tensor, mean=None, std=None, range=None) -> torch.Tensor:
@@ -185,7 +190,7 @@ def denormalize(data: torch.Tensor, mean=None, std=None, range=None) -> torch.Te
     :param data: 需要进行标准化的数据
     :param mean: 反标准化所用均值
     :param std: 反标准化所用标准差
-    :param range: 反归一化后，数据分布的区间。
+    :param range: 反归一化后，数据分布的区间。本参数需为一个二元组（d_min, d_max）
     :return: 反标准化后的数据
     """
     # 如果指定了均值和方差

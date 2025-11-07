@@ -1,12 +1,15 @@
+import inspect
 import warnings
 from functools import wraps
+from typing import Iterable
 
 import dill
 import torch
 from torchinfo import summary
 from tqdm import tqdm
 
-from networks import BasicNN
+from networks import BasicNN, configure_network
+
 
 class net_builder:
     """网络创建装饰器。
@@ -86,10 +89,15 @@ class net_builder:
         """
         if trainer.runtime_cfg['print_net']:
             input_size = trainer.input_size
-            try:
-                summary(net, input_size=(trainer.hps['batch_size'], *input_size))
-            except Exception as e:
-                warnings.warn(f"打印网络时遇到错误：{e}，将切换成简洁打印模式！")
+            if isinstance(input_size, Iterable):
+                try:
+                    summary(net, input_size=(trainer.hps['batch_size'], *input_size), device=net.device)
+                except Exception as e:
+                    msg = f"打印网络时遇到错误：{e}，只显示网络结构！"
+                    warnings.warn(msg)
+                    print(net)
+            else:
+                warnings.warn(f"输入形状{input_size}无法解析，只显示网络结构！")
                 print(net)
 
 
@@ -129,6 +137,7 @@ class prepare:
                 # 执行本体函数
                 with torch.no_grad():
                     result = func(*args, **kwargs)
+                self.__after_valid(args[0])
             elif self.what == 'test':
                 args = self.__prepare_test(*args)
                 # 执行本体函数
@@ -164,10 +173,14 @@ class prepare:
         :return: trainer, *args
         """
         trainer, net, *args = args
-        if not net.ready:
-            # 训练前准备
-            prepare_args = trainer.prepare_args
-            net.prepare_training(*prepare_args)
+        # if not net.ready:
+        #     # 训练前准备
+        #     prepare_args = trainer.prepare_args
+        #     assert len(prepare_args) == len(inspect.signature(net.prepare_training).parameters), \
+        #         (f"网络训练需要按照顺序提供优化器参数、学习率规划器参数、训练损失函数参数、测试损失函数参数；"
+        #          f"本次训练只收到了{len(prepare_args)}个参数")
+        #     net.prepare_training(*prepare_args)
+        configure_network(net, True, *trainer.prepare_args)
         # 进度条更新
         if hasattr(trainer, 'pbar'):
             trainer.pbar.set_description('训练中……')
@@ -184,11 +197,12 @@ class prepare:
         """
         if self.k_fold:
             return
-        net = trainer.module
-        # 清除训练痕迹
-        del net.optimizer_s, net.scheduler_s, net.ls_fn_s, \
-            net.lr_names, net.loss_names, net.test_ls_names
-        net.ready = False
+        # net = trainer.module
+        # # 清除训练痕迹
+        # del net.optimizer_s, net.scheduler_s, net.lr_names, net.train_ls_fn_s, \
+        #     net.train_ls_names, net.test_ls_fn_s, net.test_ls_names
+        # net.ready = False
+        trainer.module.deactivate()
 
     @staticmethod
     def __prepare_valid(*args):
@@ -205,6 +219,16 @@ class prepare:
         return trainer, *args
 
     @staticmethod
+    def __after_valid(trainer):
+        """进行验证准备
+        设置神经网络模式以及更新进度条
+
+        :param args: 需要传递的第一个参数为trainer对象
+        :return: args
+        """
+        trainer.module.train()
+
+    @staticmethod
     def __prepare_test(*args):
         """进行测试准备
         进行测试准备，设置神经网络模式以及更新进度条
@@ -214,14 +238,20 @@ class prepare:
         """
         trainer, *args = args
         net = trainer.module
-        # 进行测试准备，获取损失函数
-        with warnings.catch_warnings():
-            # 忽视优化器参数不足警告
-            warnings.simplefilter('ignore', category=UserWarning)
-            net.prepare_training(ls_args=trainer.prepare_args[2])
-        del net.optimizer_s, net.scheduler_s
+        # # 进行测试准备，获取损失函数
+        # with warnings.catch_warnings():
+        #     # 忽视优化器参数不足警告
+        #     warnings.simplefilter('ignore', category=UserWarning)
+        #     ts_ls_args = trainer.prepare_args[3]
+        #     if isinstance(ts_ls_args[0], list):
+        #         o_args, l_args, tr_ls_args = [[]], [[]], [[]]
+        #     elif isinstance(ts_ls_args[0], tuple):
+        #         o_args, l_args, tr_ls_args = [()], [()], [()]
+        #     net.prepare_training(o_args, l_args, tr_ls_args, ts_ls_args)
+        # del net.optimizer_s, net.scheduler_s, net.train_ls_fn_s, net.train_ls_names
         # 设置神经网络模式
         net.eval()
+        configure_network(trainer.module, False, ts_ls_args=trainer.prepare_args[3])
         return trainer, *args
 
     @staticmethod
@@ -232,9 +262,10 @@ class prepare:
         :param trainer: 训练器对象，神经网络对象的来源
         :return: None
         """
-        net = trainer.module
-        # 清除测试痕迹
-        del net.ls_fn_s, net.lr_names, net.loss_names, net.test_ls_names
+        # net = trainer.module
+        # # 清除测试痕迹
+        # del net.lr_names, net.test_ls_fn_s, net.test_ls_names
+        trainer.module.deactivate()
 
     @net_builder()
     def __prepare_predict(self, *args):
@@ -245,17 +276,17 @@ class prepare:
         :return: args
         """
         trainer, net, data_iter, *args = args
-        if not net.ready:
-            # 预处理损失函数参数
-            ls_fn_args = trainer.prepare_args[2]
-            for (_, kwargs) in ls_fn_args:
-                kwargs['size_averaged'] = False
-            # 进行测试准备，获取损失函数
-            with warnings.catch_warnings():
-                # 忽视优化器参数不足警告
-                warnings.simplefilter('ignore', category=UserWarning)
-                net.prepare_training(ls_args=ls_fn_args)
-            del net.optimizer_s, net.scheduler_s
+        # if not net.ready:
+        #     # 预处理损失函数参数
+        #     ls_fn_args = trainer.prepare_args[3]
+        #     for (_, kwargs) in ls_fn_args:
+        #         kwargs['size_averaged'] = False
+        #     # 进行测试准备，获取损失函数
+        #     with warnings.catch_warnings():
+        #         # 忽视优化器参数不足警告
+        #         warnings.simplefilter('ignore', category=UserWarning)
+        #         net.prepare_training(ts_ls_args=ls_fn_args)
+        #     del net.optimizer_s, net.scheduler_s, net.train_ls_fn_s, net.train_ls_names
         # 创建进度条
         trainer.pbar = tqdm(
             data_iter, unit='批', position=0, desc=f'正在计算结果……',
@@ -263,6 +294,7 @@ class prepare:
         )
         # 设置神经网络模式
         net.eval()
+        configure_network(trainer.module, False, ts_ls_args=trainer.prepare_args[3])
         return trainer, *args
 
     @staticmethod

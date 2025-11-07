@@ -1,6 +1,7 @@
 import time
 from datetime import datetime
 import warnings
+import gc
 
 import torch
 
@@ -111,12 +112,9 @@ class Experiment:
         """
         # 进行日志编写
         if exc_type is not None:
-            if exc_type != KeyboardInterrupt:
-                # 出现异常则记录
-                print(f'exc_type: {exc_type}')
-                print(f'exc_val: {exc_val}')
-                self.__hp.update({'exc_val': exc_val})
-            else:
+            if exc_type == MemoryError:
+                gc.collect()
+            elif exc_type == KeyboardInterrupt:
                 # 键盘中断则什么也不做
                 print('该组超参数实验被中断！')
                 try:
@@ -125,7 +123,10 @@ class Experiment:
                         time.sleep(1)
                     return True
                 except KeyboardInterrupt:
-                    raise KeyboardInterrupt('该组超参数实验被中断！')
+                    raise KeyboardInterrupt('实验被中断！')
+            # 出现异常则记录
+            print(f'\n出现{exc_type}异常\n描述为{exc_val}')
+            self.__hp.update({'exc_type': exc_type, 'exc_val': exc_val})
         # 记录时间信息
         time_span = time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start))
         self.__hp.update({
@@ -137,6 +138,7 @@ class Experiment:
             self.__write_log(**self.__hp)
         # 保存训练生成的网络
         self.__save_net()
+        # return True
 
     def register_result(self,
                         net, history,
@@ -160,8 +162,8 @@ class Experiment:
             True, **log_msg,
             data_portion=self.__runtime_cfg["ds_kwargs"]['data_portion'],
             which_dataset=self.__runtime_cfg["ds_kwargs"]['which_dataset'],
-            f_req_sha=self.__runtime_cfg["ds_kwargs"]['f_req_sha'],
-            l_req_sha=self.__runtime_cfg["ds_kwargs"]['l_req_sha'],
+            f_req_shp=self.__runtime_cfg["ds_kwargs"]['f_req_shp'],
+            l_req_shp=self.__runtime_cfg["ds_kwargs"]['l_req_shp'],
         )
         if self.device != torch.device('cpu') and self.__runtime_cfg["cuda_memrecord"]:
             self.add_logMsg(
@@ -189,7 +191,7 @@ class Experiment:
         """
         kwargs.update(self.__extra_lm)
         ltools.write_log(self.__lp, **kwargs)
-        print('已编写日志')
+        print(f'已在{self.__lp}编写日志')
 
     def __save_net(self) -> None:
         """保存实验对象持有网络
@@ -215,9 +217,10 @@ class Experiment:
             return
         if save_net == 'entire':
             torch.save(self.__net, self.__np + f'{self.__exp_no}.ptm')
+            print(f'已在{self.__np}保存网络，保存文件为：{self.__exp_no}.ptm')
         elif save_net == 'state':
             torch.save(self.__net.state_dict(), self.__np + f'{self.__exp_no}.ptsd')
-        print('已保存网络')
+            print(f'已在{self.__np}保存网络，保存文件为：{self.__exp_no}.ptsd')
 
     def __plot_history(self, history, **plot_kwargs) -> None:
         """绘制历史趋势图
@@ -251,7 +254,7 @@ class Experiment:
             title='EXP NO.' + str(self.__exp_no),
             savefig_as=savefig_as, **plot_kwargs
         )
-        print('已绘制历史趋势图')
+        # print('已绘制历史趋势图')
 
     @property
     def device(self):

@@ -1,6 +1,5 @@
-data_related/__pycache__/*
-networks/__pycache__/*
-layers/__pycache__/*
-utils/__pycache__/*
+*/__pycache__
 utils/func/__pycache__/*
 networks/nets/__pycache__/*
+.vscode/*
+.idea/*

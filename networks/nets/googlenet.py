@@ -316,13 +316,13 @@ class GoogLeNet(BasicNN):
         else:
             super()._init_submodules(init_str, **kwargs)
 
-    def _get_ls_fn(self, *args):
+    def _get_ls_fn(self, ls_args):
         """若指定损失函数类型为`original`，则使用论文中的标签平滑损失计算方式，辅助分类器的损失值权重为0.4
-        :param args: 多个二元组，元组格式为（损失函数类型字符串，本损失函数关键词参数）
+        :param ls_args: 多个二元组，元组格式为（损失函数类型字符串，本损失函数关键词参数）
         :return: 损失函数序列
         """
         ls_fn_s, loss_names, test_ls_names = [], [], []
-        for (type_s, kwargs) in args:
+        for (type_s, kwargs) in ls_args:
             size_averaged = kwargs.pop('size_averaged', True)
             if type_s == 'original' and self.side_head is not None:
                 ls_fn = ttools.get_ls_fn('entro', label_smoothing=0.1)
@@ -344,17 +344,17 @@ class GoogLeNet(BasicNN):
                 test_ls_names += tls_names
         return ls_fn_s, loss_names, test_ls_names
 
-    def _get_optimizer(self, *args) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
+    def _get_optimizer(self, o_args) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
         """若指定类型参数为`original`，则使用论文中的优化器RMSPROP，指定的关键字参数会被覆盖
-        :param args: 多个二元组，元组格式为（优化器类型字符串，本优化器关键词参数）
+        :param o_args: 多个二元组，元组格式为（优化器类型字符串，本优化器关键词参数）
         :return: 优化器序列
         """
         lr_names, optimizers = [], []
-        for i, (type_s, kwargs) in enumerate(args):
+        for i, (type_s, kwargs) in enumerate(o_args):
             if type_s == 'original' and self.version == '3':
                 type_s = 'rmsprop'
                 kwargs = {'lr': 0.045, 'w_decay': 0.9, 'alpha': 0.1}
-            optims, lns = super()._get_optimizer((type_s, kwargs), )
+            optims, lns = super()._get_optimizer((type_s, kwargs))
             optimizers += optims
             lr_names += lns
             # optimizers.append(ttools.get_optimizer(self, type_s, **kwargs))
@@ -365,9 +365,9 @@ class GoogLeNet(BasicNN):
         if self.version == '2' or self.version == '3':
             nn.utils.clip_grad_norm_(self.parameters(), 2.)
 
-    def _get_lr_scheduler(self, *args):
+    def _get_lr_scheduler(self, l_args):
         """若指定学习率规划器类型为`original`，则会使用论文中的学习率规划器。
-        :param args: 多个二元组，元组格式为（规划器类型字符串，本规划器关键词参数）
+        :param l_args: 多个二元组，元组格式为（规划器类型字符串，本规划器关键词参数）
         :return: 规划器序列
         """
         schedulers = []
@@ -378,7 +378,7 @@ class GoogLeNet(BasicNN):
         #             optimizer, 'lambda',
         #             lr_lambda=lambda epoch: basic_lr ** (0.94 * (epoch // 2))
         #         ))
-        for (type_s, kwargs), optimizer in zip(args, self._optimizer_s):
+        for (type_s, kwargs), optimizer in zip(l_args, self._optimizer_s):
             if type_s == 'original' and (self.version == '2' or self.version == '3'):
                 type_s = 'lambda'
                 basic_lr = optimizer.param_groups[0]['lr']

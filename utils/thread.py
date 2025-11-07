@@ -29,6 +29,7 @@ class Thread(BuiltinThread):
             raise self.exc
 
     def get_result(self):
+        self.join()
         if self.exc is not None:
             raise self.exc
         return self.result

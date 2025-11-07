@@ -15,18 +15,7 @@ activations = ['sigmoid', 'relu', 'lrelu', 'tanh']
 lr_schedulers = ["lambda", "step", 'constant', 'multistep', 'cosine', 'plateau']
 
 
-def try_gpu(i=0):
-    """
-    获取一个GPU
-    :param i: GPU编号
-    :return: 第i号GPU。若GPU不可用，则返回CPU
-    """
-    if cuda.device_count() >= i + 1:
-        return torch.device(f"cuda:{i}")
-    return torch.device("cpu")
-
-
-def get_optimizer(net: torch.nn.Module, optim_str='adam', lr=0.1, w_decay=0., **kwargs):
+def get_optimizer(net: torch.nn.Module, optim_str, lr, w_decay, **kwargs):
     if optim_str == "asgd":
         # 使用随机平均梯度下降优化器
         return torch.optim.ASGD(
@@ -87,7 +76,7 @@ def get_optimizer(net: torch.nn.Module, optim_str='adam', lr=0.1, w_decay=0., **
         raise NotImplementedError(f"不支持优化器{optim_str}, 支持的优化器包括{optimizers}")
 
 
-def get_ls_fn(ls_str: str = "mse", **kwargs):
+def get_ls_fn(ls_str, **kwargs):
     """获取损失函数。
     此处返回的损失函数不接收size_average参数，若需要非批量平均化的损失值，请指定reduction='none'
     :param ls_str: 损失函数对应字符串
@@ -112,7 +101,7 @@ def get_ls_fn(ls_str: str = "mse", **kwargs):
         raise NotImplementedError(f"不支持损失函数{ls_str}, 支持的损失函数包括{loss_es}")
 
 
-def init_wb(func_str: str = "xavier", **kwargs):
+def init_wb(func_str, **kwargs):
     """获取初始化方法
     根据func_str返回初始化权重、偏移参数的函数，返回的是方法局部函数。
 
@@ -124,8 +113,6 @@ def init_wb(func_str: str = "xavier", **kwargs):
         return None
     elif func_str == "normal":
         mean, std = kwargs.pop('mean', 0), kwargs.pop('std', 1)
-        # w_init = lambda m: init.normal_(m, mean, std)
-        # b_init = lambda m: init.normal_(m, mean, std)
         w_init = functools.partial(init.normal_, mean=mean, std=std)
         b_init = functools.partial(init.normal_, mean=mean, std=std)
     elif func_str == "xavier":
@@ -134,8 +121,6 @@ def init_wb(func_str: str = "xavier", **kwargs):
         w_init, b_init = init.zeros_, init.zeros_
     elif func_str == 'constant':
         w_value, b_value = kwargs.pop('w_value', 1), kwargs.pop('b_value', 0)
-        # w_init = lambda m: init.constant_(m, w_value)
-        # b_init = lambda m: init.constant_(m, b_value)
         w_init = functools.partial(init.constant_, val=w_value)
         b_init = functools.partial(init.constant_, val=b_value)
     elif func_str == 'trunc_norm':
@@ -162,9 +147,15 @@ def init_wb(func_str: str = "xavier", **kwargs):
             return
         elif isinstance(module_s, nn.modules.batchnorm._NormBase):
             # 使用"全0法"初始化批次标准化层的权重和偏置量会导致计算结果均为0，因此将被跳过！
-            # 泽维尔初始化不支持低于二维的张量初始化，因此将被跳过！
+            # 泽维尔初始化不支持低于二维的张量初始化，因此将替换为正态初始化！
             if func_str == 'xavier' or func_str == 'zero':
-                w_init_impl, b_init_impl = lambda ts: None, lambda ts: None
+                w_init_impl, b_init_impl = init.normal_, init.normal_
+        elif module_s.__module__ == 'torch.nn.modules.normalization':
+            # 使用"全0法"初始化批次标准化层的权重和偏置量会导致计算结果均为0，因此将被跳过！
+            # 泽维尔初始化不支持低于二维的张量初始化，因此将替换为正态初始化！
+            if func_str == 'xavier' or func_str == 'zero':
+                w_init_impl, b_init_impl = init.normal_, init.normal_
+
         if hasattr(module_s, 'weight') and module_s.weight is not None:
             w_init_impl(module_s.weight)
         if hasattr(module_s, 'bias') and module_s.bias is not None:
@@ -173,7 +164,7 @@ def init_wb(func_str: str = "xavier", **kwargs):
     return _init_impl
 
 
-def get_lr_scheduler(optimizer, which: str = 'step', **kwargs):
+def get_lr_scheduler(optimizer, which, **kwargs):
     """获取学习率规划器
     :param optimizer: 指定规划器的学习率优化器对象。
     :param which: 使用哪种类型的规划器
@@ -200,7 +191,7 @@ def get_lr_scheduler(optimizer, which: str = 'step', **kwargs):
         raise NotImplementedError(f"不支持的学习率规划器{which}, 当前支持的初始化方式包括{lr_schedulers}")
 
 
-def get_activation(which: str = 'step', **kwargs):
+def get_activation(which, **kwargs):
     """获取激活函数
     :param which: 使用哪种类型的激活函数
     :param kwargs: 指定激活函数的关键词参数
@@ -214,8 +205,33 @@ def get_activation(which: str = 'step', **kwargs):
         return torch.nn.LeakyReLU(**kwargs)
     elif which == 'tanh':
         return torch.nn.Tanh()
+    elif which == 'gelu':
+        return torch.nn.GELU(**kwargs)
     else:
         raise NotImplementedError(f"不支持的激活函数{which}, 当前支持的激活函数层包括{activations}")
+
+
+def get_norm_layer(which, **kwargs):
+    """返回一个标准化层
+
+    对于批量标准化层，使用可学习的仿射参数并追踪动态数据（均值/stddev）
+    对于实例标准化层则不然。
+
+    Parameters:
+    :param which: 标准化层的类型: batch | instance | none
+    :return: 创建标准化层的函数，可以直接填入位置参数，辅以kwargs作为预填关键字参数
+    """
+    if which == 'batch':
+        norm_layer = functools.partial(nn.BatchNorm2d, **kwargs)
+    elif which == 'instance':
+        norm_layer = functools.partial(nn.InstanceNorm2d, **kwargs)
+    elif which == 'layer':
+        norm_layer = functools.partial(nn.LayerNorm, **kwargs)
+    elif which == 'none':
+        norm_layer = nn.Identity()
+    else:
+        raise NotImplementedError(f'不支持的标准化层{which}!')
+    return norm_layer
 
 
 def sample_wise_ls_fn(x, y, ls_fn):

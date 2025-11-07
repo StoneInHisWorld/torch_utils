@@ -1,3 +1,4 @@
+from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 
 
@@ -13,7 +14,7 @@ class DataTransformer:
         self.n_workers = n_workers
         self.refresh()
 
-    def __default_preprocesses(self) -> None:
+    def _default_preprocesses(self) -> None:
         """默认数据集预处理程序。
         注意：此程序均为本地程序，不可被序列化（pickling）！
 
@@ -65,6 +66,10 @@ class DataTransformer:
                     futures.append(pool.submit(self.f_preprocesses, fea))
                 if self.l_preprocesses and lb:
                     futures.append(pool.submit(self.l_preprocesses, lb))
+                for future in as_completed(futures):
+                    if future.exception():
+                        pool.shutdown(wait=False)  # 立即终止线程池
+                        raise future.exception()
             return [f.result() for f in futures]
         if self.f_preprocesses and fea:
             futures.append(self.f_preprocesses(fea))
@@ -72,9 +77,15 @@ class DataTransformer:
             futures.append(self.l_preprocesses(lb))
         return futures
 
-    def refresh(self):
-        """刷新预处理程序，需要在每次预处理数据之前调用一次"""
+    def refresh(self, *args, **kwargs):
+        """刷新预处理程序，需要在每次预处理数据之前调用一次
+
+        :param args: 预处理程序所用位置参数
+        :param kwargs: 预处理程序所用关键字参数
+        """
         if hasattr(self, f'{self.module_type.__name__}_preprocesses'):
-            exec(f'self.{self.module_type.__name__}_preprocesses()')
+            getattr(self, f"{self.module_type.__name__}_preprocesses")(*args, **kwargs)
+            # exec(f'self.{self.module_type.__name__}_preprocesses()')
         else:
-            self.__default_preprocesses()
+            raise NotImplementedError(f"没有为{self.module_type.__name__}定制预处理程序！"
+                                      f"请在{self.__class__.__name__}类中创建{self.module_type.__name__}_preprocesses()方法！")

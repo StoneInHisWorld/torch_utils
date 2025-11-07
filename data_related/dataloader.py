@@ -1,25 +1,74 @@
+import functools
 import queue
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 
-import dill
+import torch
 from prefetch_generator import BackgroundGenerator
 from torch.utils.data import DataLoader as DLoader
 
 from data_related.datasets import LazyDataSet
 
 
+# def default_transit_fn(
+#         device, non_blocking, share_memory,
+#         indicated_transit_fn, batch, transit_kwargs
+# ):
+#     """可自定义的数据供给传输函数
+#     DataLoader每次从内存取出数据后，都会调用本函数对批次进行预处理
+#
+#     :param batch: 需要预处理的数据批
+#     :param kwargs: 预处理所用关键字参数
+#     :return: 数据批次
+#     """
+#     X, y = batch
+#     device = torch.device(device)
+#     if indicated_transit_fn:
+#         return indicated_transit_fn(batch, **transit_kwargs)
+#     else:
+#         if X.device != device:
+#             X = X.to(device, non_blocking=non_blocking)
+#         if y.device != device:
+#             y = y.to(device, non_blocking=non_blocking)
+#         if share_memory:
+#             X, y = X.share_memory_(), y.share_memory_()
+#         return X, y
+
+
+def default_transit_fn(device, non_blocking, share_memory, batch):
+    """可自定义的数据供给传输函数
+    DataLoader每次从内存取出数据后，都会调用本函数对批次进行预处理
+
+    :param batch: 需要预处理的数据批
+    :param kwargs: 预处理所用关键字参数
+    :return: 数据批次
+    """
+    X, y = batch
+    device = torch.device(device)
+    if X.device != device:
+        X = X.to(device, non_blocking=non_blocking)
+    if y.device != device:
+        y = y.to(device, non_blocking=non_blocking)
+    if share_memory:
+        X, y = X.share_memory_(), y.share_memory_()
+    return X, y
+
+
 class DataLoader(DLoader):
     """普通数据加载器"""
 
-    def __init__(self, dataset, transit_fn, transit_kwargs,
-                 batch_size=1, bkg_gen=True, max_prefetch=3,
-                 **kwargs):
+    def __init__(self,
+                 dataset, transit_fn, transit_kwargs,
+                 bkg_gen=True, max_prefetch=3, device=torch.device('cpu'),
+                 non_blocking=True, share_memory=True,  # 数据迁移参数
+                 batch_size=1, **kwargs):  # 数据加载参数
         """普通数据加载器
 
         :param dataset: 将要转化为加载器的数据集对象
         :param transit_fn: 数据批次迁移方法。
             在__iter__()方法中，每次从内存取出数据后，都会调用transit_fn对数据批次进行迁移操作。
+            transit_fn()的签名需为:
+            def transit_fn(device, non_blocking, share_memory, batch, **kwargs) -> X, y
         :param transit_kwargs: 数据供给传输函数的关键字参数。
             调用transit_fn时，一并输入到transit_fn中的关键字参数
         :param batch_size: 数据批次大小
@@ -29,16 +78,21 @@ class DataLoader(DLoader):
         :param kwargs: pytorch.utils.data.DataLoader的额外参数
         """
         self.transit_kwargs = transit_kwargs
-        self.transit_fn = dill.dumps(transit_fn)
+        if transit_fn:
+            self.transit_fn = functools.partial(
+                transit_fn, device, non_blocking, share_memory, **transit_kwargs
+            )
+        else:
+            self.transit_fn = functools.partial(
+                default_transit_fn, device, non_blocking, share_memory
+            )
         self.bkg_gen = bkg_gen
         self.max_prefetch = max_prefetch
         super().__init__(dataset, batch_size, **kwargs)
 
     def __iter__(self):
-        transit_fn = dill.loads(self.transit_fn)
         unwrapped_generator = (
-            transit_fn(batch, **self.transit_kwargs)
-            for batch in super().__iter__()
+            self.transit_fn(batch) for batch in super().__iter__()
         )
         if self.bkg_gen:
             return BackgroundGenerator(unwrapped_generator, self.max_prefetch)
