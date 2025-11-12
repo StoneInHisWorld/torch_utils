@@ -161,7 +161,7 @@ class Experiment:
         self.add_logMsg(
             True, **log_msg,
             data_portion=self.__runtime_cfg["ds_kwargs"]['data_portion'],
-            which_dataset=self.__runtime_cfg["ds_kwargs"]['which_dataset'],
+            # which_dataset=self.__runtime_cfg["ds_kwargs"]['which_dataset'],
             f_req_shp=self.__runtime_cfg["ds_kwargs"]['f_req_shp'],
             l_req_shp=self.__runtime_cfg["ds_kwargs"]['l_req_shp'],
         )
