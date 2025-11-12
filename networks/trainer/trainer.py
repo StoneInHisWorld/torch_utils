@@ -514,8 +514,11 @@ class Trainer:
 
         def send_data(data_iter, data_q, epoch, which):
             pbar.set_description(f'获取世代{epoch}/{n_epochs}的{which}数据……')
+            # n_data = 0
             for X, y in data_iter:
                 data_q.put((X, y))
+                # print(f"线程发送了世代{epoch}/{n_epochs}的第{n_data}批次的{which}数据")
+                # n_data += 1
             data_q.put(None)
 
         # 生成子进程用于创建网络、执行网络更新并记录数据
