@@ -1,4 +1,5 @@
 import random
+import warnings
 from typing import Sized, Tuple
 
 import numpy as np
@@ -37,11 +38,14 @@ def k1_split_data(dataset: DataSet or LazyDataSet,
     )
 
 
-def split_data(dataset: DataSet or LazyDataSet, k, train=0.8, shuffle=True):
+def split_data(dataset: DataSet or LazyDataSet, k, train_portion=0.8, shuffle=True):
     # 提取超参数
     if k == 1:
-        return k1_split_data(dataset, train, shuffle)
+        assert 0 <= train_portion <= 1.0, f'训练验证比参数需要在[0, 1]范围内，收到的训练验证比为{train_portion}'
+        return k1_split_data(dataset, train_portion, shuffle)
     elif k > 1:
+        if train_portion < 1.0:
+            warnings.warn(f"训练验证比参数train_portion{train_portion}与k折参数{k}冲突，k>1时训练比例参数将无效！")
         return k_fold_split(dataset, k, shuffle)
     else:
         raise ValueError(f'不正确的k值={k}，k值应该大于0，且为整数！')
@@ -95,7 +99,7 @@ def to_loader(
         )
     elif isinstance(dataset, DataSet):
         # 删除预处理方法，以便DataLoader的多进程加载
-        dataset.pop_preprocesses()
+        # dataset.pop_preprocesses()
         # if hasattr(dataset, 'transformer')
         # del dataset.transformer
         return DataLoader(
