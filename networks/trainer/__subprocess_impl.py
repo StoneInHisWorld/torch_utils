@@ -26,7 +26,7 @@ def train_valid_impl(trainer, tdata_q, vdata_q, pbar_q, epoch_q, result_conn):
     # 通过队列获取世代更新消息。这里不能写成while q.get(): 因为这里的世代数会等于0
     epoch = epoch_q.get()
     while epoch is not None:
-        batch = tdata_q.get()  # TODO: 请参考DynamicDIMPLE是如何处理传输过来的张量全0的情况
+        batch = tdata_q.get()
         pbar_q.put(f"世代{epoch}训练开始")
         log_epoch_q.put(epoch)
         n_batch = 0
@@ -61,8 +61,8 @@ def train_valid_impl(trainer, tdata_q, vdata_q, pbar_q, epoch_q, result_conn):
     log_epoch_q.put(None)
     lrlog_q.put(None)
     # 使用None来通知记录进程“训练已经结束”
-    tlog_q.put(None)
-    pbar_q.put(None)
+    # tlog_q.put(None)
+    # pbar_q.put(None)
     result_conn.send(net)
     log_subp.join()
 
@@ -113,7 +113,7 @@ def log_impl(criteria_fns, trls_names, tels_names, lr_names,
     # 创建线程进行学习率的记录
     def add_lr_to_history():
         data = lrlog_q.get()
-        while data:
+        while data is not None:
             lr_names, lrs = data
             history.add([f"{ln}_lrs" for ln in lr_names], lrs)
             data = lrlog_q.get()
