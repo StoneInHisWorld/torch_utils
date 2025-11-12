@@ -18,7 +18,7 @@ from data_related.selfdefined_ds import SelfDefinedDataSet
 class TheNameOfYourDS(SelfDefinedDataSet):
 
     # TODO： 此处编写数据集路径检查逻辑
-    def _check_path(self, root: str, which: str) -> [str, str, str, str]:
+    def _check_path(self, root: str) -> [str, str, str, str]:
         """检查数据集路径是否正确，并生成和返回特征集和标签集路径
 
         :param root: 数据集所在根目录。

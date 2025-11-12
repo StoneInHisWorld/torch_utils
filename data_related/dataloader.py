@@ -10,31 +10,6 @@ from torch.utils.data import DataLoader as DLoader
 from data_related.datasets import LazyDataSet
 
 
-# def default_transit_fn(
-#         device, non_blocking, share_memory,
-#         indicated_transit_fn, batch, transit_kwargs
-# ):
-#     """可自定义的数据供给传输函数
-#     DataLoader每次从内存取出数据后，都会调用本函数对批次进行预处理
-#
-#     :param batch: 需要预处理的数据批
-#     :param kwargs: 预处理所用关键字参数
-#     :return: 数据批次
-#     """
-#     X, y = batch
-#     device = torch.device(device)
-#     if indicated_transit_fn:
-#         return indicated_transit_fn(batch, **transit_kwargs)
-#     else:
-#         if X.device != device:
-#             X = X.to(device, non_blocking=non_blocking)
-#         if y.device != device:
-#             y = y.to(device, non_blocking=non_blocking)
-#         if share_memory:
-#             X, y = X.share_memory_(), y.share_memory_()
-#         return X, y
-
-
 def default_transit_fn(device, non_blocking, share_memory, batch):
     """可自定义的数据供给传输函数
     DataLoader每次从内存取出数据后，都会调用本函数对批次进行预处理
@@ -99,12 +74,11 @@ class DataLoader(DLoader):
         else:
             return unwrapped_generator
 
-
 class LazyDataLoader:
 
     def __init__(self, index_ds: LazyDataSet,
                  transit_fn, transit_kwargs=None, batch_size=1,
-                 i_cfn=None, bkgGen=True, max_prefetch=3,
+                 i_cfn=None, bkgGen=True, max_prefetch=3, is_train=True,
                  **kwargs):
         """数据懒加载器，适配懒加载数据集的数据加载器
         每次供给时，调用索引数据集内含的读取数据方法，加载并供给索引对应的数据内容。
@@ -132,12 +106,13 @@ class LazyDataLoader:
         self.transformer = index_ds.transformer
         # 创建索引迭代器
         self.__index_dl = DLoader(index_ds, batch_size, collate_fn=i_cfn, **kwargs)
+        self.is_train = is_train
 
     def __read_impl(self, i_batch, n_workers):
         # print('fetch thread...')
-        fea_s, lb_s = self.reader.fetch(*i_batch, n_workers=n_workers)
+        fea_s, lb_s = self.reader.fetch(*i_batch, n_workers=n_workers, is_train=self.is_train)
         # print('fetched!')
-        batch = self.transformer.transform_data(fea_s, lb_s, n_workers=n_workers)
+        batch = self.transformer.transform_data(fea_s, lb_s, n_workers=n_workers, is_train=self.is_train)
         # print('transformed!')
         batch = self.collate_fn(batch)
         return self.transit_fn(batch, **self.transit_kwargs)

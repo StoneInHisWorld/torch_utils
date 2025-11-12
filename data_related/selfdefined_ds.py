@@ -14,24 +14,37 @@ from utils import ControlPanel
 
 
 class SelfDefinedDataSet:
-    # 数据基本信息
-    f_channel = 1
-    l_channel = 1
-    f_mode = 'L'  # 读取二值图，读取图片速度将会大幅下降
-    l_mode = '1'
+
+    # # 数据基本信息
+    # f_channel = 1
+    # l_channel = 1
+    # f_mode = 'L'
+    # l_mode = '1'
 
     def __init__(self, module: type, config: dict or ControlPanel,
                  is_train: bool = True):
         """自定义DAO数据集
-        负责按照用户指定的方式读取数据集的索引以及数据本身，并提供评价指标、数据预处理方法、结果包装方法。
-        读取数据集的索引体现在_get_fea_index(), _get_lb_index()方法中，在此之前需要调用_check_path()检查数据集路径。
-        读取数据体现在_get_fea_reader(), _get_lb_reader()方法中。
+        负责按照用户指定的方式读取数据集的索引以及数据本身，并根据模型类型提供评价指标。与StorageDataLoader相联系，调用数据读取方法；
+            与DataTransformer相联系，调用数据预处理方法；与PredictionWrapper相联系，调用结果包装方法。
+        在初始化函数__init__()函数中完成:
+            1. 调用self._check_path()检查用户指定的"root/which"数据集文件中，数据路径是否满足用户要求。
+            2. 调用self._get_fea_index(), self._get_lb_index()方法读取训练时所用的特征集索引以及标签集索引。验证集从这两个索引集中切分，
+            3. 根据用户指定的懒加载状态，调用self.reader进行训练数据集读取
+            4. 调用self._get_test_fea_index(), self._get_test_lb_index()方法读取测试时所用的特征集索引以及标签集索引。
+            5. 根据用户指定的懒加载状态，调用self.reader进行测试数据集读取
+        需要或者可选重载的方法包括：
+            1. 数据集路径检查方法：_check_path()
+            2. 训练特征集索引加载方法：_get_fea_index()
+            3. 训练标签集索引加载方法：_get_lb_index()
+            4. （可选）测试特征集索引加载方法：_get_test_fea_index()，默认调用self._get_fea_index()
+            5. （可选）测试标签集索引加载方法：_get_test_lb_index()，默认调用self._get_lb_index()
+            6. 指定数据读取的方法：_get_reader()
+            7. 指定数据预处理器的方法：_get_transformer()
+            8. 指定预测数据打包器的方法：get_wrapper()
+            9. 涉及模型对应的评价指标方法：[ModelName]_criterion_a()
         评价指标通过get_criterion_a()方法提供。
-        数据预处理方法通过AdoptedModelName_preprocesses()提供，请将AdoptedModelName替换为本次训练使用的模型类名
-        结果包装方法通过AdoptedModelName_wrap_fn()提供，请将AdoptedModelName替换为本次训练使用的模型类名
-        上述所有方法均需要用户自定义。
 
-        :param module: 实验涉及数据集类型。数据集会根据实验所用模型来自动指定数据预处理程序以及结果包装程序。
+        :param module: 实验涉及数据集类型。
         :param config: 当前实验所属控制面板
         :param is_train: 是否处于训练模式。处于训练模式，则会加载训练和测试数据集，否则只提供测试数据集。
         """
@@ -41,7 +54,7 @@ class SelfDefinedDataSet:
         data_portion = config['data_portion']
         self.bulk_preprocess = config['bulk_preprocess']
         shuffle = config['shuffle']
-        which = config['which_dataset']
+        # which = config['which_dataset']
         self.device = config['device']
         # 判断图片指定形状
         self.f_req_shp = tuple(config['f_req_shp']) if config['f_req_shp'] else None
@@ -59,7 +72,7 @@ class SelfDefinedDataSet:
         # 加载训练集
         self.is_train = is_train
         # 进行数据集路径检查
-        directories = self._check_path(where, which)
+        directories = self._check_path(where)
         # 获取数据转换器和数据读取器
         self.transformer = self._get_transformer()
         self.reader = self._get_reader()
@@ -85,39 +98,36 @@ class SelfDefinedDataSet:
                 f'训练集的特征集和标签集长度{len(self._train_f)}&{len(self._train_l)}不一致'
         # 加载测试集
         print(f"{self.__class__.__name__}正在获取测试索引……")
-        self._test_f, self._test_l = [fn(d) for fn, d in zip([self._get_fea_index, self._get_lb_index], directories)]
+        # self._test_f, self._test_l = [fn(d) for fn, d in zip([self._get_fea_index, self._get_lb_index], directories)]
+        self._test_f, self._test_l = [fn(d) for fn, d in zip(
+            [self._get_test_fea_index, self._get_test_lb_index], directories
+        )]
         self._test_f, self._test_l = data_slicer(data_portion, shuffle, self._test_f, self._test_l)
         self._test_f = self._test_f if self._f_lazy \
-            else self.reader.fetch(self._test_f, None, not self.bulk_preprocess)[0]
+            else self.reader.fetch(self._test_f, None, not self.bulk_preprocess, False)[0]
         self._test_l = self._test_l if self._l_lazy \
-            else self.reader.fetch(None, self._test_l, not self.bulk_preprocess)[0]
+            else self.reader.fetch(None, self._test_l, not self.bulk_preprocess, False)[0]
 
         # 加载结果报告
         assert len(self._test_f) == len(
             self._test_l), f'测试集的特征集和标签集长度{len(self._test_f)}&{len(self._test_l)}不一致'
         print("\n************数据集读取完毕*******************")
-        print(f'数据集名称为{which}')
+        # print(f'数据集名称为{which}')
         print(f'数据集切片大小为{data_portion}')
         if is_train:
             print(f'训练集长度为{len(self._train_f)}, 测试集长度为{len(self._test_f)}')
         else:
             print(f'测试集长度为{len(self._test_f)}')
         print("******************************************")
-        # # 获取特征集、标签集及其索引集的预处理程序
-        # if not self.bulk_preprocess:
-        #     # 整理读取和预处理过后的数据，并清空预处理程序
-        #     self._train_f = torch.vstack(self._train_f)
-        #     self._train_l = torch.vstack(self._train_l)
-        #     self._test_f = torch.vstack(self._test_f)
-        #     self._test_l = torch.vstack(self._test_l)
 
     @abstractmethod
-    def _check_path(self, root: str, which: str) -> [str, str, str, str]:
-        """检查数据集路径是否正确，否则直接中断程序。
+    def _check_path(self, root: str) -> [str, str, str, str]:
+        """检查数据集路径是否正确，并生成训练和测试数据的根目录
+        如果发现数据集路径不正确则直接中断程序
+        v0.5后不接受which参数，将有继承的子类在初始化函数中进行赋值，辅助路径判断
 
-        :param root: 数据集源目录。
-        :param which: 数据集批次名
-        :return 返回正确的路径名。
+        :param root: 数据集源目录，指的是数据集文件存储的根目录
+        :return 数据集路径。
             如果self.is_train == True，则返回[训练特征集路径，训练标签集路径，测试特征集路径，测试标签集路径]；
             否则返回[测试特征集路径，测试标签集路径]
         """
@@ -125,58 +135,45 @@ class SelfDefinedDataSet:
 
     @abstractmethod
     def _get_fea_index(self, root) -> list:
-        """读取根目录下的特征集索引
+        """读取root根目录下的特征集索引，作为训练时的特征集。
+        此处需要指定全量数据集的特征集索引存放目录。
+        请不要在这里加载随机打乱的索引和进行数据集划分，这两项操作会由系统自动完成。
 
         :param root: 数据集根目录
-        :return 提取出的索引列表
+        :return 提取出的特征集索引列表
         """
         raise NotImplementedError('没有编写特征集索引读取程序！')
 
     @abstractmethod
     def _get_lb_index(self, root) -> list:
-        """读取根目录下的标签集索引
+        """读取root根目录下的标签集索引，作为训练时的标签集
+        此处需要指定全量数据集的特征集索引存放目录。
+        请不要在这里加载随机打乱的索引和进行数据集划分，这两项操作会由系统自动完成。
 
         :param root: 数据集根目录
-        :return 提取出的索引列表
+        :return 提取出的标签集索引列表
         """
         raise NotImplementedError('没有编写标签集索引读取程序！')
 
-    # TODO: 设置验证集和测试集的索引获取方法，需要提供默认方法来兼容以前编写的代码和降低编写自定义数据集的编写难度
-    @abstractmethod
-    def _get_valid_fea_index(self, root) -> list:
-        """读取根目录下的特征集索引
-
-        :param root: 数据集根目录
-        :return 提取出的索引列表
-        """
-        raise NotImplementedError('没有编写验证集中的特征集索引读取程序！')
-
-    @abstractmethod
-    def _get_valid_lb_index(self, root) -> list:
-        """读取根目录下的标签集索引
-
-        :param root: 数据集根目录
-        :return 提取出的索引列表
-        """
-        raise NotImplementedError('没有编写验证集中的标签集索引读取程序！')
-
-    @abstractmethod
     def _get_test_fea_index(self, root) -> list:
-        """读取根目录下的特征集索引
+        """读取root根目录下的特征集索引，作为测试时的特征集。
+        请不要在这里加载随机打乱的索引，这项操作会由系统自动完成。
+        默认使用训练时的特征集读取方式，可以通过重载本方法进行自定义。
 
         :param root: 数据集根目录
-        :return 提取出的索引列表
+        :return 提取出的特征集索引列表
         """
-        raise NotImplementedError('没有编写验证集中的特征集索引读取程序！')
+        return self._get_fea_index(root)
 
-    @abstractmethod
     def _get_test_lb_index(self, root) -> list:
-        """读取根目录下的标签集索引
+        """读取根目录下的标签集索引，作为测试时的标签集。
+        请不要在这里加载随机打乱的索引，这项操作会由系统自动完成。
+        默认使用训练时的特征集读取方式，可以通过重载本方法进行自定义。
 
         :param root: 数据集根目录
-        :return 提取出的索引列表
+        :return 提取出的标签集索引列表
         """
-        raise NotImplementedError('没有编写验证集中的标签集索引读取程序！')
+        return self._get_lb_index(root)
 
     def get_criterion_a(self) -> List[
         Callable[
@@ -194,7 +191,8 @@ class SelfDefinedDataSet:
         if hasattr(self, f'{self.module.__name__}_criterion_a'):
             return getattr(self, f'{self.module.__name__}_criterion_a')()
         else:
-            return []
+            raise NotImplementedError(f'{self.__class__.__name__}没有为{self.module.__name__}定义评价指标！'
+                                      f'请在该类中定义{self.module.__name__}_criterion_a()来指定评价指标！')
 
     def refresh_preprocess(self):
         self.transformer.refresh()
@@ -208,32 +206,55 @@ class SelfDefinedDataSet:
 
         :return: (训练数据集、测试数据集)，两者均为pytorch框架下数据集
         """
-        gen_datasets = []
-        fl_pairs = [(self._train_f, self._train_l), (self._test_f, self._test_l)] if self.is_train \
-            else [(self._test_f, self._test_l)]
-        # TODO：这里的懒加载数据集生成方式不支持特征集或标签集的单独懒加载模式
-        if self._f_lazy or self._l_lazy:
-            gen_datasets += [
-                LazyDataSet(
-                    f, l, i_cfn, self.reader, self.transformer, collate_fn
-                ) for f, l in fl_pairs
-            ]
-            train_preprocess_desc, test_preprocess_desc = \
-                '\r正在对训练数据索引集进行预处理……', '\r正在对测试数据索引集进行预处理……'
-        else:
-            # 生成数据集
-            gen_datasets += [
-                DataSet(f, l, self.transformer, collate_fn, self.device)
-                for f, l in fl_pairs
-            ]
-            train_preprocess_desc, test_preprocess_desc = \
-                '\r正在对训练数据集进行预处理……', '\r正在对测试数据集进行预处理……'
-        # 如进行批量预处理
-        if self.bulk_preprocess:
-            for ds, desc in zip(gen_datasets, [train_preprocess_desc, test_preprocess_desc]):
+        # gen_datasets = []
+        # fl_pairs = [(self._train_f, self._train_l), (self._test_f, self._test_l)] if self.is_train \
+        #     else [(self._test_f, self._test_l)]
+        # # TODO：这里的懒加载数据集生成方式不支持特征集或标签集的单独懒加载模式
+        # if self._f_lazy or self._l_lazy:
+        #     gen_datasets += [
+        #         LazyDataSet(
+        #             f, l, i_cfn, self.reader, self.transformer, collate_fn
+        #         ) for f, l in fl_pairs
+        #     ]
+        #     train_preprocess_desc, test_preprocess_desc = \
+        #         '\r正在对训练数据索引集进行预处理……', '\r正在对测试数据索引集进行预处理……'
+        # else:
+        #     # 生成数据集
+        #     gen_datasets += [
+        #         DataSet(f, l, self.transformer, collate_fn, self.device)
+        #         for f, l in fl_pairs
+        #     ]
+        #     train_preprocess_desc, test_preprocess_desc = \
+        #         '\r正在对训练数据集进行预处理……', '\r正在对测试数据集进行预处理……'
+        # # 如进行批量预处理
+        # if self.bulk_preprocess:
+        #     for ds, desc in zip(gen_datasets, [train_preprocess_desc, test_preprocess_desc]):
+        #         print(desc, flush=True)
+        #         ds.preprocess()
+        # # return gen_datasets
+
+        def __get_a_dataset(f, l, is_train):
+            # TODO：这里的懒加载数据集生成方式不支持特征集或标签集的单独懒加载模式
+            if self._f_lazy or self._l_lazy:
+                ds = LazyDataSet(
+                    i_cfn, self.reader,
+                    f, l, self.transformer, collate_fn, is_train=is_train
+                )
+                desc = '\r正在对训练数据索引集进行预处理……' if is_train else '\r正在对测试数据索引集进行预处理……'
+            else:
+                # 生成数据集
+                ds = DataSet(f, l, self.transformer, collate_fn, self.device, is_train)
+                desc = '\r正在对训练数据集进行预处理……' if is_train else '\r正在对测试数据集进行预处理……'
+            if self.bulk_preprocess:
                 print(desc, flush=True)
                 ds.preprocess()
-        return gen_datasets
+            return ds
+
+        test_ds = __get_a_dataset(self._test_f, self._test_l, False)
+        if self.is_train:
+            train_ds = __get_a_dataset(self._train_f, self._train_l, True)
+            return train_ds, test_ds
+        return test_ds
 
     def to_dataloaders(self,
                        k, batch_size, i_cfn=None, collate_fn=None,
@@ -254,7 +275,8 @@ class SelfDefinedDataSet:
         ret = []
         if self.is_train:
             train_ds, test_ds = self._to_dataset(i_cfn, collate_fn)
-            train_portion = dl_kwargs.pop('train_portion', 0.8)
+            assert 'train_portion' in dl_kwargs.keys(), "DataLoader参数缺少训练验证比'train_portion'！"
+            train_portion = dl_kwargs.pop('train_portion')
             # 使用k-fold机制
             data_iter_generator = (
                 [
@@ -268,7 +290,10 @@ class SelfDefinedDataSet:
             )  # 将抽取器遍历，构造加载器
             ret.append(data_iter_generator)
         else:
-            test_ds = self._to_dataset(i_cfn, collate_fn)[0]
+            if 'train_portion' in dl_kwargs.keys():
+                warnings.warn("数据集的测试模式下train_portion参数将无效！")
+                dl_kwargs.pop('train_portion')
+            test_ds = self._to_dataset(i_cfn, collate_fn)
         # 获取测试集数据迭代器
         test_iter = dso.to_loader(
             test_ds, batch_size, transit_fn, **dl_kwargs
@@ -277,19 +302,20 @@ class SelfDefinedDataSet:
 
     @abstractmethod
     def _get_transformer(self) -> DataTransformer:
-        """返回执行数据预处理的数据转换器
+        """告诉数据集，数据预处理的数据转换器
         需要根据访问的数据类型以及任务需求，自定义数据预处理程序
         :return: 数据转换器
         """
-        raise NotImplementedError('没有指定数据集转换器！')
+        raise NotImplementedError(f'{self.__class__.__name__}没有指定数据集转换器！')
 
     @abstractmethod
     def _get_reader(self) -> StorageDataLoader:
-        """返回根据索引进行存储访问的数据读取器
+        """告诉数据集，根据索引进行存储访问的数据读取器
         该数据处理器为StorageDataLoader的子类
+
         :return: 数据读取器
         """
-        raise NotImplementedError('没有指定特征集读取程序！')
+        raise NotImplementedError(f'{self.__class__.__name__}没有指定数据集读取程序！')
 
     @abstractmethod
     def get_wrapper(self, required_raw_ds=True) -> PredictionWrapper:
@@ -297,7 +323,7 @@ class SelfDefinedDataSet:
         该结果打包器为PredictionWrapper的子类
 
         Args:
-            required_raw_ds: 需要未进行预处理的原数据集
+            required_raw_ds: 是否需要未进行预处理的原数据集
 
         Returns:
             结果打包器
