@@ -5,12 +5,12 @@ import torch
 from torch.profiler import ProfilerActivity
 from torch.profiler import record_function
 
+from networks.trainer import prepare_train
 from utils.accumulator import Accumulator
-from networks.decorators import prepare
 from utils.history import History
 
 
-@prepare('train')
+@prepare_train
 def profiling_impl(n_epochs, log_path, trainer, data_iter):
     # 提取训练器参数
     net = trainer.module
@@ -25,11 +25,8 @@ def profiling_impl(n_epochs, log_path, trainer, data_iter):
     # 进行性能测试
     with torch.profiler.profile(
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-            # schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
-            # on_trace_ready=torch.profiler.tensorboard_trace_handler('./log'),
             record_shapes=True,
             profile_memory=True,
-            # with_stack=True,
     ) as prof:
         for epoch in range(n_epochs):
             with record_function("epoch_switch_consume"):
