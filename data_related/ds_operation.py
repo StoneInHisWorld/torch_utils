@@ -23,7 +23,7 @@ def k1_split_data(dataset: DataSet or LazyDataSet,
     """
     assert 0 < train <= 1.0, '训练集、验证集比例之和须为1'
     # 数据集分割
-    print('\r正在进行数据集分割……', flush=True)
+    # print('\r正在进行数据集分割……', flush=True)
     data_len = len(dataset)
     train_len = int(data_len * train)
     ranger = (r for r in np.split(np.arange(data_len), (train_len,)) if len(r) > 0)

@@ -85,7 +85,7 @@ class SelfDefinedDataSet:
         else:
             print("已选择批量预处理，将会在转化成数据迭代器前进行预处理")
         if is_train:
-            print(f'{self.__class__.__name__}正在获取训练索引……')
+            print(f'\r{self.__class__.__name__}正在获取训练索引……', flush=True, end="")
             self._train_fd, self._train_ld = directories.pop(0), directories.pop(0)
             self._train_f, self._train_l = self._get_fea_index(self._train_fd), self._get_lb_index(self._train_ld)
             # 按照数据比例切分数据集索引
@@ -97,7 +97,7 @@ class SelfDefinedDataSet:
             assert len(self._train_f) == len(self._train_l), \
                 f'训练集的特征集和标签集长度{len(self._train_f)}&{len(self._train_l)}不一致'
         # 加载测试集
-        print(f"{self.__class__.__name__}正在获取测试索引……")
+        print(f"\r{self.__class__.__name__}正在获取测试索引……", flush=True, end="")
         # self._test_f, self._test_l = [fn(d) for fn, d in zip([self._get_fea_index, self._get_lb_index], directories)]
         self._test_f, self._test_l = [fn(d) for fn, d in zip(
             [self._get_test_fea_index, self._get_test_lb_index], directories
@@ -240,14 +240,14 @@ class SelfDefinedDataSet:
                     i_cfn, self.reader,
                     f, l, self.transformer, collate_fn, is_train=is_train
                 )
-                desc = '\r正在对训练数据索引集进行预处理……' if is_train else '\r正在对测试数据索引集进行预处理……'
+                desc = '训练数据索引集' if is_train else '测试数据索引集'
             else:
                 # 生成数据集
                 ds = DataSet(f, l, self.transformer, collate_fn, self.device, is_train)
-                desc = '\r正在对训练数据集进行预处理……' if is_train else '\r正在对测试数据集进行预处理……'
+                desc = '训练数据集' if is_train else '测试数据集'
             if self.bulk_preprocess:
-                print(desc, flush=True)
-                ds.preprocess()
+                print(f"正在对{desc}进行预处理……", flush=True, end="")
+                ds.preprocess(desc)
             return ds
 
         test_ds = __get_a_dataset(self._test_f, self._test_l, False)
