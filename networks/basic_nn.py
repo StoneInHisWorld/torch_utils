@@ -17,28 +17,32 @@ class BasicNN(nn.Sequential):
     提供神经网络的基本功能，包括训练准备（优化器生成、学习率规划器生成、损失函数生成）、模块初始化、前反向传播实现以及展示图片输出注释的实现。
     """
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *layers,
+                 init_meth='zero', device=torch.device('cpu'), with_checkpoint=False,
+                 init_kwargs=None, input_size=None) -> None:
         """基本神经网络
         提供神经网络的基本功能，包括训练准备（优化器生成、学习率规划器生成、损失函数生成）、模块初始化、前反向传播实现以及展示图片输出注释的实现。
 
-        :param args: 需要添加的网络层
-        :param kwargs: 可选提供的参数。
-        -- device: 网络所处设备。
-        -- init_meth: 网络初始化方法。
-        -- init_kwargs: 网络初始化方法所用参数。
-        -- with_checkpoint: 是否使用检查点机制。
-        -- input_size: 本网络指定的输入形状，赋值为除批量维的维度。例如赋值为（通道数，长，宽）或者（序列长度，）等。
+        :param layers: 需要添加的网络层
+        :param init_meth: 网络初始化方法。
+        :param device: 网络所处设备。
+        :param with_checkpoint: 是否使用检查点机制。
+        :param init_kwargs: 网络初始化方法所用参数。
+        :param input_size: 本网络指定的输入形状，赋值为除批量维的维度。例如赋值为（通道数，长，宽）或者（序列长度，）等。
         """
         # 设置默认值
-        init_meth = 'zero' if 'init_meth' not in kwargs.keys() else kwargs['init_meth']
-        device = torch.device('cpu') if 'device' not in kwargs.keys() else kwargs['device']
-        with_checkpoint = False if 'with_checkpoint' not in kwargs.keys() else kwargs['with_checkpoint']
-        init_kwargs = {} if 'init_kwargs' not in kwargs.keys() else kwargs['init_kwargs']
-        self.input_size = None if 'input_size' not in kwargs.keys() else (-1, *kwargs.pop('input_size'))
+        if init_kwargs is None:
+            init_kwargs = {}
+        # init_meth = 'zero' if 'init_meth' not in kwargs.keys() else kwargs['init_meth']
+        # device = torch.device('cpu') if 'device' not in kwargs.keys() else kwargs['device']
+        # with_checkpoint = False if 'with_checkpoint' not in kwargs.keys() else kwargs['with_checkpoint']
+        # init_kwargs = {} if 'init_kwargs' not in kwargs.keys() else kwargs['init_kwargs']
+        # self.input_size = None if 'input_size' not in kwargs.keys() else (-1, *kwargs.pop('input_size'))
+        self.input_size = (-1, *input_size) if input_size else None
         # 设置状态标志
         self._ready = False
         # 初始化各模块
-        super(BasicNN, self).__init__(*args)
+        super(BasicNN, self).__init__(*layers)
         self._init_submodules(init_meth, **init_kwargs)
         self._gradient_clipping = None
         # 设备迁移
