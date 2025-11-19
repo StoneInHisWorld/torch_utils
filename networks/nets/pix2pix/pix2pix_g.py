@@ -215,7 +215,7 @@ class ResNetGenerator(nn.Sequential):
 
 class Pix2Pix_G(BasicNN):
 
-    def __init__(self, version='u256', *args, **kwargs):
+    def __init__(self, version='u256', *layers, **kwargs):
         """适用于图片翻译、转换任务的学习模型。
         参考：
 
@@ -224,19 +224,19 @@ class Pix2Pix_G(BasicNN):
         [2] Phillip Isola, Jun-Yan Zhu, Tinghui Zhou and Alexei A. Efros. Image-to-Image Translation with Conditional Adversarial Networks[J]. CVF, 2017. 1125, 1134
         :param version: 指定pix2pix生成器版本的字符串。
             支持['u256', 'r9', 'u128']，要求的图片大小分别为[(256, 256), (256, 256), (128, 128)]
-        :param args: 参见各个生成器的位置参数
+        :param layers: 参见各个生成器的位置参数
             包括UNet256Generator、UNet128Generator、ResNetGenerator
         :param kwargs: 参见各个生成器的关键字参数
         """
         supported = ['u256', 'r9', 'u128']
         device = kwargs.pop("device")
         if version == 'u256':
-            model = UNet256Genarator(*args, **kwargs)
+            model = UNet256Genarator(*layers, **kwargs)
         elif version == 'u128':
-            model = UNet128Genarator(*args, **kwargs)
+            model = UNet128Genarator(*layers, **kwargs)
         elif version == 'r9':
             kwargs['n_blocks'] = 9
-            model = ResNetGenerator(*args, **kwargs)
+            model = ResNetGenerator(*layers, **kwargs)
         else:
             raise NotImplementedError(f'不支持的生成器版本{version}，支持的生成器版本包括{supported}')
         assert "input_size" not in kwargs.keys(), f"{self.__class__.__name__}不支持赋值输入大小！"

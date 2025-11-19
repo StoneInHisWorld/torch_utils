@@ -26,7 +26,7 @@ class ResNet(BasicNN):
                  block_type, num_layers, in_channels,
                  width=64, norm_layer=nn.BatchNorm2d, norm_kwargs=None,
                  num_classes=1000,
-                 *args, **kwargs):
+                 *layers, **kwargs):
         """
         ResNet标准实现
         根据-Deep Residual Learning for Image Recognition-
@@ -56,7 +56,7 @@ class ResNet(BasicNN):
         super(ResNet, self).__init__(OrderedDict([
             ('root_block', root_block), ('resnet_stages', resnet_stages),
             ('avgpool', avgpool), ("flatten", nn.Flatten(1)), ('output', output)
-        ]), *args, **kwargs)
+        ]), *layers, **kwargs)
 
     def _make_layer(self, block_type, planes, num_blocks, norm_layer, norm_kwargs, stride=1):
         downsample = None

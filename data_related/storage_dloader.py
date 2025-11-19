@@ -95,7 +95,7 @@ class StorageDataLoader:
         if not self.mute:
             return list(tqdm(
                 ret, total=len(indices), position=0, leave=True,
-                desc=f"\r正在读取{which}……", unit="个"
+                desc=f"{self.__class__.__name__}正在读取{which}……", unit="个"
             ))
         else:
             return list(ret)
@@ -115,7 +115,7 @@ class StorageDataLoader:
             if not self.mute:
                 futures.append(tqdm(
                     xc.map(reader, indices), total=len(indices),
-                    position=0, leave=True, desc=f"\r正在读取{which}……", unit="个"
+                    desc=f"{self.__class__.__name__}正在读取{which}……", unit="个"
                 ))
             else:
                 futures.append(xc.map(reader, indices))

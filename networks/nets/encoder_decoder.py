@@ -7,15 +7,15 @@ from .. import BasicNN
 class Encoder(BasicNN):
 
     @abstractmethod
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *layers, **kwargs):
         raise NotImplementedError("Encoder解码器类是抽象类，需要继承之后才能使用")
 
 
 class Decoder(BasicNN):
 
     @abstractmethod
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *layers, **kwargs):
+        super().__init__(*layers, **kwargs)
 
     @abstractmethod
     def init_state(self, enc_outputs, *args):
