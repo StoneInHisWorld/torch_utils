@@ -1,3 +1,6 @@
+import functools
+import time
+
 from tqdm import tqdm
 
 from networks.decorators import prepare
@@ -5,17 +8,14 @@ from data_related import SelfDefinedDataSet
 from utils.accumulator import Accumulator
 from utils.func import pytools as ptools
 from utils.history import History
+from . import is_multiprocessing, test_duration_names
 
 from .__log_impl import log_impl
-from .__train_impl import train_impl, tv_impl, train_with_k_fold
+from .__train_impl import train_impl, train_and_valid_impl, train_with_k_fold
 from .__train_impl import tv_multiprocessing_impl as tv_multiprocessing
 
 
-def is_multiprocessing(n_workers):
-    return n_workers >= 3
-
-
-def prepare_test(fn):
+def _prepare_test(fn):
     """
     Decorator for training preparation and cleanup.
     Allows user-defined operations before and after training.
@@ -24,6 +24,7 @@ def prepare_test(fn):
         def train_fn(...): ...
     """
 
+    @functools.wraps(fn)
     def wrapper(trainer, test_iter):
         # 创建网络
         assert hasattr(trainer, 'module'), "训练器中不含模型对象，是否是尚未训练模型？"
@@ -85,7 +86,8 @@ class Trainer:
         """
         # 提取所需超参数以及动态运行参数
         self.k = self.hps['k']
-
+        self.n_workers = self.runtime_cfg['n_workers']
+        self.n_epochs = self.hps['epochs']
         # 判断是否是k折训练
         if self.k > 1:
             train_fn, train_args = train_with_k_fold, (self, data_iter)
@@ -101,11 +103,11 @@ class Trainer:
             # else:
             #     raise ValueError(f"无法识别的数据迭代器，其提供的长度为{len(data_iter)}")
             # 判断是否要进行多线程训练
-            if not is_multiprocessing(self.runtime_cfg['n_workers']):
+            if not is_multiprocessing(self.n_workers):
                 # 不启用多线程训练
                 if len(data_iters) == 2:
                     # 进行训练和验证
-                    train_fn = tv_impl
+                    train_fn = train_and_valid_impl
                 elif len(data_iters) == 1:
                     # 进行训练
                     train_fn = train_impl
@@ -114,9 +116,11 @@ class Trainer:
                 train_args = (self, *data_iters)
             else:
                 # 启用多进程训练
+                self.train_prefetch = int(self.runtime_cfg['train_prefetch'])
+                self.valid_prefetch = int(self.runtime_cfg['valid_prefetch'])
                 train_fn, train_args = tv_multiprocessing, (self, *data_iters)
-        history = train_fn(*train_args)
-        return history
+        histories = train_fn(*train_args)
+        return histories
 
     @prepare('predict')
     def predict(self, ret_ls_metric=True, ret_ds=True):
@@ -176,8 +180,8 @@ class Trainer:
             ], net.test_ls_names]
         return ret
 
-    @prepare_test
-    def test(self, test_iter) -> dict:
+    @_prepare_test
+    def test(self, test_iter):
         """测试实现。
         每次取出测试数据供给器中的下一批次数据进行前向传播，计算评价指标和损失，记录到日志中。
 
@@ -189,26 +193,31 @@ class Trainer:
         criterion_a = self.criterion_a
         # 要统计的数据种类数目
         l_names = [f'test_{item}' for item in net.test_ls_names]
-        metric_acc = Accumulator(len(criterion_a) + len(l_names) + 1)
         c_names = [f'test_{ptools.get_computer_name(criterion)}' for criterion in criterion_a]
+        metric_acc = Accumulator(len(criterion_a) + len(l_names) + 1)
+        duration_acc = Accumulator(len(test_duration_names) + 1)
         # 计算准确率和损失值
+        log_stamp = time.perf_counter()
         for features, labels in test_iter:
+            data_fetched_stamp = time.perf_counter()
             preds, ls_es = net.forward_backward(features, labels, False)
-            # num_samples = len(preds)
-            # metric_acc.add(
-            #     *[criterion(preds, labels) for criterion in criterion_a],
-            #     *[ls * num_samples for ls in ls_es], len(preds)
-            # )
+            predict_stamp = time.perf_counter()
+            durations = [
+                data_fetched_stamp - log_stamp,
+                predict_stamp - data_fetched_stamp
+            ]
             log_impl(
                 self.pbar, preds, labels, ls_es, l_names,
-                criterion_a, c_names, metric_acc
+                criterion_a, c_names, metric_acc, durations, duration_acc
             )
+            log_stamp = time.perf_counter()
         # 生成测试日志
-        log = {}
-        i = 0
-        for i, (computer, name) in enumerate(zip(criterion_a, c_names)):
-            log[name] = metric_acc[i] / metric_acc[-1]
-        i += 1
-        for j, ln in enumerate(l_names):
-            log[ln] = metric_acc[i + j] / metric_acc[-1]
-        return log
+        metric_log = {
+            name: metric_acc[i] / metric_acc[-1]
+            for i, name in enumerate(c_names + l_names)
+        }
+        duration_log = {
+            name: duration_acc[i] / duration_acc[-1]
+            for i, name in enumerate(test_duration_names)
+        }
+        return metric_log, duration_log

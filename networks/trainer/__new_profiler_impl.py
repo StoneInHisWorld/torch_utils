@@ -5,11 +5,11 @@ import torch
 from torch.profiler import ProfilerActivity
 from torch.profiler import record_function
 
-from networks.trainer import prepare_train
+from networks.trainer import _prepare_train
 from utils import History, Accumulator
 
 
-@prepare_train
+@_prepare_train
 def profiling_impl(n_epochs, log_path, trainer, data_iter):
     # 提取训练器参数
     net = trainer.module
