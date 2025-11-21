@@ -46,12 +46,14 @@ class ControlPanel:
         # 生成其他路径
         self.__hcp = os.path.join(cfg_root, net_name, f'hyper_param_s.json')  # 网络训练超参数文件路径
         log_root = self.cfg_dict['log_root']
-        self.__lp = os.path.join(log_root, net_name, f'{net_name}_log.csv')  # 日志文件存储路径
+        self.__mlp = os.path.join(log_root, net_name, f'metric_log.csv')  # 指标日志文件存储路径
+        self.__plp = os.path.join(log_root, net_name, f'perf_log.csv')  # 性能日志文件存储路径
         self.__np = os.path.join(log_root, net_name, f'trained_net/')  # 训练成果网络存储路径
         self.__pp = os.path.join(log_root, net_name, f'imgs/')  # 历史趋势图存储路径
         # 路径检查
         ptools.check_path(self.__hcp, init_hps)
-        ptools.check_path(self.__lp, init_log)
+        ptools.check_path(self.__mlp, init_log)
+        ptools.check_path(self.__plp, init_log)
         ptools.check_path(self.__np)
         ptools.check_path(self.__pp)
         # 设置随机种子
@@ -67,13 +69,19 @@ class ControlPanel:
         :return: None
         """
         # 读取实验编号
-        if self.__lp is not None:
-            try:
-                log = pd.read_csv(self.__lp)
-                exp_no = log.iloc[-1]['exp_no'] + 1
-            except Exception as _:
-                exp_no = 1
-        else:
+        # if self.__mlp is not None:
+        #     try:
+        #         log = pd.read_csv(self.__mlp)
+        #         exp_no = log.iloc[-1]['exp_no'] + 1
+        #     except Exception as _:
+        #         exp_no = 1
+        # else:
+        #     exp_no = 1
+        # 读取性能日志的最后一项
+        try:
+            log = pd.read_csv(self.__plp)
+            exp_no = log.iloc[-1]['exp_no'] + 1
+        except Exception as _:
             exp_no = 1
         assert exp_no > 0, f'训练序号需为正整数，但读取到的序号为{exp_no}'
         self.exp_no = int(exp_no)
@@ -100,7 +108,7 @@ class ControlPanel:
                 self.__cur_exp = Experiment(
                     self.exp_no, self.__datasource,
                     hyper_params, self.cfg_dict,
-                    self.__pp, self.__lp, self.__np
+                    self.__pp, self.__mlp, self.__plp, self.__np
                 )
                 print(
                     f'\r---------------------------'
