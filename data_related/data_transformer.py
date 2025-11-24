@@ -2,6 +2,10 @@ import warnings
 from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 
+import numpy as np
+
+def identity(x): return x
+
 
 class DataTransformer:
 
@@ -82,46 +86,79 @@ class DataTransformer:
             futures.append(l_preprocesses(lb))
         return futures
 
+    def augment_data(self, f, l):
+        print(f"没有为{self.module_type.__name__}训练时指定数据增强程序，将返回源数据。"
+              f"若要指定数据增强方法，请在{self.__class__.__name__}类中创建def augment_data(self, f, l)方法！")
+        return f, l
+
     def refresh(self, *args, **kwargs):
         """刷新预处理程序，需要在每次预处理数据之前调用一次
 
         :param args: 预处理程序所用位置参数
         :param kwargs: 预处理程序所用关键字参数
         """
+        # 将之前定义的程序清空
+        for preprocesses in ['fi_preprocesses', 'li_preprocesses', 'f_preprocesses', "l_preprocesses",
+                             'tfi_preprocesses', 'tli_preprocesses', 'tf_preprocesses', 'tl_preprocesses']:
+            if hasattr(self, preprocesses):
+                delattr(self, preprocesses)
+        # 寻找用户定制的预处理程序
         if hasattr(self, f'{self.module_type.__name__}_preprocesses'):
             getattr(self, f"{self.module_type.__name__}_preprocesses")(*args, **kwargs)
         else:
             raise NotImplementedError(f"没有为{self.module_type.__name__}定制预处理程序！"
                                       f"请在{self.__class__.__name__}类中创建{self.module_type.__name__}_preprocesses()方法！")
-        assert hasattr(self, f'fi_preprocesses'), \
-            (f"没有为{self.module_type.__name__}训练时的特征集的索引指定预处理程序，"
-             f"请在{self.module_type.__name__}_preprocesses()中通过self.fi_preprocesses进行赋值！")
-        assert hasattr(self, f'li_preprocesses'), \
-            (f"没有为{self.module_type.__name__}训练时的标签集的索引指定预处理程序，"
-             f"请在{self.module_type.__name__}_preprocesses()中通过self.li_preprocesses进行赋值！")
-        assert hasattr(self, f'f_preprocesses'), \
-            (f"没有为{self.module_type.__name__}训练时的特征集指定预处理程序，"
-             f"请在{self.module_type.__name__}_preprocesses()中通过self.f_preprocesses进行赋值！")
-        assert hasattr(self, f'l_preprocesses'), \
-            (f"没有为{self.module_type.__name__}训练时的标签集指定预处理程序，"
-             f"请在{self.module_type.__name__}_preprocesses()中通过self.l_preprocesses进行赋值！")
-        if not hasattr(self, f'tfi_preprocesses'):
-            warnings.warn(f"没有为{self.module_type.__name__}指定测试时的特征集索引的预处理程序，"
-                          f"请在{self.module_type.__name__}_preprocesses()中通过self.tfi_preprocesses指定。"
-                          f"将使用self.fi_preprocesses替代！")
-            self.tfi_preprocesses = self.fi_preprocesses
-        if not hasattr(self, f'tli_preprocesses'):
-            warnings.warn(f"没有为{self.module_type.__name__}指定测试时的标签集索引的预处理程序，"
-                          f"请在{self.module_type.__name__}_preprocesses()中通过self.tli_preprocesses指定。"
-                          f"将使用self.li_preprocesses替代！")
-            self.tli_preprocesses = self.li_preprocesses
-        if not hasattr(self, f'tf_preprocesses'):
-            warnings.warn(f"没有为{self.module_type.__name__}指定测试时的特征集预处理程序，"
-                          f"请在{self.module_type.__name__}_preprocesses()中通过self.tf_preprocesses指定。"
-                          f"将使用self.f_preprocesses替代！")
-            self.tf_preprocesses = self.f_preprocesses
-        if not hasattr(self, f'tl_preprocesses'):
-            warnings.warn(f"没有为{self.module_type.__name__}指定测试时的标签集预处理程序，"
-                          f"请在{self.module_type.__name__}_preprocesses()中通过self.tl_preprocesses指定。"
-                          f"将使用self.l_preprocesses替代！")
-            self.tl_preprocesses = self.l_preprocesses
+        # 检查用户预处理程序是否定义完备
+        for preprocesses, serve_for in zip(['fi_preprocesses', 'li_preprocesses'], ["特征集的索引", "标签集的索引"]):
+            if not hasattr(self, preprocesses):
+                print(f"没有为{self.module_type.__name__}指定训练时{serve_for}的预处理程序，"
+                      f"请在{self.module_type.__name__}_preprocesses()中通过self.{preprocesses}指定。"
+                      f"将使用恒等函数替代！")
+                setattr(self, preprocesses, identity)
+        for preprocesses, serve_for in zip(['f_preprocesses', "l_preprocesses"], ["特征集", "标签集"]):
+            assert hasattr(self, preprocesses), \
+                (f"没有为{self.module_type.__name__}训练时的{serve_for}指定预处理程序，"
+                 f"请在{self.module_type.__name__}_preprocesses()中通过self.{preprocesses}进行指定！")
+        # 若用户未指定测试时预处理程序，则用训练的预处理程序作替代
+        for preprocesses, backup, serve_for in zip(
+            ['tfi_preprocesses', 'tli_preprocesses', 'tf_preprocesses', 'tl_preprocesses'],
+            [identity, identity, self.f_preprocesses, self.l_preprocesses],
+            ["特征集的索引", "标签集的索引", "特征集", "标签集"]
+        ):
+            if not hasattr(self, preprocesses):
+                print(f"没有为{self.module_type.__name__}指定测试时{serve_for}的预处理程序，"
+                      f"请在{self.module_type.__name__}_preprocesses()中通过self.{preprocesses}指定。"
+                      f"将使用self.{backup.__name__}替代！")
+                setattr(self, preprocesses, backup)
+        # assert hasattr(self, f'fi_preprocesses'), \
+        #     (f"没有为{self.module_type.__name__}训练时的特征集的索引指定预处理程序，"
+        #      f"请在{self.module_type.__name__}_preprocesses()中通过self.fi_preprocesses进行赋值！")
+        # assert hasattr(self, f'li_preprocesses'), \
+        #     (f"没有为{self.module_type.__name__}训练时的标签集的索引指定预处理程序，"
+        #      f"请在{self.module_type.__name__}_preprocesses()中通过self.li_preprocesses进行赋值！")
+        # assert hasattr(self, f'f_preprocesses'), \
+        #     (f"没有为{self.module_type.__name__}训练时的特征集指定预处理程序，"
+        #      f"请在{self.module_type.__name__}_preprocesses()中通过self.f_preprocesses进行赋值！")
+        # assert hasattr(self, f'l_preprocesses'), \
+        #     (f"没有为{self.module_type.__name__}训练时的标签集指定预处理程序，"
+        #      f"请在{self.module_type.__name__}_preprocesses()中通过self.l_preprocesses进行赋值！")
+        # if not hasattr(self, f'tfi_preprocesses'):
+        #     warnings.warn(f"没有为{self.module_type.__name__}指定测试时的特征集索引的预处理程序，"
+        #                   f"请在{self.module_type.__name__}_preprocesses()中通过self.tfi_preprocesses指定。"
+        #                   f"将使用self.fi_preprocesses替代！")
+        #     self.tfi_preprocesses = self.fi_preprocesses
+        # if not hasattr(self, f'tli_preprocesses'):
+        #     warnings.warn(f"没有为{self.module_type.__name__}指定测试时的标签集索引的预处理程序，"
+        #                   f"请在{self.module_type.__name__}_preprocesses()中通过self.tli_preprocesses指定。"
+        #                   f"将使用self.li_preprocesses替代！")
+        #     self.tli_preprocesses = self.li_preprocesses
+        # if not hasattr(self, f'tf_preprocesses'):
+        #     warnings.warn(f"没有为{self.module_type.__name__}指定测试时的特征集预处理程序，"
+        #                   f"请在{self.module_type.__name__}_preprocesses()中通过self.tf_preprocesses指定。"
+        #                   f"将使用self.f_preprocesses替代！")
+        #     self.tf_preprocesses = self.f_preprocesses
+        # if not hasattr(self, f'tl_preprocesses'):
+        #     warnings.warn(f"没有为{self.module_type.__name__}指定测试时的标签集预处理程序，"
+        #                   f"请在{self.module_type.__name__}_preprocesses()中通过self.tl_preprocesses指定。"
+        #                   f"将使用self.l_preprocesses替代！")
+        #     self.tl_preprocesses = self.l_preprocesses
