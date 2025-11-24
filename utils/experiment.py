@@ -161,7 +161,11 @@ class Experiment:
             self.__write_log(
                 self.__plp, **perf_log, exp_no=self.__exp_no,
                 time_stamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                duration=time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start))
+                duration=time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start)),
+                n_workers=self.__runtime_cfg['n_workers'],
+                n_workers_for_trainer=self.__runtime_cfg["t_kwargs"]['n_workers'],
+                n_workers_for_dloader=self.__runtime_cfg["dl_kwargs"]['num_workers'],
+                n_workers_for_ds=self.__runtime_cfg["ds_kwargs"]['n_workers'],
             )
         # return True
 
@@ -180,7 +184,9 @@ class Experiment:
         self.perf_log = {**{
             k + "(s)": sum(log) / len(log)
             for k, log in train_duration_log
-        }, **{k + "(s)": log[0] for k, log in train_duration_log}}
+        }, **{
+            k + "(s)": log for k, log in test_duration_log.items()
+        }}
         # 将最后一个世代的信息计算并打印在命令行中
         self.metric_log = _print_result(train_metric_log, test_metric_log)
         # # 将以上信息加入到日志项
