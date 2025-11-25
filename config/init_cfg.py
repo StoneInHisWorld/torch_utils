@@ -25,35 +25,22 @@ def init_settings(path):
         "device": "cpu",
         "n_workers": 8,
         "cuda_memrecord": False,
-        "log_root": "../../log",
+        "log_root": "./log",
+        "nb_kwargs": {
+            "with_checkpoint": False, "print_net": False
+        },
         "t_kwargs": {
-            "with_hook": False,
-            "hook_mute": True,
-            "with_checkpoint": False,
-            "print_net": False,
-            "device": {"$ref": "#/device"},
-            "n_workers": {"$ref": "#/n_workers"}
+            "with_hook": False, "hook_mute": True, "train_prefetch": 4, "valid_prefetch": 4,
+            "device": {"$ref": "#/device"}, "n_workers": {"$ref": "#/n_workers"}
         },
         "ds_kwargs": {
-            "dataset_root": "../../datasets",
-            "n_workers": {"$ref": "#/n_workers"},
-            "data_portion": 0.01,
-            "bulk_preprocess": False,
-            "shuffle": True,
-            "which_dataset": "which?",
-            "f_req_shp": [128, 128],
-            "l_req_shp": [128, 128],
-            "lazy": False
+            "dataset_root": "./", "n_workers": {"$ref": "#/n_workers"},
+            "data_portion": 0.01, "bulk_preprocess": True, "shuffle": True, "device": {"$ref": "#/device"},
+            "share_memory": False, "non_blocking": True, "transit_kwargs": {}, "f_req_shp": [128, 128],
+            "l_req_shp": [128, 128], "lazy": False, "bulk_transit": True
         },
         "dl_kwargs": {
-            "train_portion": 0.8, "max_prefetch": 2, "pin_memory": True,
-            "prefetch_factor": None, "bkg_gen": True,
-            "num_workers": {"$ref": "#/n_workers"},
-            "transit_kwargs": {
-                "device": {"$ref": "#/device"},
-                "share_memory": False,
-                "non_blocking": True
-            }
+            "train_portion": 0.8, "pin_memory": True, "prefetch_factor": 2, "num_workers": {"$ref": "#/n_workers"}
         }
     }
 
