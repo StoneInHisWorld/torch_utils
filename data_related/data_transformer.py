@@ -1,8 +1,6 @@
-import warnings
 from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 
-import numpy as np
 
 def identity(x): return x
 
@@ -11,9 +9,11 @@ class DataTransformer:
 
     def __init__(self, which_module: type, n_workers=1):
         """数据转换器
-        负责对数据集按照服务的模型进行预处理
+        负责对数据集按照服务的模型进行预处理和数据增强
+        重载def augment_data(self, f, l) -> f, l方法以实现数据增强！
 
-        :param module: 用于处理本数据集的模型类型
+        :param which_module: 用于处理本数据集的模型类型
+        :param n_workers: 转换器能使用的处理机个数
         """
         self.module_type = which_module
         self.n_workers = n_workers
@@ -87,8 +87,8 @@ class DataTransformer:
         return futures
 
     def augment_data(self, f, l):
-        print(f"没有为{self.module_type.__name__}训练时指定数据增强程序，将返回源数据。"
-              f"若要指定数据增强方法，请在{self.__class__.__name__}类中创建def augment_data(self, f, l)方法！")
+        # print(f"没有为{self.module_type.__name__}训练时指定数据增强程序，将返回源数据。"
+        #       f"若要指定数据增强方法，请在{self.__class__.__name__}类中重载def augment_data(self, f, l) -> f, l方法！")
         return f, l
 
     def refresh(self, *args, **kwargs):
