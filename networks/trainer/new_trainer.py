@@ -88,6 +88,7 @@ class Trainer:
         self.k = self.hps['k']
         self.n_workers = self.runtime_cfg['n_workers']
         self.n_epochs = self.hps['epochs']
+        self.pbar_verbose = self.runtime_cfg['pbar_verbose']
         # 判断是否是k折训练
         if self.k > 1:
             train_fn, train_args = train_with_k_fold, (self, data_iter)
@@ -118,6 +119,8 @@ class Trainer:
                 # 启用多进程训练
                 self.train_prefetch = int(self.runtime_cfg['train_prefetch'])
                 self.valid_prefetch = int(self.runtime_cfg['valid_prefetch'])
+                self.tdata_q_len = int(self.runtime_cfg['tdata_q_len'])
+                self.vdata_q_len = int(self.runtime_cfg['vdata_q_len'])
                 train_fn, train_args = tv_multiprocessing, (self, *data_iters)
         histories = train_fn(*train_args)
         return histories

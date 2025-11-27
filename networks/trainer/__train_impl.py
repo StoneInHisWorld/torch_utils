@@ -346,8 +346,7 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
 
     # 提取训练器参数
     n_epochs = trainer.n_epochs
-    pbar = _get_a_training_progress_bar(n_epochs * (len(train_iter) + len(valid_iter)))
-
+    pbar = _get_a_training_progress_bar(n_epochs * (len(train_iter) + len(valid_iter)), trainer.pbar_verbose)
     pbar.set_description('\r正在创建队列和事件对象')
     # 进程通信队列
     ctx = torch.multiprocessing.get_context("spawn")
@@ -385,7 +384,10 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
     parent_conn, child_conn = ctx.Pipe(duplex=False)
     # 创建子线程进行训练和验证操作，并更新进度条
     tv_subp = ctx.Process(target=train_valid_impl, args=(
-        trainer, tdata_q, vdata_q, pbar_q, epoch_q, child_conn
+        trainer, 
+        tdata_q, vdata_q, pbar_q, epoch_q,
+        ctx, trainer.tdata_q_len, trainer.vdata_q_len,
+        child_conn
     ))
     pbar_update_thread = Thread(target=update_pbar)  # 更新进度条
     # 开启两个子进程
