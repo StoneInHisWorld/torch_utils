@@ -120,7 +120,7 @@ class Experiment:
                 # 键盘中断则什么也不做
                 print('该组超参数实验被中断！')
                 try:
-                    for i in range(10, 0, -1):
+                    for i in range(5, 0, -1):
                         print(f'\r将在{i}秒后继续进行下一组超参数实验，再中断一次即可终止整个程序', end='', flush=True)
                         time.sleep(1)
                     return True
