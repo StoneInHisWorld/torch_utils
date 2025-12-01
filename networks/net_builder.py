@@ -1,37 +1,10 @@
-import inspect
 import warnings
 
 from torchsummary import summary
 
 from networks import BasicNN, configure_network
+from utils import ptools
 
-
-def get_signature(module):
-    module_sig = inspect.signature(module)
-    # 分类参数
-    positional_only = []  # 仅位置参数
-    positional_or_keyword = []  # 位置或关键字参数
-    keyword_only = []  # 仅关键字参数
-    needed = []
-
-    for param_name, param in module_sig.parameters.items():
-        kind, default = param.kind, param.default
-        if kind == inspect.Parameter.VAR_KEYWORD:
-            continue
-        elif kind == inspect.Parameter.VAR_POSITIONAL:
-            continue
-        elif kind == inspect.Parameter.POSITIONAL_ONLY:
-            # positional_only.append((param_name, default))
-            positional_only.append(param_name)
-        elif kind == inspect.Parameter.POSITIONAL_OR_KEYWORD:
-            # positional_or_keyword.append((param_name, default))
-            positional_or_keyword.append(param_name)
-        elif kind == inspect.Parameter.KEYWORD_ONLY:
-            # keyword_only.append((param_name, default))
-            keyword_only.append(param_name)
-        if default == inspect.Parameter.empty:
-            needed.append(param_name)
-    return positional_only, positional_or_keyword, keyword_only, needed
 
 class NetBuilder:
     """
@@ -52,8 +25,25 @@ class NetBuilder:
         # Validate that init_args or init_kwargs are provided
         self.module = module
         self.config = config
-        m_po, m_pok, m_ko, m_needed = get_signature(module)
-        _, bn_pok, bn_ko, _ = get_signature(BasicNN)
+        # m_po, m_pok, m_ko, m_needed = get_signature(module)
+        # _, bn_pok, bn_ko, _ = get_signature(BasicNN)
+        # n_valid_argments = len(init_args) + len(init_kwargs.keys() - [b[0] for b in bn_ko])
+        # if n_valid_argments < len(m_needed):
+        #     msg = (f"输入的参数不完整！{module.__name__}的构造参数包括位置参数{m_po}, 位置/关键字参数{m_pok}, "
+        #            f"关键字参数{m_ko}。\n{BasicNN.__name__}可以输入的参数包括{bn_ko}。\n"
+        #            f"创建{module.__name__}必需的参数为{m_needed}。")
+        #     raise ValueError(msg)
+        #
+        # assert issubclass(module, BasicNN), f'{self.__class__.__name__}只服务BasicNN的子类！'
+        # self.module = module
+        # self.init_args = init_args
+        # init_kwargs['with_checkpoint'] = self.config['with_checkpoint']
+        # self.init_kwargs = init_kwargs
+
+    def set_module_init_args(self, *init_args, **init_kwargs):
+        module = self.module
+        m_po, m_pok, m_ko, m_needed = ptools.get_signature(module)
+        _, bn_pok, bn_ko, _ = ptools.get_signature(BasicNN)
         n_valid_argments = len(init_args) + len(init_kwargs.keys() - [b[0] for b in bn_ko])
         if n_valid_argments < len(m_needed):
             msg = (f"输入的参数不完整！{module.__name__}的构造参数包括位置参数{m_po}, 位置/关键字参数{m_pok}, "
@@ -66,13 +56,6 @@ class NetBuilder:
         self.init_args = init_args
         init_kwargs['with_checkpoint'] = self.config['with_checkpoint']
         self.init_kwargs = init_kwargs
-
-        # # per-submodule argument storages
-        # # each maps sub_key -> (positional_args_tuple, keyword_args_dict)
-        # self._optimizer_args = {}
-        # self._lr_scheduler_args = {}
-        # self._training_ls_fn_args = {}
-        # self._testing_ls_fn_args = {}
 
     # Setter methods for per-submodule argument groups
     def set_optimizer_args(self, *args):
@@ -100,10 +83,6 @@ class NetBuilder:
         """
         if not mute:
             print(f'\r正在构造{self.module.__name__}', end='', flush=True)
-        net = self.module(*self.init_args, **self.init_kwargs)
-        if not mute:
-            print(f'\r构造{self.module.__name__}完成')
-            self.__list_net(net)
         assert hasattr(self, '_optimizer_args'), (f"没有为网络配置优化器参数，请通过调用{self.__class__.__name__}()."
                                                   f"{self.set_optimizer_args.__name__}()方法进行配置！")
         assert hasattr(self, '_lr_scheduler_args'), (f"没有为网络配置学习率规划器参数，请通过调用{self.__class__.__name__}()."
@@ -112,6 +91,10 @@ class NetBuilder:
                                                        f"{self.set_training_ls_fn_args.__name__}()方法进行配置！")
         assert hasattr(self, '_testing_ls_fn_args'), (f"没有为网络配置测试损失函数参数，请通过调用{self.__class__.__name__}()."
                                                       f"{self.set_testing_ls_fn_args.__name__}()方法进行配置！")
+        net = self.module(*self.init_args, **self.init_kwargs)
+        if not mute:
+            print(f'\r构造{self.module.__name__}完成')
+            self.__list_net(net)
         self.activate_model(net, is_train, mute)
         return net
 
