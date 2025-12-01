@@ -10,7 +10,7 @@ from data_related.datasets import LazyDataSet, DataSet
 from data_related.ds_operation import data_slicer
 from data_related.prediction_wrapper import PredictionWrapper
 from data_related.storage_dloader import StorageDataLoader
-from utils import ControlPanel
+# from utils import ControlPanel
 
 
 class SelfDefinedDataSet:
@@ -21,7 +21,7 @@ class SelfDefinedDataSet:
     # f_mode = 'L'
     # l_mode = '1'
 
-    def __init__(self, module: type, config: dict or ControlPanel, is_train: bool = True):
+    def __init__(self, module: type, is_train: bool, ds_config: dict, dl_config: dict):
         """自定义DAO数据集
         负责按照用户指定的方式读取数据集的索引以及数据本身，并根据模型类型提供评价指标。与StorageDataLoader相联系，调用数据读取方法；
             与DataTransformer相联系，调用数据预处理方法；与PredictionWrapper相联系，调用结果包装方法。
@@ -44,25 +44,25 @@ class SelfDefinedDataSet:
         评价指标通过get_criterion_a()方法提供。
 
         :param module: 实验涉及数据集类型。
-        :param config: 当前实验所属控制面板
+        :param ds_config: 当前实验所属控制面板
         :param is_train: 是否处于训练模式。处于训练模式，则会加载训练和测试数据集，否则只提供测试数据集。
         """
         # 从运行动态参数中获取参数
-        where = config['dataset_root']
-        self.n_workers = config['n_workers']
-        data_portion = config['data_portion']
-        self.bulk_preprocess = config['bulk_preprocess']
-        shuffle = config['shuffle']
+        where = ds_config['dataset_root']
+        self.n_workers = ds_config['n_workers']
+        data_portion = ds_config['data_portion']
+        self.bulk_preprocess = ds_config['bulk_preprocess']
+        shuffle = ds_config['shuffle']
         # which = config['which_dataset']
-        self.device = config['device']
+        self.device = ds_config['device']
         # 判断图片指定形状
-        self.f_req_shp = tuple(config['f_req_shp']) if config['f_req_shp'] else None
-        self.l_req_shp = tuple(config['l_req_shp']) if config['l_req_shp'] else None
+        self.f_req_shp = tuple(ds_config['f_req_shp']) if ds_config['f_req_shp'] else None
+        self.l_req_shp = tuple(ds_config['l_req_shp']) if ds_config['l_req_shp'] else None
         # 指定数据集服务的模型类型
         self.module = module
 
         # 判断数据集懒加载程度
-        self._f_lazy = self._l_lazy = config['lazy']
+        self._f_lazy = self._l_lazy = ds_config['lazy']
         if self._f_lazy:
             print('对于训练集，实行懒加载特征数据集')
         if self._l_lazy:
@@ -78,9 +78,9 @@ class SelfDefinedDataSet:
         if not self.bulk_preprocess:
             print(f'已选择单例预处理，将会在数据读取后立即进行预处理。本数据集将不会存储原始数据！')
             assert is_train, '测试模式下不允许单例预处理，否则将无法访问原始数据'
-            if config['lazy']:
+            if ds_config['lazy']:
                 warnings.warn('懒加载和单例预处理冲突，优先选择单例预处理！')
-                config['lazy'] = False
+                ds_config['lazy'] = False
         else:
             print("已选择批量预处理，将会在转化成数据迭代器前进行预处理")
         if is_train:
@@ -118,7 +118,8 @@ class SelfDefinedDataSet:
         else:
             print(f'测试集选取长度为{len(self._test_f)}')
         print("******************************************")
-        self.config = config
+        self.ds_config = ds_config
+        self.dl_config = dl_config
 
     @abstractmethod
     def _check_path(self, root: str) -> [str, str, str, str]:
@@ -309,11 +310,11 @@ class SelfDefinedDataSet:
 
         :return: (训练数据集、测试数据集)，两者均为pytorch框架下数据集
         """
-        non_blocking = self.config['non_blocking']
-        share_memory = self.config['share_memory']
-        transit_kwargs = self.config['transit_kwargs']
-        device = self.config['device']
-        bulk_transit = self.config['bulk_transit']
+        non_blocking = self.ds_config['non_blocking']
+        share_memory = self.ds_config['share_memory']
+        transit_kwargs = self.ds_config['transit_kwargs']
+        device = self.ds_config['device']
+        bulk_transit = self.ds_config['bulk_transit']
 
         def __get_a_dataset(f, l, is_train):
             # TODO：这里的懒加载数据集生成方式不支持特征集或标签集的单独懒加载模式
@@ -387,8 +388,7 @@ class SelfDefinedDataSet:
     #     test_iter = test_ds.to_loader(batch_size, **dl_kwargs)
     #     return [*ret, test_iter]
 
-    def to_dataloaders(self, k, batch_size,
-                       transit_fn: Callable = None, **dl_kwargs):
+    def to_dataloaders(self, transit_fn: Callable = None, **dl_kwargs):
         """将自定义数据集转化为数据集迭代器
 
         Args:
@@ -403,15 +403,21 @@ class SelfDefinedDataSet:
             训练模式返回（训练数据迭代器，测试数据迭代器），测试模式返回测试数据迭代器
         """
         ret = []
+        # 将框架的固定配置参数提取出来，合并到dl_kwargs中
+        batch_size = self.dl_config.pop('batch_size')
+        k = self.dl_config.pop('k')
+        dl_kwargs.update(self.dl_config)
+        # 根据训练模式进行数据集创建
         if self.is_train:
+            train_portion = dl_kwargs.pop('train_portion')
             train_ds, test_ds = self._to_dataset(transit_fn)
-            assert 'train_portion' in dl_kwargs.keys(), "DataLoader参数缺少训练验证比'train_portion'！"
+            # assert 'train_portion' in dl_kwargs.keys(), "DataLoader参数缺少训练验证比'train_portion'！"
             assert 'sampler' not in dl_kwargs.keys(), "请不要为DataLoader定制sampler，框架会自动生成！"
             # 使用k-fold机制
             data_iter_generator = (
                 [train_ds.to_loader(batch_size, sampler=sampler, **dl_kwargs)
                  for sampler in sampler_group]
-                for sampler_group in dso.split_data(train_ds, k, dl_kwargs.pop('train_portion'))
+                for sampler_group in dso.split_data(train_ds, k, train_portion)
             )  # 将抽取器遍历，构造加载器
             ret.append(data_iter_generator)
         else:
