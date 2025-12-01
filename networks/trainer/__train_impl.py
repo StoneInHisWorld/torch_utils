@@ -511,10 +511,10 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
 
 def train_with_profiler(trainer, data_iter, log_path):
     # 提取训练器参数
-    k = trainer.hps['k']
+    # k = trainer.k
     n_epochs = 2
     # 取相对较少数量的那个数据迭代器进行性能测试
-    if k > 1:
+    if trainer.k > 1:
         _, data_iter = next(data_iter)
     else:
         # 提取训练迭代器和验证迭代器
