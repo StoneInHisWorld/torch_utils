@@ -1,4 +1,5 @@
 import functools
+import inspect
 import math
 import os.path
 import warnings
@@ -175,3 +176,31 @@ def get_computer_name(computer):
 
 def is_multiprocessing(n_workers):
     return n_workers >= 5
+
+
+def get_signature(module):
+    module_sig = inspect.signature(module)
+    # 分类参数
+    positional_only = []  # 仅位置参数
+    positional_or_keyword = []  # 位置或关键字参数
+    keyword_only = []  # 仅关键字参数
+    needed = []
+
+    for param_name, param in module_sig.parameters.items():
+        kind, default = param.kind, param.default
+        if kind == inspect.Parameter.VAR_KEYWORD:
+            continue
+        elif kind == inspect.Parameter.VAR_POSITIONAL:
+            continue
+        elif kind == inspect.Parameter.POSITIONAL_ONLY:
+            # positional_only.append((param_name, default))
+            positional_only.append(param_name)
+        elif kind == inspect.Parameter.POSITIONAL_OR_KEYWORD:
+            # positional_or_keyword.append((param_name, default))
+            positional_or_keyword.append(param_name)
+        elif kind == inspect.Parameter.KEYWORD_ONLY:
+            # keyword_only.append((param_name, default))
+            keyword_only.append(param_name)
+        if default == inspect.Parameter.empty:
+            needed.append(param_name)
+    return positional_only, positional_or_keyword, keyword_only, needed
