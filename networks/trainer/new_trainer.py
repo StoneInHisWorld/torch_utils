@@ -84,6 +84,7 @@ class Trainer:
         self.n_workers = self.config['n_workers']
         self.n_epochs = self.config['n_epochs']
         self.batch_size = self.config['batch_size']
+        self.pbar_verbose = self.config['pbar_verbose']
         # 判断是否是k折训练
         if self.k > 1:
             train_fn, train_args = train_with_k_fold, (self, data_iter)

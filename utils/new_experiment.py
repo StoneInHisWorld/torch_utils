@@ -1,12 +1,11 @@
+import gc
 import os.path
 import time
-from datetime import datetime
 import warnings
-import gc
+from datetime import datetime
 
 import torch
 
-from simulation.find_suitable_a_and_s import batch_size
 from .func import log_tools as ltools
 from .func import pytools as ptools
 
@@ -114,7 +113,7 @@ class Experiment:
         # 加载数据集
         data = self.build_dao_ds(self.__hp)
         net_builder = self.build_net_builder()
-        trainer = self.build_trainer(net_builder, data.get_criterion_a(), self.__hp, self.t_kwargs)
+        trainer = self.build_trainer(net_builder, data.get_criterion_a(), self.t_kwargs)
         return data, net_builder, trainer, self.__hp
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -219,11 +218,11 @@ class Experiment:
         # nb_kwargs = self.cfg_dict.pop("nb_kwargs")
         return NetBuilder(self.net_type, self.nb_kwargs)
 
-    def build_trainer(self, net_builder, criteria_fns, hyper_params, t_kwargs):
+    def build_trainer(self, net_builder, criteria_fns, t_kwargs):
         from networks import Trainer
 
         # t_kwargs = self.cfg_dict.pop("t_kwargs")
-        t_kwargs['k'] = self.__hp.pop("k")
+        # t_kwargs['k'] = self.__hp.pop("k")
         trainer = Trainer(net_builder, criteria_fns, t_kwargs)
         return trainer
 

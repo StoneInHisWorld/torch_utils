@@ -1,16 +1,14 @@
 import json
-import jsonref
 import os.path
 
+import jsonref
 import pandas as pd
 import torch
+from jsonref import JsonRef
 
 from config.init_cfg import init_log, init_settings, init_hps
-from networks import NetBuilder, Trainer
-from .experiment import Experiment
+from .new_experiment import Experiment
 from .func import pytools as ptools
-
-from jsonref import JsonRef
 
 
 def resolve_jsonref(obj):
