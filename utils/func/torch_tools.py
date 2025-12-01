@@ -9,7 +9,7 @@ from layers import PCCLoss
 from layers import SSIMLoss
 
 loss_es = ["l1", "entro", "mse", "huber", "ssim", "pcc", 'gan']
-init_funcs = ["normal", "xavier", "zero", "state", 'constant', 'trunc_norm']
+init_funcs = ["normal", "xavier", "zero", "state", 'constant', 'trunc_norm', "kaiming_normal"]
 optimizers = ["sgd", "asgd", "adagrad", "adadelta", "rmsprop", "adam", "adamax"]
 activations = ['sigmoid', 'relu', 'lrelu', 'tanh']
 lr_schedulers = ["lambda", "step", 'constant', 'multistep', 'cosine', 'plateau']
@@ -130,6 +130,8 @@ def init_wb(func_str, **kwargs):
         b_init = init.zeros_
     elif func_str == 'skip':
         w_init, b_init = lambda ts: None, lambda ts: None
+    elif func_str == "kaiming_normal":
+        w_init, b_init = init.kaiming_normal_, init.zeros_
     else:
         raise NotImplementedError(f"不支持的初始化方式{func_str}, 当前支持的初始化方式包括{init_funcs}")
 
@@ -148,12 +150,12 @@ def init_wb(func_str, **kwargs):
         elif isinstance(module_s, nn.modules.batchnorm._NormBase):
             # 使用"全0法"初始化批次标准化层的权重和偏置量会导致计算结果均为0，因此将被跳过！
             # 泽维尔初始化不支持低于二维的张量初始化，因此将替换为正态初始化！
-            if func_str == 'xavier' or func_str == 'zero':
+            if func_str == 'xavier' or func_str == 'kaiming_normal' or func_str == 'zero':
                 w_init_impl, b_init_impl = init.normal_, init.normal_
         elif module_s.__module__ == 'torch.nn.modules.normalization':
             # 使用"全0法"初始化批次标准化层的权重和偏置量会导致计算结果均为0，因此将被跳过！
             # 泽维尔初始化不支持低于二维的张量初始化，因此将替换为正态初始化！
-            if func_str == 'xavier' or func_str == 'zero':
+            if func_str == 'xavier' or func_str == 'kaiming_normal' or func_str == 'zero':
                 w_init_impl, b_init_impl = init.normal_, init.normal_
 
         if hasattr(module_s, 'weight') and module_s.weight is not None:
