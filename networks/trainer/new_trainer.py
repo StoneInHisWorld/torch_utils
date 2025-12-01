@@ -48,10 +48,7 @@ def _prepare_test(fn):
 class Trainer:
     """神经网络训练器对象，提供所有针对神经网络的操作，包括训练、验证、测试、预测"""
 
-    def __init__(
-        self, net_builder, criterion_a,
-        runtime_cfg, hps=None  # 训练、验证、测试依赖参数
-    ):
+    def __init__(self, net_builder, criterion_a, runtime_cfg):  # 训练、验证、测试依赖参数
         """神经网络训练器对象，提供所有针对神经网络的操作，包括训练、验证、测试、预测。
         Trainer类负责进行网络构建以及网络训练方法实现，可以通过Trainer.module获取训练完成或正在训练的网络对象。
 
@@ -63,11 +60,9 @@ class Trainer:
         :param hps: 超参数组合，用于获取其中的超参数进行训练
         :param runtime_cfg: 动态运行参数，用于获取其中的参数指导训练
         """
-        if hps is None:
-            hps = {}
         # 设置训练、验证、测试依赖参数
-        self.hps = hps
-        self.runtime_cfg = runtime_cfg
+        # self.hps = hps
+        self.config = runtime_cfg
         self.criterion_a = criterion_a if isinstance(criterion_a, list) else [criterion_a]
         if len(self.criterion_a) == 0:
             raise ValueError(f"训练器没有拿到训练指标方法!"
@@ -85,9 +80,10 @@ class Trainer:
         :return: 训练数据记录对象
         """
         # 提取所需超参数以及动态运行参数
-        self.k = self.hps['k']
-        self.n_workers = self.runtime_cfg['n_workers']
-        self.n_epochs = self.hps['epochs']
+        self.k = self.config['k']
+        self.n_workers = self.config['n_workers']
+        self.n_epochs = self.config['n_epochs']
+        self.batch_size = self.config['batch_size']
         # 判断是否是k折训练
         if self.k > 1:
             train_fn, train_args = train_with_k_fold, (self, data_iter)
@@ -116,8 +112,8 @@ class Trainer:
                 train_args = (self, *data_iters)
             else:
                 # 启用多进程训练
-                self.train_prefetch = int(self.runtime_cfg['train_prefetch'])
-                self.valid_prefetch = int(self.runtime_cfg['valid_prefetch'])
+                self.train_prefetch = int(self.config['train_prefetch'])
+                self.valid_prefetch = int(self.config['valid_prefetch'])
                 train_fn, train_args = tv_multiprocessing, (self, *data_iters)
         histories = train_fn(*train_args)
         return histories
