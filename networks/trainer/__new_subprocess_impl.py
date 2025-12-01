@@ -1,10 +1,7 @@
 import time
 
-import torch
 from torch.multiprocessing import Process
-from torch.multiprocessing import Queue
 
-from networks.decorators import prepare
 from utils import ptools, History, Thread
 from utils.accumulator import Accumulator
 from . import _prepare_train, _prepare_valid, tduration_names, vduration_names
@@ -17,13 +14,16 @@ debug = False
 
 @_prepare_train
 @hook()
-def train_valid_impl(trainer, tdata_q, vdata_q, pbar_q, epoch_q, result_conn):
+def train_valid_impl(trainer, 
+                     tdata_q, vdata_q, pbar_q, epoch_q, 
+                     ctx, tdata_q_len, vdata_q_len,
+                     result_conn):
     net = trainer.module
     # 传递训练数据的队列
-    tlog_q = Queue()  # 训练数据
-    vlog_q = Queue()  # 验证数据
-    lrlog_q = Queue()  # 学习率
-    log_epoch_q = Queue()  # 世代更新队列
+    tlog_q = ctx.Queue(tdata_q_len)  # 训练数据
+    vlog_q = ctx.Queue(vdata_q_len)  # 验证数据
+    lrlog_q = ctx.Queue()  # 学习率
+    log_epoch_q = ctx.Queue()  # 世代更新队列
     # 创建记录进程，处理评价指标的计算以及记录，损失值、学习率的记录的事项
     log_subp = Process(
         target=__train_and_valid_logging,

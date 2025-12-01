@@ -114,6 +114,8 @@ class Trainer:
                 # 启用多进程训练
                 self.train_prefetch = int(self.config['train_prefetch'])
                 self.valid_prefetch = int(self.config['valid_prefetch'])
+                self.tdata_q_len = int(self.config['tdata_q_len'])
+                self.vdata_q_len = int(self.config['vdata_q_len'])
                 train_fn, train_args = tv_multiprocessing, (self, *data_iters)
         histories = train_fn(*train_args)
         return histories

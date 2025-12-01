@@ -9,30 +9,36 @@ test_duration_names = ["duration_test_data_fetch", "duration_test_predict", "dur
 def is_multiprocessing(n_workers):
     return n_workers >= 3
 
-def _get_a_training_progress_bar(pbar_len):
+def _get_a_training_progress_bar(pbar_len, verbose=True):
+    """
+    获取一个训练进度条
+    
+    :param pbar_len: 进度条长度
+    :param verbose: 进度条格式，True显示每个批次的计算指标和详细进度描述，False只显示基本进度
+    :return: 进度条对象
+    """
     from tqdm import tqdm
 
+    bar_format = '{desc}{n}/{total} | {elapsed}/{remaining} |{rate_fmt}{postfix}' if verbose else \
+        '{percentage:3.0f}% {bar} {n}/{total} [{elapsed}/{remaining}, {rate_fmt}]'
     return tqdm(
-        total=pbar_len, unit='批', desc=f'\r正在进行训练准备', ncols=100,
-        bar_format='{desc}{n}/{total} | {elapsed}/{remaining} |{rate_fmt}{postfix}',
+        total=pbar_len, unit='批', desc=f'\r正在进行训练准备', mininterval=1, bar_format=bar_format,
     )
 
-def _before_training(trainer, *data_iters):
+def _before_training(trainer, *args):
     if trainer.k == 1:
         print(f'\r本次训练位于设备{trainer.config["device"]}上')
         # 创建网络
         setattr(trainer, "module", trainer.net_builder.build(True))
         if not is_multiprocessing(trainer.n_workers):
             # 设置进度条
-            pbar_len = trainer.n_epochs * functools.reduce(
-                lambda x, y: len(x) + len(y), data_iters
-            )
-            setattr(trainer, "pbar", _get_a_training_progress_bar(pbar_len))
+            pbar_len = trainer.n_epochs * functools.reduce(lambda x, y: len(x) + len(y), args)
+            setattr(trainer, "pbar", _get_a_training_progress_bar(pbar_len, trainer.pbar_verbose))
     else:
         if not hasattr(trainer, "module"):
             setattr(trainer, "module", trainer.net_builder.build(True))
         if not hasattr(trainer, "pbar"):
-            setattr(trainer, "pbar", _get_a_training_progress_bar(0))
+            setattr(trainer, "pbar", _get_a_training_progress_bar(0, trainer.pbar_verbose))
 
 def _after_training(trainer, *args):
     if trainer.k == 1:
