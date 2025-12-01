@@ -19,7 +19,7 @@ def _get_a_training_progress_bar(pbar_len):
 
 def _before_training(trainer, *data_iters):
     if trainer.k == 1:
-        print(f'\r本次训练位于设备{trainer.runtime_cfg["device"]}上')
+        print(f'\r本次训练位于设备{trainer.config["device"]}上')
         # 创建网络
         setattr(trainer, "module", trainer.net_builder.build(True))
         if not is_multiprocessing(trainer.n_workers):

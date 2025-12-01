@@ -67,7 +67,7 @@ class net_builder:
         if not mute:
             print(f'\r正在构造{net_class.__name__}', end='', flush=True)
         try:
-            n_init_kwargs['with_checkpoint'] = trainer.runtime_cfg['with_checkpoint']
+            n_init_kwargs['with_checkpoint'] = trainer.config['with_checkpoint']
             net = net_class(*n_init_args, **n_init_kwargs)
         except FileNotFoundError:
             # 处理预训练网络加载
@@ -87,11 +87,12 @@ class net_builder:
         :param net: 待打印的网络
         :return: None
         """
-        if trainer.runtime_cfg['print_net']:
+        if trainer.config['print_net']:
             input_size = trainer.input_size
             if isinstance(input_size, Iterable):
                 try:
-                    summary(net, input_size=(trainer.hps['batch_size'], *input_size), device=net.device)
+                    # summary(net, input_size=(trainer.hps['batch_size'], *input_size), device=net.device)
+                    summary(net, input_size=(trainer.batch_size, *input_size), device=net.device)
                 except Exception as e:
                     msg = f"打印网络时遇到错误：{e}，只显示网络结构！"
                     warnings.warn(msg)
