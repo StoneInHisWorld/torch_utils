@@ -9,4 +9,5 @@ from .func import log_tools as ltools
 from .func import pytools as ptools
 from .func import tensor_tools as tstools
 from .func import torch_tools as ttools
+from .new_ctrl_panel import ControlPanel as NewControlPanel
 
