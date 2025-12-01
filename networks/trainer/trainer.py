@@ -164,9 +164,12 @@ class Trainer:
         if ret_ds:
             ret += [inputs, labels]
         if ret_ls_metric:
-            ret += [metrics, loss_pool, [
+            # ret += [metrics, loss_pool, [
+            #     ptools.get_computer_name(criterion) for criterion in criterion_a
+            # ], net.test_ls_names]
+            ret += [metrics, loss_pool, self.criterion_a, [
                 ptools.get_computer_name(criterion) for criterion in criterion_a
-            ], net.test_ls_names]
+            ], net.test_ls_fn_s, net.test_ls_names]
         return ret
 
     @prepare('train')

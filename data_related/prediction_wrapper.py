@@ -36,8 +36,8 @@ class PredictionWrapper:
         if ret_ds:
             self.inputs, self.labels = prediciton_results[1:3]
         if ret_ls_metric:
-            (self.metrics, self.ls_es, self.critera_names,
-             self.ls_names) = prediciton_results[-4:]
+            (self.metrics, self.ls_es, self.criteria_fns, self.criteria_names,
+             self.ls_fns, self.ls_names) = prediciton_results[3:]
         try:
             wrapped_results = getattr(
                 self, f'{self.module_type.__name__}_wrap_fn'
@@ -49,5 +49,6 @@ class PredictionWrapper:
         if ret_ds:
             del self.inputs, self.labels
         if ret_ls_metric:
-            del self.metrics, self.ls_es, self.critera_names, self.ls_names
+            del self.metrics, self.ls_es, self.criteria_fns, self.criteria_names,\
+             self.ls_fns, self.ls_names
         return wrapped_results
