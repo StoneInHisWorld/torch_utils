@@ -1,15 +1,14 @@
 import json
-import jsonref
 import os.path
 
+import jsonref
 import pandas as pd
 import torch
+from jsonref import JsonRef
 
 from config.init_cfg import init_log, init_settings, init_hps
-from .experiment import Experiment
+from .new_experiment import Experiment
 from .func import pytools as ptools
-
-from jsonref import JsonRef
 
 
 def resolve_jsonref(obj):
@@ -28,7 +27,7 @@ def resolve_jsonref(obj):
 class ControlPanel:
     """控制台类负责读取、管理动态运行参数、超参数组合，以及实验对象的提供"""
 
-    def __init__(self, datasource, net_type, cfg_root, is_train):
+    def __init__(self, datasource, net_type, is_train, cfg_root=os.path.join(".", "config")):
         """控制面板
 
         负责读取、管理动态运行参数、超参数组合，生成超参数配置文件路径、日志文件存储路径以及网络文件存储目录，提供实验Experiment对象。
@@ -38,6 +37,7 @@ class ControlPanel:
         :param cfg_root: 运行配置文件路径
         """
         net_name = net_type.__name__.lower()
+        self.net_type = net_type
         # 生成运行动态配置
         self.__rcp = os.path.join(cfg_root, net_name, f'settings.json')  # 运行配置json文件路径
         # 读取运行配置
@@ -60,8 +60,7 @@ class ControlPanel:
         torch.random.manual_seed(self['random_seed'])
         # # 读取实验编号
         self.__read_expno()
-        self.__datasource = datasource
-        self.net_type = net_type
+        self.dao_ds = datasource
         self.is_train = is_train
 
     def __read_expno(self):
@@ -70,16 +69,7 @@ class ControlPanel:
         本函数将会创建self.exp_no以及self.last_expno属性。
         :return: None
         """
-        # 读取实验编号
-        # if self.__mlp is not None:
-        #     try:
-        #         log = pd.read_csv(self.__mlp)
-        #         exp_no = log.iloc[-1]['exp_no'] + 1
-        #     except Exception as _:
-        #         exp_no = 1
-        # else:
-        #     exp_no = 1
-        # 读取性能日志的最后一项
+        # 读取性能日志的最后一项，取出实验编号作为本次实验编号的参考
         try:
             log = pd.read_csv(self.__plp)
             exp_no = log.iloc[-1]['exp_no'] + 1
@@ -95,6 +85,13 @@ class ControlPanel:
                 n_exp *= len(v)
         # 最后一组实验的实验编号
         self.last_expno = self.exp_no + n_exp - 1
+    #
+    # def build_dao_ds(self, hyper_params):
+    #     pos_only_args, pos_or_kwargs, kwargs_only, _ = ptools.get_signature(self.dao_ds)
+    #     args = [hyper_params.pop(poa) for poa in pos_only_args + pos_or_kwargs]
+    #     kwargs = {ko: hyper_params.pop(ko) for ko in kwargs_only}
+    #     ds_kwargs = self.cfg_dict.pop("ds_kwargs")
+    #     return self.dao_ds(*args, **kwargs, module=self.net_type, config=ds_kwargs, is_train=self.is_train)
 
     def __iter__(self):
         """迭代
@@ -104,26 +101,37 @@ class ControlPanel:
         """
         with open(self.__hcp, 'r', encoding='utf-8') as cfg:
             hyper_params = json.load(cfg)
-            for hps in ptools.permutation([], *hyper_params.values()):
-                hyper_params = {k: v for k, v in zip(hyper_params.keys(), hps)}
-                # 构造实验对象
-                self.__cur_exp = Experiment(
-                    self.exp_no, self.__datasource, self.net_type,
-                    hyper_params, self.cfg_dict, self.is_train,
-                    self.__pp, self.__mlp, self.__plp, self.__np
-                )
-                print(
-                    f'\r---------------------------'
-                    f'实验{self.exp_no}号/{self.last_expno}号'
-                    f'---------------------------'
-                )
-                yield self.__cur_exp
-                # 读取运行动态参数
-                self.__read_runtime_cfg()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                # 更新实验编号
-                self.exp_no += 1
+            hp_keys = hyper_params.keys()
+        for hps in ptools.permutation([], *hyper_params.values()):
+            hyper_params = {k: v for k, v in zip(hp_keys, hps)}
+            # nb_kwargs = self.cfg_dict.pop("nb_kwargs")
+            # t_kwargs = self.cfg_dict.pop("t_kwargs")
+            # 构造实验对象
+            print(
+                f'\r---------------------------'
+                f'实验{self.exp_no}号/{self.last_expno}号'
+                f'---------------------------'
+            )
+            cur_exp = Experiment(
+                self.exp_no, self.dao_ds, self.net_type,
+                hyper_params, self.cfg_dict, self.is_train,
+                self.__pp, self.__mlp, self.__plp, self.__np
+            )
+            # data = self.__datasource(
+            #     hps['d_size'], hps['s_quantity'], hps['s_size'], hps["test_which"],
+            #     hps["flip_prob"], hps["rotate_prob"], hps["add_noise_prob"],
+            #     train_which=hps['train_which'], module=self.net_type, config=ds_kwargs, is_train=True
+            # )
+            # data = self.build_dao_ds(hyper_params)
+            # net_builder = NetBuilder(self.net_type, nb_kwargs)
+            # trainer = Trainer(net_builder, data.get_criterion_a(), t_kwargs, hyper_params)
+            yield cur_exp
+            # 读取运行动态参数
+            self.__read_runtime_cfg()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            # 更新实验编号
+            self.exp_no += 1
 
     def __getitem__(self, item):
         """获取控制面板中的运行配置参数。
@@ -139,14 +147,15 @@ class ControlPanel:
         with open(self.__rcp, 'r', encoding='utf-8') as config:
             config_dict = jsonref.load(config, merge_props=True)
             config_dict = resolve_jsonref(config_dict)
-            if hasattr(self, 'cfg_dict'):
-                # 更新运行动态参数
-                assert config_dict.keys() == self.cfg_dict.keys(), '在运行期间，不允许添加新的运行设置参数！'
-                for k, v in config_dict.items():
-                    self.cfg_dict[k] = v
-            else:
-                # 首次获取运行动态参数
-                self.cfg_dict = config_dict
+            self.cfg_dict = config_dict
+            # if hasattr(self, 'cfg_dict'):
+            #     # 更新运行动态参数
+            #     # assert config_dict.keys() == self.cfg_dict.keys(), '在运行期间，不允许添加新的运行设置参数！'
+            #     for k, v in config_dict.items():
+            #         self.cfg_dict[k] = v
+            # else:
+            #     # 首次获取运行动态参数
+            #     self.cfg_dict = config_dict
 
     @property
     def runtime_cfg(self):

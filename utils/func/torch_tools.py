@@ -1,12 +1,8 @@
 import functools
 
 import torch
-from torch import cuda, nn as nn
+from torch import nn as nn
 from torch.nn import init as init
-
-from layers import GANLoss
-from layers import PCCLoss
-from layers import SSIMLoss
 
 loss_es = ["l1", "entro", "mse", "huber", "ssim", "pcc", 'gan']
 init_funcs = ["normal", "xavier", "zero", "state", 'constant', 'trunc_norm', "kaiming_normal"]
@@ -83,6 +79,10 @@ def get_ls_fn(ls_str, **kwargs):
     :param kwargs: 输入到损失值计算模块中的关键词参数。请注意，每个损失值计算模块的关键词参数可能不同！建议输入关键词参数时只选用一种损失值计算模块。
     :return: 损失函数模块
     """
+    from layers import GANLoss
+    from layers import PCCLoss
+    from layers import SSIMLoss
+
     if ls_str == "l1":
         return nn.L1Loss(**kwargs)
     elif ls_str == "entro":

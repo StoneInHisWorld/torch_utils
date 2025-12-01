@@ -52,27 +52,28 @@ class DataLoader(DLoader):
         :param max_prefetch: BackgroundGenerator提前取出的数据批数目
         :param kwargs: pytorch.utils.data.DataLoader的额外参数
         """
-        self.transit_kwargs = transit_kwargs
-        if transit_fn:
-            self.transit_fn = functools.partial(
-                transit_fn, device, non_blocking, share_memory, **transit_kwargs
-            )
-        else:
-            self.transit_fn = functools.partial(
-                default_transit_fn, device, non_blocking, share_memory
-            )
-        self.bkg_gen = bkg_gen
-        self.max_prefetch = max_prefetch
+        # self.transit_kwargs = transit_kwargs
+        # if transit_fn:
+        #     self.transit_fn = functools.partial(
+        #         transit_fn, device, non_blocking, share_memory, **transit_kwargs
+        #     )
+        # else:
+        #     self.transit_fn = functools.partial(
+        #         default_transit_fn, device, non_blocking, share_memory
+        #     )
+        # self.bkg_gen = bkg_gen
+        # self.max_prefetch = max_prefetch
         super().__init__(dataset, batch_size, **kwargs)
 
-    def __iter__(self):
-        unwrapped_generator = (
-            self.transit_fn(batch) for batch in super().__iter__()
-        )
-        if self.bkg_gen:
-            return BackgroundGenerator(unwrapped_generator, self.max_prefetch)
-        else:
-            return unwrapped_generator
+    # def __iter__(self):
+        # unwrapped_generator = (
+        #     self.transit_fn(batch) for batch in super().__iter__()
+        # )
+        # if self.bkg_gen:
+        #     return BackgroundGenerator(unwrapped_generator, self.max_prefetch)
+        # else:
+        #     return unwrapped_generator
+
 
 class LazyDataLoader:
 

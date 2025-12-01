@@ -1,8 +1,8 @@
+import gc
 import os.path
 import time
-from datetime import datetime
 import warnings
-import gc
+from datetime import datetime
 
 import torch
 
@@ -50,11 +50,12 @@ class Experiment:
 
     sn_range = ['no', 'entire', 'state']
 
-    def __init__(self,
-                 exp_no: int, datasource: type, hyper_parameters: dict, runtime_cfg: dict,
-                 plot_path: str = None, metric_log_path: str = None, perf_log_path: str = None,
-                 net_path: str = None
-                 ):
+    def __init__(
+            self, exp_no: int, datasource: type, net_type: type,
+            hyper_parameters: dict, runtime_cfg: dict, is_train: bool,
+            plot_path: str = None, metric_log_path: str = None, perf_log_path: str = None,
+            net_path: str = None
+    ):
         """实验对象
         进行神经网络训练的相关周边操作，计时、显存监控、日志编写、网络持久化、历史趋势图绘制及保存。
         请使用上下文管理器来调用本对象以启用全部功能，示例：`with Experiment() as hps:`。使用上下文管理器后，能够自动开启计时以及显存监控功能，
@@ -76,9 +77,10 @@ class Experiment:
         self.__plp = perf_log_path
         self.__np = net_path
         self.__exp_no = exp_no
-        self.__runtime_cfg = runtime_cfg
-        self.datasource = datasource
-        self.__net = None
+        self.cfg_dict = runtime_cfg
+        self.dao_ds = datasource
+        self.net_type = net_type
+        self.is_train = is_train
 
     def __enter__(self):
         """训练对象的上下文管理进入方法
@@ -86,22 +88,33 @@ class Experiment:
         """
         # 计时开始
         self.start = time.time()
+        # # 提取框架固定配置参数
+        # self.ds_config = self.cfg_dict.pop("ds_kwargs")
+        # self.dl_config = self.cfg_dict.pop("dl_kwargs")
+        # nb_kwargs = self.cfg_dict.pop("nb_kwargs")
+        # self.t_kwargs = self.cfg_dict.pop("t_kwargs")
+        self.config_rearrange()
         # 打印本次训练超参数
         for k, v in self.__hp.items():
             print(k + ': ' + str(v))
-        print(f'data_portion: {self.__runtime_cfg["ds_kwargs"]["data_portion"]}')
+        print(f'data_portion: {self.ds_config["data_portion"]}')
         print(
             '\r-----------------输入Ctrl+C即可终止本组超参数实验'
             '--------------------'
         )
-        device = torch.device(self.__runtime_cfg['device'])
-        cuda_memrecord = self.__runtime_cfg['cuda_memrecord']
+        # 提取训练配置参数
+        device = torch.device(self.cfg_dict['device'])
+        cuda_memrecord = self.cfg_dict['cuda_memrecord']
         # 开启显存监控
         if device.type == 'cuda' and cuda_memrecord:
             torch.cuda.memory._record_memory_history(cuda_memrecord)
         elif device.type == 'cpu' and cuda_memrecord:
             warnings.warn(f'运行设备为{device}，不支持显存监控！请使用支持CUDA的处理机，或者设置cuda_memrecord为false')
-        return self.__hp
+        # 加载数据集
+        data = self.build_dao_ds(self.__hp)
+        net_builder = self.build_net_builder()
+        trainer = self.build_trainer(net_builder, data.get_criterion_a(), self.t_kwargs)
+        return data, net_builder, trainer, self.__hp
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """训练器对象的退出动作。
@@ -120,7 +133,7 @@ class Experiment:
                 # 键盘中断则什么也不做
                 print('该组超参数实验被中断！')
                 try:
-                    for i in range(5, 0, -1):
+                    for i in range(10, 0, -1):
                         print(f'\r将在{i}秒后继续进行下一组超参数实验，再中断一次即可终止整个程序', end='', flush=True)
                         time.sleep(1)
                     return True
@@ -136,7 +149,7 @@ class Experiment:
         #     f_req_shp=self.__runtime_cfg["ds_kwargs"]['f_req_shp'],
         #     l_req_shp=self.__runtime_cfg["ds_kwargs"]['l_req_shp'],
         # )
-        if self.device != torch.device('cpu') and self.__runtime_cfg["cuda_memrecord"]:
+        if self.device != torch.device('cpu') and self.cfg_dict["cuda_memrecord"]:
             perf_log.update(
                 max_GPUmemory_allocated=torch.cuda.max_memory_allocated(self.device) / (1024 ** 3),
                 max_GPUmemory_reserved=torch.cuda.max_memory_reserved(self.device) / (1024 ** 3),
@@ -151,10 +164,10 @@ class Experiment:
             metric_log = self.metric_log if hasattr(self, 'metric_log') else {}
             # 指定了日志路径，则进行日志记录
             self.__write_log(
-                self.__mlp, **self.__hp, **metric_log, dataset=self.datasource.__name__,
-                data_portion=self.__runtime_cfg["ds_kwargs"]['data_portion'],
-                f_req_shp=self.__runtime_cfg["ds_kwargs"]['f_req_shp'],
-                l_req_shp=self.__runtime_cfg["ds_kwargs"]['l_req_shp'],
+                self.__mlp, **self.__hp, **metric_log, dataset=self.dao_ds.__name__,
+                data_portion=self.ds_config['data_portion'],
+                f_req_shp=self.ds_config['f_req_shp'],
+                l_req_shp=self.ds_config['l_req_shp'],
             )
         if self.__plp is not None:
             # 记录时间信息
@@ -162,12 +175,56 @@ class Experiment:
                 self.__plp, **perf_log, exp_no=self.__exp_no,
                 time_stamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 duration=time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start)),
-                n_workers=self.__runtime_cfg['n_workers'],
-                n_workers_for_trainer=self.__runtime_cfg["t_kwargs"]['n_workers'],
-                n_workers_for_dloader=self.__runtime_cfg["dl_kwargs"]['num_workers'],
-                n_workers_for_ds=self.__runtime_cfg["ds_kwargs"]['n_workers'],
+                n_workers=self.cfg_dict['n_workers'],
+                n_workers_for_trainer=self.t_kwargs['n_workers'],
+                n_workers_for_dloader=self.dl_config['num_workers'],
+                n_workers_for_ds=self.ds_config['n_workers'],
             )
         # return True
+
+    def config_rearrange(self):
+        # 数据集参数
+        self.ds_config = self.cfg_dict.pop("ds_kwargs")
+        # 数据迭代器参数
+        self.dl_config = self.cfg_dict.pop("dl_kwargs")
+        k = self.__hp.pop("k")
+        batch_size = self.__hp.pop("batch_size")
+        self.dl_config["k"] = k
+        self.dl_config["batch_size"] = batch_size
+        # 网络创建器参数
+        self.nb_kwargs = self.cfg_dict.pop("nb_kwargs")
+        # 训练器参数
+        self.t_kwargs = self.cfg_dict.pop("t_kwargs")
+        self.t_kwargs["batch_size"] = batch_size
+        if self.is_train:
+            self.t_kwargs["k"] = k
+            self.t_kwargs["n_epochs"] = self.__hp.pop("n_epochs")
+
+
+    def build_dao_ds(self, hyper_params):
+        pos_only_args, pos_or_kwargs, kwargs_only, _ = ptools.get_signature(self.dao_ds)
+        args = [hyper_params.pop(poa) for poa in pos_only_args + pos_or_kwargs]
+        kwargs = {ko: hyper_params.pop(ko) for ko in kwargs_only}
+        # ds_config = self.cfg_dict.pop("ds_kwargs")
+        # dl_config = self.cfg_dict.pop("dl_kwargs")
+        # dl_config["k"] = self.__hp.pop("k")
+        # dl_config["batch_size"] = self.__hp.pop("batch_size")
+        return self.dao_ds(*args, **kwargs, module=self.net_type, is_train=self.is_train,
+                           ds_config=self.ds_config, dl_config=self.dl_config)
+
+    def build_net_builder(self):
+        from networks import NetBuilder
+
+        # nb_kwargs = self.cfg_dict.pop("nb_kwargs")
+        return NetBuilder(self.net_type, self.nb_kwargs)
+
+    def build_trainer(self, net_builder, criteria_fns, t_kwargs):
+        from networks import Trainer
+
+        # t_kwargs = self.cfg_dict.pop("t_kwargs")
+        # t_kwargs['k'] = self.__hp.pop("k")
+        trainer = Trainer(net_builder, criteria_fns, t_kwargs)
+        return trainer
 
     def register_result(self, net, train_logs, test_logs=None, **plot_kwargs):
         """根据训练历史记录进行输出，并进行日志参数的记录。
@@ -177,7 +234,7 @@ class Experiment:
         :param test_logs: 测试记录
         :return: None
         """
-        self.__net = net
+        # self.__net = net
         train_metric_log, train_duration_log = train_logs
         test_metric_log, test_duration_log = test_logs
         # 计算花费时间项
@@ -235,7 +292,7 @@ class Experiment:
         if not isinstance(net, torch.nn.Module):
             print('训练器对象未得到训练网络对象，因此不予保存网络！')
             return
-        save_net = self.__runtime_cfg['save_net']
+        save_net = self.cfg_dict['save_net']
         if not ptools.check_para('save_net', save_net, self.sn_range):
             warnings.warn(
                 '请检查setting.json中参数save_net设置是否正确，本次不予保存模型！',
@@ -262,7 +319,7 @@ class Experiment:
         """
         # 检查参数设置
         cfg_range = ['plot', 'save', 'no']
-        cfg = self.__runtime_cfg['plot_history']
+        cfg = self.cfg_dict['plot_history']
         if not ptools.check_para('plot_history', cfg, cfg_range):
             warnings.warn(
                 '请检查setting.json中参数plot_history设置是否正确，本次不予绘制历史趋势图！',
@@ -277,7 +334,7 @@ class Experiment:
                 self.__pp + str(self.__exp_no) + '.jpg')
         # 绘图
         ltools.plot_history(
-            history, mute=self.__runtime_cfg['plot_mute'],
+            history, mute=self.cfg_dict['plot_mute'],
             title='EXP NO.' + str(self.__exp_no),
             savefig_as=savefig_as, **plot_kwargs
         )
@@ -285,4 +342,4 @@ class Experiment:
 
     @property
     def device(self):
-        return torch.device(self.__runtime_cfg['device'])
+        return torch.device(self.cfg_dict['device'])

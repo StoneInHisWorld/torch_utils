@@ -10,7 +10,6 @@ dependencies:
   - tqdm
   - wheel
   - pip:
-      - dill
       - matplotlib
       - numpy
       - pillow
@@ -21,10 +20,8 @@ dependencies:
       - jsonref
       - toolz
       - tqdm
-      - dill
       - torchsummary
       - opencv-python
       - torchmetrics
-      - prefetch-generator
       - pandas
       - torchinfo

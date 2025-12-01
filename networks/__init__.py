@@ -14,7 +14,14 @@ def check_prepare_args(who: type, *args):
 from .basic_nn import BasicNN
 
 
-def configure_network(module: BasicNN, is_train: bool, o_args=None, l_args=None, tr_ls_args=None, ts_ls_args=None):
+# def configure_network(
+#         module: BasicNN, is_train: bool,
+#         o_args=None, l_args=None, tr_ls_args=None, ts_ls_args=None
+# ):
+def configure_network(
+    module: BasicNN, is_train: bool, mute: bool = False,
+    o_args=None, l_args=None, tr_ls_args=None, ts_ls_args=None
+):
     """训练准备实现
     获取优化器（对应学习率名称）、学习率规划器以及损失函数（训练、测试损失函数名称），储存在自身对象中。
     获取顺序是先子网络，后主网络
@@ -41,16 +48,20 @@ def configure_network(module: BasicNN, is_train: bool, o_args=None, l_args=None,
     assert isinstance(tr_ls_args, Iterable), "训练损失函数参数需要为可迭代对象，每个元素对应一个基础网络的训练损失函数参数！"
     assert isinstance(ts_ls_args, Iterable), "测试损失函数参数需要为可迭代对象，每个元素对应一个基础网络的测试损失函数参数！"
     # 提取出本网络中的所有基础网络
-    print("依次对", end="")
+    if not mute:
+        print("依次对", end="")
     bnn_s = list(filter(lambda m: isinstance(m, BasicNN), reversed(list(module.modules()))))
     for bnn, o, l, tr, ts in zip_longest(bnn_s, o_args, l_args, tr_ls_args, ts_ls_args, fillvalue=[]):
-        print(bnn.__class__.__name__, end=" ")
+        if not mute:
+            print(bnn.__class__.__name__, end=" ")
         if not bnn:
             raise ValueError(f"赋值的参数比赋值的网络数要多！"
                              f"可赋值的网络总共包括：{', '.join(map(lambda m: m.__class__.__name__, bnn_s))}")
         bnn.activate(is_train, o, l, tr, ts)
-    print("进行初始化")
+    if not mute:
+        print("进行训练初始化" if is_train else "进行测试初始化", flush=True, end="")
 
 
 from .trainer import Trainer
+from .net_builder import NetBuilder
 from .nets import *

@@ -6,7 +6,7 @@ import torch.nn as nn
 from torch import Tensor
 from torch.nn import TransformerEncoderLayer, TransformerDecoderLayer
 
-import utils.func.torch_tools as ttools
+from utils import ttools
 from layers.kvcache_MultiheadAttention import KVCacheMultiHeadAttention
 
 
