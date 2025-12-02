@@ -9,7 +9,7 @@ test_duration_names = ["duration_test_data_fetch", "duration_test_predict", "dur
 def is_multiprocessing(n_workers):
     return n_workers >= 3
 
-def _get_a_training_progress_bar(pbar_len, verbose=True):
+def _get_a_progress_bar(pbar_len, verbose=True):
     """
     获取一个训练进度条
     
@@ -33,12 +33,12 @@ def _before_training(trainer, *args):
         if not is_multiprocessing(trainer.n_workers):
             # 设置进度条
             pbar_len = trainer.n_epochs * functools.reduce(lambda x, y: len(x) + len(y), args)
-            setattr(trainer, "pbar", _get_a_training_progress_bar(pbar_len, trainer.pbar_verbose))
+            setattr(trainer, "pbar", _get_a_progress_bar(pbar_len, trainer.pbar_verbose))
     else:
         if not hasattr(trainer, "module"):
             setattr(trainer, "module", trainer.net_builder.build(True))
         if not hasattr(trainer, "pbar"):
-            setattr(trainer, "pbar", _get_a_training_progress_bar(0, trainer.pbar_verbose))
+            setattr(trainer, "pbar", _get_a_progress_bar(0, trainer.pbar_verbose))
 
 def _after_training(trainer, *args):
     if trainer.k == 1:
