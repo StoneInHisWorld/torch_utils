@@ -6,7 +6,7 @@ import torch
 from tqdm import tqdm
 
 from . import _prepare_train, _before_training, _after_training
-from . import _prepare_valid, _get_a_training_progress_bar
+from . import _prepare_valid, _get_a_progress_bar
 from . import vduration_names, tduration_names
 from .__log_impl import log_impl
 from .__hook_impl import hook
@@ -346,7 +346,7 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
 
     # 提取训练器参数
     n_epochs = trainer.n_epochs
-    pbar = _get_a_training_progress_bar(n_epochs * (len(train_iter) + len(valid_iter)), trainer.pbar_verbose)
+    pbar = _get_a_progress_bar(n_epochs * (len(train_iter) + len(valid_iter)), trainer.pbar_verbose)
     pbar.set_description('\r正在创建队列和事件对象')
     # 进程通信队列
     ctx = torch.multiprocessing.get_context("spawn")
