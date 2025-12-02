@@ -160,11 +160,12 @@ class Experiment:
         #     'exp_no': self.__exp_no, "duration": time_span, "dataset": self.datasource.__name__,
         #     'time_stamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         # })
-        if self.__mlp is not None:
+        if self.__mlp is not None and exc_type is None:
             metric_log = self.metric_log if hasattr(self, 'metric_log') else {}
             # 指定了日志路径，则进行日志记录
             self.__write_log(
-                self.__mlp, **self.__hp, **metric_log, dataset=self.dao_ds.__name__,
+                self.__mlp, **self.__hp, **metric_log,
+                exp_no=self.__exp_no, dataset=self.dao_ds.__name__,
                 data_portion=self.ds_config['data_portion'],
                 f_req_shp=self.ds_config['f_req_shp'],
                 l_req_shp=self.ds_config['l_req_shp'],
