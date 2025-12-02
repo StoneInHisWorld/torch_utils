@@ -59,3 +59,16 @@ def log_multiprocessing_impl(
     # print(f"世代{epoch}的{which}记录线程退出")
     pbar_q.put(f"世代{epoch}{which}记录完毕")
 
+def log_summarize(metric_acc, duration_acc, c_names, l_names, duration_names):
+    if metric_acc[-1] > 0:
+        metric_log = {
+            name: metric_acc[i] / metric_acc[-1]
+            for i, name in enumerate(c_names + l_names)
+        }
+        duration_log = {
+            name: duration_acc[i] / duration_acc[-1]
+            for i, name in enumerate(duration_names)
+        }
+    else:
+        metric_log, duration_log = {}, {}
+    return metric_log, duration_log

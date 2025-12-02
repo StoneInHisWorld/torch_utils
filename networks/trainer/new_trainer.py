@@ -8,9 +8,9 @@ from data_related import SelfDefinedDataSet
 from utils.accumulator import Accumulator
 from utils.func import pytools as ptools
 from utils.history import History
-from . import is_multiprocessing, test_duration_names
+from . import _get_a_progress_bar, is_multiprocessing, test_duration_names
 
-from .__log_impl import log_impl
+from .__log_impl import log_impl, log_summarize
 from .__train_impl import train_impl, train_and_valid_impl, train_with_k_fold
 from .__train_impl import tv_multiprocessing_impl as tv_multiprocessing
 
@@ -30,10 +30,11 @@ def _prepare_test(fn):
         assert hasattr(trainer, 'module'), "训练器中不含模型对象，是否是尚未训练模型？"
         trainer.net_builder.activate_model(trainer.module, False)
         # 设置进度条
-        setattr(trainer, "pbar", tqdm(
-            total=len(test_iter), unit='批', desc=f'\r正在进行测试准备……', ncols=100,
-            bar_format='{desc}{n}/{total} | {elapsed}/{remaining} | {rate_fmt}{postfix}'
-        ))
+        trainer.pbar = _get_a_progress_bar(len(test_iter), trainer.pbar_verbose)
+        # setattr(trainer, "pbar", tqdm(
+        #     total=len(test_iter), unit='批', desc=f'\r正在进行测试准备……', ncols=100,
+        #     bar_format='{desc}{n}/{total} | {elapsed}/{remaining} | {rate_fmt}{postfix}'
+        # ))
         # test_iter = tqdm(test_iter, unit='批', position=0, desc=f'\r测试中……', mininterval=1, ncols=100)
         result = fn(trainer, test_iter)
         trainer.module.deactivate()
@@ -211,6 +212,8 @@ class Trainer:
             )
             log_stamp = time.perf_counter()
         # 生成测试日志
+        return log_summarize(metric_acc, duration_acc, 
+                             c_names, l_names, test_duration_names)
         metric_log = {
             name: metric_acc[i] / metric_acc[-1]
             for i, name in enumerate(c_names + l_names)

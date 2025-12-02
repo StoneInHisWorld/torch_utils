@@ -6,9 +6,9 @@ import torch
 from tqdm import tqdm
 
 from . import _prepare_train, _before_training, _after_training
-from . import _prepare_valid, _get_a_training_progress_bar
+from . import _prepare_valid, _get_a_progress_bar
 from . import vduration_names, tduration_names
-from .__log_impl import log_impl
+from .__log_impl import log_impl, log_summarize
 from .__hook_impl import hook
 from networks import BasicNN
 from .__profiler_impl import profiling_impl
@@ -146,17 +146,31 @@ def train_and_valid_impl(trainer, train_iter, valid_iter):
         # 进行学习率更新
         net.update_lr()
         vmetric_log, vduration_log = __valid(trainer, valid_iter, epoch)
+        # 生成训练日志
+        tmetric_log, tduration_log = log_summarize(
+            metric_acc, duration_acc, c_names, l_names, duration_names
+        )
         # 记录训练验证世代的时间、指标和损失值
         duration_history.add(
-            duration_names + list(vduration_log.keys()) + ["duration_valid"],
-            [duration_acc[i] / duration_acc[-1] for i in range(len(duration_acc) - 1)] +
-            list(vduration_log.values()) + [time.perf_counter() - logged_stamp]
+            list(tduration_log.keys()) + list(vduration_log.keys()) + 
+            ["duration_valid"],
+            list(tduration_log.values()) + list(vduration_log.values()) + 
+            [time.perf_counter() - logged_stamp]
         )
         metric_history.add(
-            c_names + l_names + list(vmetric_log.keys()),
-            [metric_acc[i] / metric_acc[-1] for i in range(len(metric_acc) - 1)] +
-            list(vmetric_log.values())
+            list(tmetric_log.keys()) + list(vmetric_log.keys()),
+            list(tmetric_log.values()) + list(vmetric_log.values())
         )
+        # duration_history.add(
+        #     duration_names + list(vduration_log.keys()) + ["duration_valid"],
+        #     [duration_acc[i] / duration_acc[-1] for i in range(len(duration_acc) - 1)] +
+        #     list(vduration_log.values()) + [time.perf_counter() - logged_stamp]
+        # )
+        # metric_history.add(
+        #     c_names + l_names + list(vmetric_log.keys()),
+        #     [metric_acc[i] / metric_acc[-1] for i in range(len(metric_acc) - 1)] +
+        #     list(vmetric_log.values())
+        # )
     return metric_history, duration_history
 
 
@@ -246,15 +260,20 @@ def __valid(trainer, valid_iter, epoch) -> Tuple[dict, dict]:
             metric_acc, durations, duration_acc
         )
         logged_stamp = time.perf_counter()
-    # 生成验证日志
-    metric_log = {
-        name: metric_acc[i] / metric_acc[-1]
-        for i, name in enumerate(c_names + l_names)
-    }
-    duration_log = {
-        name: duration_acc[i] / duration_acc[-1]
-        for i, name in enumerate(duration_names)
-    }
+    # 生成验证日志。迭代轮数大于1时，才生成记录日志。
+    return log_summarize(metric_acc, duration_acc, 
+                         c_names, l_names, duration_names)
+    if metric_acc[-1] > 0:
+        metric_log = {
+            name: metric_acc[i] / metric_acc[-1]
+            for i, name in enumerate(c_names + l_names)
+        }
+        duration_log = {
+            name: duration_acc[i] / duration_acc[-1]
+            for i, name in enumerate(duration_names)
+        }
+    else:
+        metric_log, duration_log = {}, {}
     # i += 1
     # for j, n in enumerate(l_names + duration_names):
     #     metric_log[n] = metric_acc[i + j] / metric_acc[-1]
@@ -346,7 +365,7 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
 
     # 提取训练器参数
     n_epochs = trainer.n_epochs
-    pbar = _get_a_training_progress_bar(n_epochs * (len(train_iter) + len(valid_iter)), trainer.pbar_verbose)
+    pbar = _get_a_progress_bar(n_epochs * (len(train_iter) + len(valid_iter)), trainer.pbar_verbose)
     pbar.set_description('\r正在创建队列和事件对象')
     # 进程通信队列
     ctx = torch.multiprocessing.get_context("spawn")
