@@ -48,8 +48,7 @@ class New2Experiment:
 
     def __init__(
             self, exp_no: int, datasource: type, net_type: type,
-            hyper_parameters: dict, runtime_cfg: dict, is_train: bool,
-            plot_path: str = None
+            hyper_parameters: dict, runtime_cfg: dict, is_train: bool
     ):
         """实验对象
         进行神经网络训练的相关周边操作，计时、显存监控、日志编写、网络持久化、历史趋势图绘制及保存。
@@ -67,7 +66,7 @@ class New2Experiment:
         """
         # self.__extra_lm = {}
         self.__hp = hyper_parameters
-        self.__pp = plot_path
+        # self.__pp = plot_path
         # self.__mlp = metric_log_path
         # self.__plp = perf_log_path
         # self.__np = net_path

@@ -1,5 +1,6 @@
 import json
 import os.path
+import warnings
 
 import jsonref
 import pandas as pd
@@ -7,8 +8,9 @@ import torch
 from jsonref import JsonRef
 
 from config.init_cfg import init_log, init_settings, init_hps
-from .new_experiment import Experiment
+from .new2_experiment import New2Experiment
 from .func import pytools as ptools
+from .func import log_tools as ltools
 
 
 def resolve_jsonref(obj):
@@ -23,8 +25,11 @@ def resolve_jsonref(obj):
         return obj
 
 
+save_net_range = ['no', 'entire', 'state']
+plot_history_range = ['plot', 'save', 'no']
 
-class ControlPanel:
+
+class New2ControlPanel:
     """控制台类负责读取、管理动态运行参数、超参数组合，以及实验对象的提供"""
 
     def __init__(self, datasource, net_type, is_train, cfg_root=os.path.join(".", "config")):
@@ -45,23 +50,25 @@ class ControlPanel:
         self.__read_runtime_cfg()
         # 生成其他路径
         self.__hcp = os.path.join(cfg_root, net_name, f'hyper_param_s.json')  # 网络训练超参数文件路径
-        log_root = self.cfg_dict['log_root']
-        self.__mlp = os.path.join(log_root, net_name, f'metric_log.csv')  # 指标日志文件存储路径
-        self.__plp = os.path.join(log_root, net_name, f'perf_log.csv')  # 性能日志文件存储路径
-        self.__np = os.path.join(log_root, net_name, f'trained_net/')  # 训练成果网络存储路径
-        self.__pp = os.path.join(log_root, net_name, f'imgs/')  # 历史趋势图存储路径
-        # 路径检查
-        ptools.check_path(self.__hcp, init_hps)
-        ptools.check_path(self.__mlp, init_log)
-        ptools.check_path(self.__plp, init_log)
-        ptools.check_path(self.__np)
-        ptools.check_path(self.__pp)
+        self.log_root = self.cfg_dict['log_root']
+        if self.log_root is not None:
+            self.__mlp = os.path.join(self.log_root, net_name, 'metric_log.csv')  # 指标日志文件存储路径
+            self.__plp = os.path.join(self.log_root, net_name, 'perf_log.csv')  # 性能日志文件存储路径
+            self.__np = os.path.join(self.log_root, net_name, 'trained_net', "")  # 训练成果网络存储路径
+            self.__pp = os.path.join(self.log_root, net_name, 'imgs', "")  # 历史趋势图存储路径
+            # 路径检查
+            ptools.check_path(self.__hcp, init_hps)
+            ptools.check_path(self.__mlp, init_log)
+            ptools.check_path(self.__plp, init_log)
+            ptools.check_path(self.__np)
+            ptools.check_path(self.__pp)
         # 设置随机种子
         torch.random.manual_seed(self['random_seed'])
         # # 读取实验编号
         self.__read_expno()
         self.dao_ds = datasource
         self.is_train = is_train
+        self.plot_kwargs = {}
 
     def __read_expno(self):
         """读取实验编号
@@ -103,18 +110,31 @@ class ControlPanel:
                 f'实验{self.exp_no}号/{self.last_expno}号'
                 f'---------------------------'
             )
-            cur_exp = Experiment(
+            cur_exp = New2Experiment(
                 self.exp_no, self.dao_ds, self.net_type,
-                hyper_params, self.cfg_dict, self.is_train,
-                self.__pp, self.__mlp, self.__plp, self.__np
+                hyper_params, self.cfg_dict, self.is_train
             )
             yield cur_exp
+            # 记录
+            if hasattr(self, "log_root"):
+                if hasattr(cur_exp, "metric_log"):
+                    self.__write_log(self.__mlp, **cur_exp.metric_log)
+                else:
+                    print("没有为实验对象注入指标结果，本次实验不记录指标数据！")
+                self.__write_log(self.__plp, **cur_exp.perf_log)
+                if cur_exp.net is None:
+                    print('训练器对象未得到训练网络对象，因此不予保存网络！')
+                else:
+                    self.__save_net(cur_exp.net)
+                self.__plot_history(cur_exp.train_mlog)
+            else:
+                print("没有指定保存目录，本次实验不记录结果！")
+            # 更新实验编号以及读取下一次实验的参数
+            self.exp_no += 1
             # 读取运行动态参数
             self.__read_runtime_cfg()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-            # 更新实验编号
-            self.exp_no += 1
 
     def __getitem__(self, item):
         """获取控制面板中的运行配置参数。
@@ -131,6 +151,83 @@ class ControlPanel:
             config_dict = jsonref.load(config, merge_props=True)
             config_dict = resolve_jsonref(config_dict)
             self.cfg_dict = config_dict
+
+    def __write_log(self, path, **kwargs):
+        """日志编写函数
+        :param kwargs: 日志条目内容
+        :return: None
+        """
+        directory, file_name = os.path.split(path)
+        ltools.write_log(path, **kwargs)
+        print(f'已在{path}编写日志{file_name}')
+
+    def __save_net(self, net):
+        """保存实验对象持有网络
+        根据动态运行参数进行相应的网络保存动作，具有三种保存模式，保存模式由动态运行参数save_net指定：
+        entire：指持久化整个网络对象
+        state：指持久化网络对象参数
+        no：指不进行持久化
+
+        :return: None
+        """
+        if self.__np is None:
+            print("未指定模型保存路径，不予保存模型！")
+            return
+        save_net = self.cfg_dict['save_net']
+        if save_net == 'entire':
+            obj_to_be_saved = net
+            path = os.path.join(self.__np, f'{self.exp_no}.ptm')
+        elif save_net == 'state':
+            obj_to_be_saved = net
+            path = os.path.join(self.__np, f'{self.exp_no}.ptsd')
+        else:
+            warnings.warn(
+                f'请检查setting.json中参数save_net设置是否正确，可设置取值为：{save_net_range}'
+                f'本次不予保存模型！', UserWarning
+            )
+            return
+        torch.save(obj_to_be_saved, path)
+        print(f'已在{self.__np}保存网络，保存路径为：{path}')
+
+    def __plot_history(self, history) -> None:
+        """绘制历史趋势图
+        根据需要绘制历史趋势图，有三种模式可选，模式选择由动态运行参数plot_history指定：
+        plot： 绘制图像，但不进行保存
+        save：绘制图像且保存，需要指定保存路径self.__pp，保存图片名为(实验编号.jpg)
+        no：不绘制历史趋势图
+
+        :param history: 历史记录对象
+        :param plot_kwargs: 历史趋势图绘制关键字参数
+        :return: None
+        """
+        # 检查参数设置
+        cfg = self.cfg_dict['plot_history']
+        mute = self.cfg_dict['plot_mute']
+        assert isinstance(mute, bool), "plot_mute参数需要为布尔值，请检查setting.json中参数plot_mute设置是否正确！"
+        if cfg == 'no':
+            return
+        elif cfg == 'plot':
+            savefig_as = None
+        elif cfg == 'save':
+            if self.__pp is None:
+                warnings.warn('未指定绘图路径，不予保存历史趋势图！')
+                savefig_as = None
+            else:
+                savefig_as = os.path.join(self.__pp, f"{self.exp_no}.png")
+        else:
+            raise ValueError(f'请检查setting.json中参数plot_history设置是否正确！支持的参数包括{plot_history_range}'
+                             '本次不予绘制历史趋势图！')
+        # 绘图
+        with warnings.catch_warnings():
+            # 忽视空图图例警告
+            warnings.simplefilter('ignore', category=UserWarning)
+            ltools.plot_history(
+                history, mute=mute, title=f'EXP NO.{self.exp_no}',
+                savefig_as=savefig_as, **self.plot_kwargs
+            )
+
+    def set_plot_kwargs(self, **kwargs):
+        self.plot_kwargs = kwargs
 
     @property
     def runtime_cfg(self):
