@@ -83,14 +83,27 @@ class NetBuilder:
         """
         if not mute:
             print(f'\r正在构造{self.module.__name__}', end='', flush=True)
-        assert hasattr(self, '_optimizer_args'), (f"没有为网络配置优化器参数，请通过调用{self.__class__.__name__}()."
-                                                  f"{self.set_optimizer_args.__name__}()方法进行配置！")
-        assert hasattr(self, '_lr_scheduler_args'), (f"没有为网络配置学习率规划器参数，请通过调用{self.__class__.__name__}()."
-                                                     f"{self.set_lr_scheduler_args.__name__}()方法进行配置！")
-        assert hasattr(self, '_training_ls_fn_args'), (f"没有为网络配置训练损失函数参数，请通过调用{self.__class__.__name__}()."
-                                                       f"{self.set_training_ls_fn_args.__name__}()方法进行配置！")
-        assert hasattr(self, '_testing_ls_fn_args'), (f"没有为网络配置测试损失函数参数，请通过调用{self.__class__.__name__}()."
-                                                      f"{self.set_testing_ls_fn_args.__name__}()方法进行配置！")
+        assert hasattr(self, 'init_args'), (f"没有为网络配置初始化位置参数，请通过调用{self.__class__.__name__}()."
+                                            f"{self.set_module_init_args.__name__}()方法进行配置！")
+        assert hasattr(self, 'init_kwargs'), (f"没有为网络配置初始化关键字参数，请通过调用{self.__class__.__name__}()."
+                                              f"{self.set_module_init_args.__name__}()方法进行配置！")
+        # 允许空值以方便用户使用网络默认值或者不设置某些参数
+        if not hasattr(self, '_optimizer_args'):
+            self._optimizer_args = []
+        if hasattr(self, '_lr_scheduler_args'):
+            self._lr_scheduler_args = []
+        if hasattr(self, '_training_ls_fn_args'):
+            self._training_ls_fn_args = []
+        if hasattr(self, '_testing_ls_fn_args'):
+            self._testing_ls_fn_args = []
+        # assert hasattr(self, '_optimizer_args'), (f"没有为网络配置优化器参数，请通过调用{self.__class__.__name__}()."
+        #                                           f"{self.set_optimizer_args.__name__}()方法进行配置！")
+        # assert hasattr(self, '_lr_scheduler_args'), (f"没有为网络配置学习率规划器参数，请通过调用{self.__class__.__name__}()."
+        #                                              f"{self.set_lr_scheduler_args.__name__}()方法进行配置！")
+        # assert hasattr(self, '_training_ls_fn_args'), (f"没有为网络配置训练损失函数参数，请通过调用{self.__class__.__name__}()."
+        #                                                f"{self.set_training_ls_fn_args.__name__}()方法进行配置！")
+        # assert hasattr(self, '_testing_ls_fn_args'), (f"没有为网络配置测试损失函数参数，请通过调用{self.__class__.__name__}()."
+        #                                               f"{self.set_testing_ls_fn_args.__name__}()方法进行配置！")
         net = self.module(*self.init_args, **self.init_kwargs)
         if not mute:
             print(f'\r构造{self.module.__name__}完成')
