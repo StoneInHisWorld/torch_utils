@@ -160,10 +160,15 @@ class DataSet(torch_ds):
         self._features, self._labels = self.transformer.transform_data(
             self._features, self._labels, self.is_train
         )
-        if self.bulk_transit:
-            self._features, self._labels = self.transit_fn((self._features, self._labels))
-            print(f'\r已将数据集整体迁移至{self.device}', flush=True, end="")
+        # if self.bulk_transit:
+        #     self._features, self._labels = self.transit_fn((self._features, self._labels))
+        #     print(f'\r已将数据集整体迁移至{self.device}', flush=True, end="")
         print(f'\r{desc}预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
+
+    def data_bulky_transit(self):
+        assert self.bulk_transit, "数据集已被设置为不可整体迁移！"
+        self._features, self._labels = self.transit_fn((self._features, self._labels))
+        print(f'\r已将数据集整体迁移至{self.device}', flush=True, end="")
 
     def to_loader(self, batch_size, **dl_kwargs):
         return DataLoader(self, batch_size, **dl_kwargs)
@@ -171,7 +176,8 @@ class DataSet(torch_ds):
 
 class LazyDataSet(DataSet):
 
-    def __init__(self, i_cfn, reader, *ds_args, **ds_kwargs):
+    def __init__(self, reader, bulk_preprocess,
+                 f_lazy=False, l_lazy=False, *ds_args, **ds_kwargs):
         """懒加载数据集，存储数据的索引供LazyDataLoader使用。
         LazyDataLoader取该数据集中实际的数据内容时，会使用`reader`进行数据内容的读取。
 
@@ -185,15 +191,49 @@ class LazyDataSet(DataSet):
         :param ds_kwargs: DataSet初始化的关键字参数。
             device参数在本类中不会奏效，因为索引集预处理后不会进行批量迁移。
         """
-        self.i_cfn = i_cfn
+        self.bulk_preprocess = bulk_preprocess
         self.reader = reader
         self.reader.mute = True
-        super().__init__(**ds_kwargs)
+        assert f_lazy or l_lazy, "特征集和标签集都选择立即加载时，请使用DataSet！"
+        self.f_lazy, self.l_lazy = f_lazy, l_lazy
+        super().__init__(*ds_args, **ds_kwargs)
 
     def preprocess(self, desc):
         """数据集对持有的特征索引集和标签索引集进行预处理"""
         start_time = time.perf_counter()
-        self._features, self._labels = self.transformer.transform_indices(
-            self._features, self._labels, is_train=self.is_train
-        )
+        if self.f_lazy:
+            self._features = self.transformer.transform_indices(
+                fi=self._features, is_train=self.is_train
+            )
+        else:
+            self._features = self.transformer.transform_data(
+                fea=self._features, is_train=self.is_train
+            )
+        if self.l_lazy:
+            self._labels = self.transformer.transform_indices(
+                li=self._labels, is_train=self.is_train
+            )
+        else:
+            self._labels = self.transformer.transform_data(
+                lb=self._labels, is_train=self.is_train
+            )
         print(f'\r{desc}预处理完毕，使用了{time.perf_counter() - start_time:.5f}秒', flush=True)
+
+    def data_bulky_transit(self):
+        assert not self.bulk_transit, "懒加载数据集不可整体迁移！请将setting.json中的ds_kwargs.bulk_transit设置为False！"
+
+    def __getitem__(self, item):
+        batch = self.__get_fitem__(item), self.__get_litem__(item)
+        if self.is_train:
+            batch = self.transformer.augment_data(*batch)
+        return self.transit_fn(batch)
+
+    def __get_fitem__(self, item):
+        fi = [self._features[item]]
+        return self.reader.fetch(fi=fi, preprocess=True, is_train=self.is_train)[0][0]\
+            if self.f_lazy else fi[0]
+
+    def __get_litem__(self, item):
+        li = [self._labels[item]]
+        return self.reader.fetch(li=li, preprocess=True, is_train=self.is_train)[0][0] \
+            if self.l_lazy else li[0]
