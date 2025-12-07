@@ -63,5 +63,6 @@ def configure_network(
 
 
 from .trainer import Trainer
+from .trainer import New2Trainer
 from .net_builder import NetBuilder
 from .nets import *

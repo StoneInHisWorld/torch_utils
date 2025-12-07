@@ -10,4 +10,6 @@ from .func import pytools as ptools
 from .func import tensor_tools as tstools
 from .func import torch_tools as ttools
 from .new_ctrl_panel import ControlPanel as NewControlPanel
+from .new2_ctrl_panel import New2ControlPanel
+from .new2_experiment import New2Experiment
 

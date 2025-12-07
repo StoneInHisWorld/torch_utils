@@ -41,6 +41,7 @@ def train_impl(trainer, train_iter) -> History:
     :param train_iter: 训练数据迭代器
     :return: 训练数据记录`History`对象
     """
+    raise NotImplementedError("暂时未测试过！")
     # 提取训练器参数
     pbar = trainer.pbar
     net = trainer.module
@@ -152,15 +153,25 @@ def train_and_valid_impl(trainer, train_iter, valid_iter):
         )
         # 记录训练验证世代的时间、指标和损失值
         duration_history.add(
-            list(tduration_log.keys()) + list(vduration_log.keys()) + 
-            ["duration_valid"],
-            list(tduration_log.values()) + list(vduration_log.values()) + 
-            [time.perf_counter() - logged_stamp]
+            [*tduration_log, *vduration_log, "duration_valid"],
+            [*tduration_log.values(), *vduration_log.values(),
+             time.perf_counter() - logged_stamp]
         )
         metric_history.add(
-            list(tmetric_log.keys()) + list(vmetric_log.keys()),
-            list(tmetric_log.values()) + list(vmetric_log.values())
+            [*tmetric_log, *vmetric_log],
+            [*tmetric_log.values(), *vmetric_log.values()]
         )
+
+        # duration_history.add(
+        #     list(tduration_log.keys()) + list(vduration_log.keys()) +
+        #     ["duration_valid"],
+        #     list(tduration_log.values()) + list(vduration_log.values()) +
+        #     [time.perf_counter() - logged_stamp]
+        # )
+        # metric_history.add(
+        #     list(tmetric_log.keys()) + list(vmetric_log.keys()),
+        #     list(tmetric_log.values()) + list(vmetric_log.values())
+        # )
         # duration_history.add(
         #     duration_names + list(vduration_log.keys()) + ["duration_valid"],
         #     [duration_acc[i] / duration_acc[-1] for i in range(len(duration_acc) - 1)] +
@@ -197,6 +208,7 @@ def train_with_k_fold(trainer, train_loaders_iter) -> History:
     # # 设置进度条
     # pbar = get_a_training_progress_bar(trainer.n_epochs)
     # setattr(trainer, "pbar", pbar)
+    raise NotImplementedError("暂时未测试过！")
     _before_training(trainer, trainer.n_epochs)
     pbar = trainer.pbar
     # 根据训练器参数调用相应的训练函数
@@ -263,22 +275,22 @@ def __valid(trainer, valid_iter, epoch) -> Tuple[dict, dict]:
     # 生成验证日志。迭代轮数大于1时，才生成记录日志。
     return log_summarize(metric_acc, duration_acc, 
                          c_names, l_names, duration_names)
-    if metric_acc[-1] > 0:
-        metric_log = {
-            name: metric_acc[i] / metric_acc[-1]
-            for i, name in enumerate(c_names + l_names)
-        }
-        duration_log = {
-            name: duration_acc[i] / duration_acc[-1]
-            for i, name in enumerate(duration_names)
-        }
-    else:
-        metric_log, duration_log = {}, {}
+    # if metric_acc[-1] > 0:
+    #     metric_log = {
+    #         name: metric_acc[i] / metric_acc[-1]
+    #         for i, name in enumerate(c_names + l_names)
+    #     }
+    #     duration_log = {
+    #         name: duration_acc[i] / duration_acc[-1]
+    #         for i, name in enumerate(duration_names)
+    #     }
+    # else:
+    #     metric_log, duration_log = {}, {}
     # i += 1
     # for j, n in enumerate(l_names + duration_names):
     #     metric_log[n] = metric_acc[i + j] / metric_acc[-1]
     # for
-    return metric_log, duration_log
+    # return metric_log, duration_log
 
 #
 # def __train_and_valid_with_preprocessing(self, train_iter, valid_iter) -> History:
@@ -532,7 +544,7 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
 
 def train_with_profiler(trainer, data_iter, log_path):
     # 提取训练器参数
-    # k = trainer.k
+    raise NotImplementedError("暂时未测试过！")
     n_epochs = 2
     # 取相对较少数量的那个数据迭代器进行性能测试
     if trainer.k > 1:

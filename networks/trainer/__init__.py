@@ -116,3 +116,4 @@ def _prepare_valid(fn):
 
 # from .trainer import Trainer
 from .new_trainer import Trainer
+from .new2_trainer import New2Trainer
