@@ -57,7 +57,7 @@ class StorageDataLoader:
     #     else:
     #         return self.__mt_fetch(*reading_args)
 
-    def fetch(self, fi, di, preprocess=False, is_train=True):
+    def fetch(self, fi=None, li=None, preprocess=False, is_train=True):
         if preprocess:
             # 如果需要预处理
             if is_train:
@@ -79,8 +79,8 @@ class StorageDataLoader:
         reading_args = []
         if fi:
             reading_args.append([f_reader, fi, prompt + "特征集"])
-        if di:
-            reading_args.append([l_reader, di, prompt + "标签集"])
+        if li:
+            reading_args.append([l_reader, li, prompt + "标签集"])
         # 根据分配的处理机数目进行调用
         if self.n_workers < 2:
             return [self.__st_fetch(*args) for args in reading_args]
