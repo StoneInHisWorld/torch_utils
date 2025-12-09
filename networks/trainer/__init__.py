@@ -2,6 +2,8 @@ import functools
 
 import torch
 
+from networks import net_predict_state, net_train_state
+
 tduration_names = ["duration_train_data_fetch", "duration_for_back_ward", "duration_train_log"]
 vduration_names = ["duration_vdata_fetch", "duration_vpredict", "duration_vlog"]
 test_duration_names = ["duration_test_data_fetch", "duration_test_predict", "duration_test_log"]
@@ -9,7 +11,7 @@ test_duration_names = ["duration_test_data_fetch", "duration_test_predict", "dur
 def is_multiprocessing(n_workers):
     return n_workers >= 3
 
-def _get_a_progress_bar(pbar_len, verbose=True):
+def _get_a_progress_bar(pbar_len, desc, verbose=True):
     """
     获取一个训练进度条
     
@@ -22,33 +24,33 @@ def _get_a_progress_bar(pbar_len, verbose=True):
     bar_format = '{desc}{n}/{total} | {elapsed}/{remaining} |{rate_fmt}{postfix}' if verbose else \
         '{percentage:3.0f}% {bar} {n}/{total} [{elapsed}/{remaining}, {rate_fmt}]'
     return tqdm(
-        total=pbar_len, unit='批', desc=f'\r正在进行训练准备', mininterval=1, bar_format=bar_format,
+        total=pbar_len, unit='批', desc=f'\r{desc}', mininterval=1, bar_format=bar_format,
     )
 
 def _before_training(trainer, *args):
     if trainer.k == 1:
         print(f'\r本次训练位于设备{trainer.config["device"]}上')
         # 创建网络
-        setattr(trainer, "module", trainer.net_builder.build(True))
+        setattr(trainer, "module", trainer.net_builder.build(net_train_state))
         if not is_multiprocessing(trainer.n_workers):
             # 设置进度条
             pbar_len = trainer.n_epochs * functools.reduce(lambda x, y: len(x) + len(y), args)
-            setattr(trainer, "pbar", _get_a_progress_bar(pbar_len, trainer.pbar_verbose))
+            setattr(trainer, "pbar", _get_a_progress_bar(pbar_len, "正在进行训练准备", trainer.pbar_verbose))
     else:
         if not hasattr(trainer, "module"):
-            setattr(trainer, "module", trainer.net_builder.build(True))
+            setattr(trainer, "module", trainer.net_builder.build(net_train_state))
         if not hasattr(trainer, "pbar"):
-            setattr(trainer, "pbar", _get_a_progress_bar(0, trainer.pbar_verbose))
+            setattr(trainer, "pbar", _get_a_progress_bar(0, "正在进行训练准备", trainer.pbar_verbose))
+    # trainer.module.train()
 
 def _after_training(trainer, *args):
     if trainer.k == 1:
         if not is_multiprocessing(trainer.n_workers):
-            trainer.module.deactivate()
             del trainer.pbar
         else:
-            trainer.module.deactivate()
             result_conn = args[-1]
             result_conn.send(trainer.module)
+        trainer.module.deactivate()
 
 def _prepare_train(fn):
     """
@@ -95,21 +97,26 @@ def _prepare_valid(fn):
     @functools.wraps(fn)
     @torch.no_grad()
     def wrapper(trainer, *args):
-        trainer.module.eval()
+        module = trainer.module
+        # 将网络状态更改为预测态
+        pre_state = module.state
+        module.state = net_predict_state
         n_workers = trainer.n_workers
         if is_multiprocessing(n_workers):
             vlog_q, pbar_q, epoch = args[-3:]
             pbar_q.put(f"世代{epoch}验证开始")
             result = fn(trainer, *args)
-            trainer.module.train()
+            # trainer.module.train()
             vlog_q.put(None)
             pbar_q.put(f"世代{epoch}验证完毕")
         else:
             epoch = args[-1]
             trainer.pbar.set_description(f"世代{epoch + 1}验证中")
             result = fn(trainer, *args)
-            trainer.module.train()
+            # trainer.module.train()
             trainer.pbar.set_description(f"世代{epoch + 1}验证完毕")
+        # 网络状态复原
+        module.state = pre_state
         return result
 
     return wrapper

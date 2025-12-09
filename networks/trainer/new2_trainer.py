@@ -13,6 +13,7 @@ from . import _get_a_progress_bar, is_multiprocessing, test_duration_names
 from .__log_impl import log_impl, log_summarize
 from .__train_impl import train_impl, train_and_valid_impl, train_with_k_fold
 from .__train_impl import tv_multiprocessing_impl as tv_multiprocessing
+from .. import net_predict_state
 
 
 def _prepare_test(fn):
@@ -28,9 +29,9 @@ def _prepare_test(fn):
     def wrapper(trainer, test_iter):
         # 创建网络
         assert hasattr(trainer, 'module'), "训练器中不含模型对象，是否是尚未训练模型？"
-        trainer.net_builder.activate_model(trainer.module, False)
+        trainer.net_builder.activate_model(trainer.module, net_predict_state, True)
         # 设置进度条
-        trainer.pbar = _get_a_progress_bar(len(test_iter), trainer.pbar_verbose)
+        trainer.pbar = _get_a_progress_bar(len(test_iter), "正在进行测试准备", trainer.pbar_verbose)
         result = fn(trainer, test_iter)
         trainer.module.deactivate()
         trainer.pbar.set_description("\r测试完毕")
@@ -131,7 +132,7 @@ class New2Trainer:
         inputs, predictions, labels, metrics, loss_pool = [], [], [], [], []
         # 对每个批次进行预测，并进行评价指标和损失值的计算
         for fe_batch, lb_batch in pbar:
-            result = net.forward_backward(fe_batch, lb_batch, False)
+            result = net.forward_backward(fe_batch, lb_batch)
             pre_batch, ls_es = result
             predictions.append(pre_batch)
             if ret_ds:
@@ -183,10 +184,11 @@ class New2Trainer:
         metric_acc = Accumulator(len(criterion_a) + len(l_names) + 1)
         duration_acc = Accumulator(len(test_duration_names) + 1)
         # 计算准确率和损失值
+        self.pbar.set_description('测试中')
         log_stamp = time.perf_counter()
         for features, labels in test_iter:
             data_fetched_stamp = time.perf_counter()
-            preds, ls_es = net.forward_backward(features, labels, False)
+            preds, ls_es = net.forward_backward(features, labels)
             predict_stamp = time.perf_counter()
             durations = [
                 data_fetched_stamp - log_stamp,

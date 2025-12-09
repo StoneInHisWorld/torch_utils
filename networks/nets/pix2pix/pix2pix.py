@@ -113,21 +113,45 @@ class Pix2Pix(BasicNN):
         """
         return self.netG(input)
 
-    def forward_backward(self, X, y, backward=True):
+    # def forward_backward(self, X, y):
+    #     # 前向传播
+    #     assert X.shape == y.shape, (f"Pix2Pix要求输入的标签集数据与特征集数据形状相同，"
+    #                                 f"然而得到的输入特征集形状为{X.shape}，标签集形状为{y.shape}")
+    #     AtoB = self.direction == 'AtoB'
+    #     X, y = [X, y] if AtoB else [y, X]
+    #     pred = self(X)
+    #     if backward:
+    #         self.netD.requires_grad_(True)
+    #         _, D_ls = self.netD.forward_backward((X, pred), y)
+    #         self.netD.requires_grad_(False)
+    #         _, G_ls = self.netG.forward_backward((X, pred, self.netD), y)
+    #         ls_es = (*G_ls, *D_ls)
+    #     else:
+    #         with torch.no_grad():
+    #             _, G_ls = self.netG.forward_backward((X, pred, self.netD), y)
+    #             ls_es = (*G_ls, )
+    #     return pred, ls_es
+
+    def _train(self, X, y):
         # 前向传播
         assert X.shape == y.shape, (f"Pix2Pix要求输入的标签集数据与特征集数据形状相同，"
                                     f"然而得到的输入特征集形状为{X.shape}，标签集形状为{y.shape}")
         AtoB = self.direction == 'AtoB'
         X, y = [X, y] if AtoB else [y, X]
         pred = self(X)
-        if backward:
-            self.netD.requires_grad_(True)
-            _, D_ls = self.netD.forward_backward((X, pred), y, backward=backward)
-            self.netD.requires_grad_(False)
-            _, G_ls = self.netG.forward_backward((X, pred, self.netD), y, backward=backward)
-            ls_es = (*G_ls, *D_ls)
-        else:
-            with torch.no_grad():
-                _, G_ls = self.netG.forward_backward((X, pred, self.netD), y, backward=backward)
-                ls_es = (*G_ls, )
-        return pred, ls_es
+        self.netD.requires_grad_(True)
+        _, D_ls = self.netD.forward_backward((X, pred), y)
+        self.netD.requires_grad_(False)
+        _, G_ls = self.netG.forward_backward((X, pred, self.netD), y)
+        return pred, [*G_ls, *D_ls]
+
+    def _predict(self, X, y):
+        # 前向传播
+        assert X.shape == y.shape, (f"Pix2Pix要求输入的标签集数据与特征集数据形状相同，"
+                                    f"然而得到的输入特征集形状为{X.shape}，标签集形状为{y.shape}")
+        AtoB = self.direction == 'AtoB'
+        X, y = [X, y] if AtoB else [y, X]
+        pred = self(X)
+        _, G_ls = self.netG.forward_backward((X, pred, self.netD), y)
+        return pred, (*G_ls,)
+

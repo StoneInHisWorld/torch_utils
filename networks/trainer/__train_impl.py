@@ -5,16 +5,15 @@ from typing import Tuple
 import torch
 from tqdm import tqdm
 
+from networks import BasicNN
+from utils import History, Accumulator
+from utils import ptools
 from . import _prepare_train, _before_training, _after_training
 from . import _prepare_valid, _get_a_progress_bar
 from . import vduration_names, tduration_names
-from .__log_impl import log_impl, log_summarize
 from .__hook_impl import hook
-from networks import BasicNN
+from .__log_impl import log_impl, log_summarize
 from .__profiler_impl import profiling_impl
-from utils import History, Accumulator
-from utils import ptools
-
 
 debug = False
 
@@ -259,7 +258,7 @@ def __valid(trainer, valid_iter, epoch) -> Tuple[dict, dict]:
     for features, labels in valid_iter:
         data_fetched_stamp = time.perf_counter()
         # 预测
-        preds, ls_es = net.forward_backward(features, labels, False)
+        preds, ls_es = net.forward_backward(features, labels)
         predicted_stamp = time.perf_counter()
         # 计算出数据获取时间和预测时间
         durations = [

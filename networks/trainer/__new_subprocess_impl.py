@@ -104,7 +104,7 @@ def __valid_impl(trainer, vdata_q, vlog_q, pbar_q, epoch):
     while batch is not None:
         X, y = batch  # epoch应该每次都相同
         data_fetched_stamp = time.perf_counter()
-        pred_s, ls_es = net.forward_backward(X, y, False)
+        pred_s, ls_es = net.forward_backward(X, y)
         # 数据传递给记录进程，进行评价指标计算、历史记录更新（损失值、评价指标、学习率）
         predicted_stamp = time.perf_counter()
         durations = [

@@ -84,7 +84,7 @@ def __valid_impl(trainer, vdata_q, vlog_q, pbar_q, epoch):
     pbar_q.put(f"世代{epoch}验证开始")
     while batch is not None:
         X, y = batch  # epoch应该每次都相同
-        pred_s, ls_es = net.forward_backward(X, y, False)
+        pred_s, ls_es = net.forward_backward(X, y)
         # 数据传递给记录进程，进行评价指标计算、历史记录更新（损失值、评价指标、学习率）
         log_data = pred_s.detach().clone(), y.detach().clone(), [l.detach().clone() for l in ls_es]
         vlog_q.put(log_data)

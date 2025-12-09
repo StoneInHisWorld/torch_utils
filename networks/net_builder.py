@@ -25,6 +25,11 @@ class NetBuilder:
         # Validate that init_args or init_kwargs are provided
         self.module = module
         self.config = config
+        # 设置空值以便activate_model()函数调用
+        self._optimizer_args = None
+        self._lr_scheduler_args = None
+        self._training_ls_fn_args = None
+        self._testing_ls_fn_args = None
         # m_po, m_pok, m_ko, m_needed = get_signature(module)
         # _, bn_pok, bn_ko, _ = get_signature(BasicNN)
         # n_valid_argments = len(init_args) + len(init_kwargs.keys() - [b[0] for b in bn_ko])
@@ -74,7 +79,44 @@ class NetBuilder:
         """保存模型的测试损失函数参数"""
         self._testing_ls_fn_args = args
 
-    def build(self, is_train: bool, mute: bool = False):
+    # def build(self, is_train: bool, mute: bool = False):
+    #     """根据参数构造一个神经网络
+    #     :param net_class: 构造的神经网络类型，作为类构造器传入
+    #     :param n_init_args: 类构造器所用位置参数
+    #     :param n_init_kwargs: 类构造器所用关键字参数
+    #     :return: 构造完成的神经网络
+    #     """
+    #     if not mute:
+    #         print(f'\r正在构造{self.module.__name__}', end='', flush=True)
+    #     assert hasattr(self, 'init_args'), (f"没有为网络配置初始化位置参数，请通过调用{self.__class__.__name__}()."
+    #                                         f"{self.set_module_init_args.__name__}()方法进行配置！")
+    #     assert hasattr(self, 'init_kwargs'), (f"没有为网络配置初始化关键字参数，请通过调用{self.__class__.__name__}()."
+    #                                           f"{self.set_module_init_args.__name__}()方法进行配置！")
+    #     # 允许空值以方便用户使用网络默认值或者不设置某些参数
+    #     if not hasattr(self, '_optimizer_args'):
+    #         self._optimizer_args = []
+    #     if hasattr(self, '_lr_scheduler_args'):
+    #         self._lr_scheduler_args = []
+    #     if hasattr(self, '_training_ls_fn_args'):
+    #         self._training_ls_fn_args = []
+    #     if hasattr(self, '_testing_ls_fn_args'):
+    #         self._testing_ls_fn_args = []
+    #     # assert hasattr(self, '_optimizer_args'), (f"没有为网络配置优化器参数，请通过调用{self.__class__.__name__}()."
+    #     #                                           f"{self.set_optimizer_args.__name__}()方法进行配置！")
+    #     # assert hasattr(self, '_lr_scheduler_args'), (f"没有为网络配置学习率规划器参数，请通过调用{self.__class__.__name__}()."
+    #     #                                              f"{self.set_lr_scheduler_args.__name__}()方法进行配置！")
+    #     # assert hasattr(self, '_training_ls_fn_args'), (f"没有为网络配置训练损失函数参数，请通过调用{self.__class__.__name__}()."
+    #     #                                                f"{self.set_training_ls_fn_args.__name__}()方法进行配置！")
+    #     # assert hasattr(self, '_testing_ls_fn_args'), (f"没有为网络配置测试损失函数参数，请通过调用{self.__class__.__name__}()."
+    #     #                                               f"{self.set_testing_ls_fn_args.__name__}()方法进行配置！")
+    #     net = self.module(*self.init_args, **self.init_kwargs)
+    #     if not mute:
+    #         print(f'\r构造{self.module.__name__}完成')
+    #         self.__list_net(net)
+    #     self.activate_model(net, is_train, mute)
+    #     return net
+
+    def build(self, usage: str, mute: bool = False):
         """根据参数构造一个神经网络
         :param net_class: 构造的神经网络类型，作为类构造器传入
         :param n_init_args: 类构造器所用位置参数
@@ -88,37 +130,38 @@ class NetBuilder:
         assert hasattr(self, 'init_kwargs'), (f"没有为网络配置初始化关键字参数，请通过调用{self.__class__.__name__}()."
                                               f"{self.set_module_init_args.__name__}()方法进行配置！")
         # 允许空值以方便用户使用网络默认值或者不设置某些参数
-        if not hasattr(self, '_optimizer_args'):
-            self._optimizer_args = []
-        if hasattr(self, '_lr_scheduler_args'):
-            self._lr_scheduler_args = []
-        if hasattr(self, '_training_ls_fn_args'):
-            self._training_ls_fn_args = []
-        if hasattr(self, '_testing_ls_fn_args'):
-            self._testing_ls_fn_args = []
-        # assert hasattr(self, '_optimizer_args'), (f"没有为网络配置优化器参数，请通过调用{self.__class__.__name__}()."
-        #                                           f"{self.set_optimizer_args.__name__}()方法进行配置！")
-        # assert hasattr(self, '_lr_scheduler_args'), (f"没有为网络配置学习率规划器参数，请通过调用{self.__class__.__name__}()."
-        #                                              f"{self.set_lr_scheduler_args.__name__}()方法进行配置！")
-        # assert hasattr(self, '_training_ls_fn_args'), (f"没有为网络配置训练损失函数参数，请通过调用{self.__class__.__name__}()."
-        #                                                f"{self.set_training_ls_fn_args.__name__}()方法进行配置！")
-        # assert hasattr(self, '_testing_ls_fn_args'), (f"没有为网络配置测试损失函数参数，请通过调用{self.__class__.__name__}()."
-        #                                               f"{self.set_testing_ls_fn_args.__name__}()方法进行配置！")
+        # if not hasattr(self, '_optimizer_args'):
+        #     self._optimizer_args = []
+        # if not hasattr(self, '_lr_scheduler_args'):
+        #     self._lr_scheduler_args = []
+        # if not hasattr(self, '_training_ls_fn_args'):
+        #     self._training_ls_fn_args = []
+        # if not hasattr(self, '_testing_ls_fn_args'):
+        #     self._testing_ls_fn_args = []
         net = self.module(*self.init_args, **self.init_kwargs)
         if not mute:
             print(f'\r构造{self.module.__name__}完成')
             self.__list_net(net)
-        self.activate_model(net, is_train, mute)
+        self.activate_model(net, usage, mute)
         return net
 
-    def activate_model(self, net, is_train: bool = True, mute: bool = False):
+    def activate_model(self, net, usage: str, mute: bool = False):
         """<UNK>
         :param net: <UNK>
         """
         configure_network(
-            net, is_train, mute, self._optimizer_args, self._lr_scheduler_args,
+            net, usage, mute, self._optimizer_args, self._lr_scheduler_args,
             self._training_ls_fn_args, self._testing_ls_fn_args
         )
+
+    # def activate_model(self, net, is_train: bool = True, mute: bool = False):
+    #     """<UNK>
+    #     :param net: <UNK>
+    #     """
+    #     configure_network(
+    #         net, is_train, mute, self._optimizer_args, self._lr_scheduler_args,
+    #         self._training_ls_fn_args, self._testing_ls_fn_args
+    #     )
 
     def __list_net(self, net) -> None:
         """打印网络信息。

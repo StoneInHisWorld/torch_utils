@@ -134,7 +134,7 @@ class Trainer:
         inputs, predictions, labels, metrics, loss_pool = [], [], [], [], []
         # 对每个批次进行预测，并进行评价指标和损失值的计算
         for fe_batch, lb_batch in pbar:
-            result = net.forward_backward(fe_batch, lb_batch, False)
+            result = net.forward_backward(fe_batch, lb_batch)
             pre_batch, ls_es = result
             predictions.append(pre_batch)
             if ret_ds:
@@ -355,7 +355,7 @@ class Trainer:
         metric = Accumulator(len(criterion_a) + len(l_names) + 1)
         # 计算准确率和损失值
         for features, labels in test_iter:
-            preds, ls_es = net.forward_backward(features, labels, False)
+            preds, ls_es = net.forward_backward(features, labels)
             num_samples = len(preds)
             metric.add(
                 *[criterion(preds, labels) for criterion in criterion_a],
@@ -390,7 +390,7 @@ class Trainer:
         # 计算准确率和损失值
         net.eval()
         for features, labels in valid_iter:
-            preds, ls_es = net.forward_backward(features, labels, False)
+            preds, ls_es = net.forward_backward(features, labels)
             num_samples = len(preds)
             metric.add(
                 *[criterion(preds, labels) for criterion in criterion_a],

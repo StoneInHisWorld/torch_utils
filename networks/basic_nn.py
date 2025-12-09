@@ -1,13 +1,14 @@
 import functools
 import warnings
 from functools import reduce
-from typing import List, Tuple, Iterable
+from typing import List, Tuple, Iterable, final
 
 import torch
 import torch.nn as nn
 from torch.utils import checkpoint
 
-from networks import check_prepare_args
+from networks import check_prepare_args, net_idle_state, net_states, net_train_state, net_finetune_state, \
+    net_predict_state
 from utils import ttools
 
 
@@ -40,7 +41,8 @@ class BasicNN(nn.Sequential):
         # self.input_size = None if 'input_size' not in kwargs.keys() else (-1, *kwargs.pop('input_size'))
         self.input_size = (-1, *input_size) if input_size else None
         # 设置状态标志
-        self._ready = False
+        # self._ready = False
+        self.__state = net_idle_state
         # 初始化各模块
         super(BasicNN, self).__init__(*layers)
         self._init_submodules(init_meth, **init_kwargs)
@@ -53,7 +55,7 @@ class BasicNN(nn.Sequential):
             warnings.warn('使用“检查点机制”虽然会减少前向传播的内存使用，但是会大大增加反向传播的计算量！')
         self.__checkpoint = with_checkpoint
 
-    def _get_optimizer(self, o_args) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
+    def _get_optimizer(self, *o_args) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
         """获取网络优化器
         根据参数列表中的每一项调用torch_tools.py中的get_optimizer()来获取优化器。
         每个优化器对应的学习率名称为LR_i，其中i对应优化器的序号。
@@ -68,7 +70,7 @@ class BasicNN(nn.Sequential):
             lr_names.append(f'LR_{i}')
         return optimizer_s, lr_names
 
-    def _get_lr_scheduler(self, l_args):
+    def _get_lr_scheduler(self, *l_args):
         """为优化器定制学习率规划器
         根据参数列表中的每一项调用torch_tools.py中的get_lr_scheduler()来获取学习率规划器。
 
@@ -82,7 +84,7 @@ class BasicNN(nn.Sequential):
             schedulers.append(ttools.get_lr_scheduler(optimizer, type_s, **kwargs))
         return schedulers
 
-    def _get_ls_fn(self, ls_args):
+    def _get_ls_fn(self, *ls_args):
         """获取网络的训练和测试损失函数序列，并设置网络的训练损失、测试损失名称
         根据参数列表中的每一项调用torch_tools.py中的get_ls_fn()来获取损失函数。
         获取损失函数前，会提取关键词参数中的size_averaged。size_averaged == True，则会返回torch_tools.sample_wise_ls_fn()包装过的损失函数。
@@ -104,28 +106,59 @@ class BasicNN(nn.Sequential):
             )
         return fn_s, name_s
 
-    def activate(self, is_train: bool,
+    # def activate(self, is_train: bool,
+    #              o_args: Iterable, l_args: Iterable, tr_ls_args: Iterable,
+    #              ts_ls_args: Iterable):
+    #     if self.ready:
+    #         return
+    #     if is_train:
+    #         self.train()
+    #         assert isinstance(o_args, Iterable), ("优化器参数需要为可迭代对象，其中的每个元素均为二元组，"
+    #                                               "二元组的0号位为优化器类型字符串，1号位为优化器构造关键字参数")
+    #         self.optimizer_s, self.lr_names = self._get_optimizer(o_args)
+    #         assert isinstance(l_args, Iterable), ("学习率规划器参数需要为可迭代对象，其中的每个元素均为二元组，"
+    #                                               "二元组的0号位为规划器类型字符串，1号位为规划器构造关键字参数")
+    #         self.scheduler_s = self._get_lr_scheduler(l_args)
+    #         assert isinstance(tr_ls_args, Iterable), ("训练损失函数参数需要为可迭代对象，其中的每个元素均为二元组，"
+    #                                                   "二元组的0号位为损失函数类型字符串，1号位为损失函数构造关键字参数")
+    #         self.train_ls_fn_s, self.train_ls_names = self._get_ls_fn(tr_ls_args)
+    #     else:
+    #         self.eval()
+    #     assert isinstance(ts_ls_args, Iterable), ("测试损失函数参数需要为可迭代对象，其中的每个元素均为二元组，"
+    #                                               "二元组的0号位为损失函数类型字符串，1号位为损失函数构造关键字参数")
+    #     self.test_ls_fn_s, self.test_ls_names = self._get_ls_fn(ts_ls_args)
+    #     self._ready = True
+
+    def activate(self, usage: str,
                  o_args: Iterable, l_args: Iterable, tr_ls_args: Iterable,
-                 ts_ls_args: Iterable):
-        if self.ready:
-            return
-        if is_train:
-            self.train()
+                 ts_ls_args: Iterable = None):
+        # 标记网络状态
+        self.state = usage
+        assert usage != net_idle_state, f"无法识别的网络状态指定{usage}，支持的网络状态包括：{set(net_states) - set([net_idle_state])}"
+        assert isinstance(tr_ls_args, Iterable), ("训练损失函数参数需要为可迭代对象，其中的每个元素均为二元组，"
+                                                  "二元组的0号位为损失函数类型字符串，1号位为损失函数构造关键字参数")
+        if usage in [net_train_state, net_finetune_state]:
+            # self.train()
             assert isinstance(o_args, Iterable), ("优化器参数需要为可迭代对象，其中的每个元素均为二元组，"
                                                   "二元组的0号位为优化器类型字符串，1号位为优化器构造关键字参数")
-            self.optimizer_s, self.lr_names = self._get_optimizer(o_args)
+            self.optimizer_s, self.lr_names = self._get_optimizer(*o_args)
             assert isinstance(l_args, Iterable), ("学习率规划器参数需要为可迭代对象，其中的每个元素均为二元组，"
                                                   "二元组的0号位为规划器类型字符串，1号位为规划器构造关键字参数")
-            self.scheduler_s = self._get_lr_scheduler(l_args)
-            assert isinstance(tr_ls_args, Iterable), ("训练损失函数参数需要为可迭代对象，其中的每个元素均为二元组，"
-                                                      "二元组的0号位为损失函数类型字符串，1号位为损失函数构造关键字参数")
-            self.train_ls_fn_s, self.train_ls_names = self._get_ls_fn(tr_ls_args)
+            self.scheduler_s = self._get_lr_scheduler(*l_args)
+            self.train_ls_fn_s, self.train_ls_names = self._get_ls_fn(*tr_ls_args)
+        # else:
+        #     self.eval()
+        # 测试损失函数可以缺省，默认值为训练损失函数
+        if ts_ls_args is None:
+            print("未指定测试损失函数，将由训练损失函数来代替")
+            if hasattr(self, "train_ls_fn_s"):
+                self.test_ls_fn_s, self.test_ls_names = self.train_ls_fn_s, self.train_ls_names
+            else:
+                self.test_ls_fn_s, self.test_ls_names = self._get_ls_fn(*tr_ls_args)
         else:
-            self.eval()
-        assert isinstance(ts_ls_args, Iterable), ("测试损失函数参数需要为可迭代对象，其中的每个元素均为二元组，"
-                                                  "二元组的0号位为损失函数类型字符串，1号位为损失函数构造关键字参数")
-        self.test_ls_fn_s, self.test_ls_names = self._get_ls_fn(ts_ls_args)
-        self._ready = True
+            assert isinstance(ts_ls_args, Iterable), ("测试损失函数参数需要为可迭代对象，其中的每个元素均为二元组，"
+                                                      "二元组的0号位为损失函数类型字符串，1号位为损失函数构造关键字参数")
+            self.test_ls_fn_s, self.test_ls_names = self._get_ls_fn(*ts_ls_args)
 
     def _init_submodules(self, init_str, **kwargs):
         """初始化各模块参数。
@@ -175,35 +208,81 @@ class BasicNN(nn.Sequential):
             init_fn = ttools.init_wb(init_str, **kwargs)
             self.apply(init_fn)
 
-    def forward_backward(self, X, y, backward=True):
-        """前向和反向传播。
-        在进行前向传播后，会利用self.ls_fn()进行损失值计算，随后根据backward的值选择是否进行反向传播。
-        若要更改optimizer.zero_grad()，optimizer.step()的操作顺序，请直接重载本函数。
-        :param X: 特征集
-        :param y: 标签集
-        :param backward: 是否进行反向传播
-        :return: 预测值，损失值集合
-        """
-        if backward:
-            with torch.enable_grad():
-                for optim in self.optimizer_s:
-                    optim.zero_grad()
-                result = self._forward_impl(X, y)
-                self._backward_impl(*result[1])
-                if self._gradient_clipping is not None:
-                    self._gradient_clipping()
-                for optim in self.optimizer_s:
-                    optim.step()
-            assert len(result) == 2, f'前反向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
-            assert len(result[1]) == len(self.train_ls_names), \
-                f'前向传播返回的损失值数量{len(result[1])}与指定的损失名称数量{len(self.train_ls_names)}不匹配。'
+    @final
+    def forward_backward(self, X, y):
+        if self.__state == net_finetune_state:
+            self.train()
+            return self._fine_tune(X, y)
+        elif self.__state == net_train_state:
+            self.train()
+            return self._train(X, y)
+        elif self.__state == net_predict_state:
+            self.eval()
+            return self._predict(X, y)
         else:
-            with torch.no_grad():
-                result = self._forward_impl(X, y)
-            assert len(result) == 2, f'前向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
-            assert len(result[1]) == len(self.test_ls_names), \
-                f'前向传播返回的损失值数量{len(result[1])}与指定的损失名称数量{len(self.test_ls_names)}不匹配。'
+            raise ValueError("网络尚未激活，在进行前向和方向传播之前请先调用activate()函数！")
+
+    @torch.enable_grad()
+    def _train(self, X, y):
+        # 清除保存的梯度
+        for optim in self.optimizer_s:
+            optim.zero_grad()
+        result = self._forward_impl(X, y)
+        self._backward_impl(*result[1])
+        # 根据梯度更新网络参数
+        if self._gradient_clipping is not None:
+            self._gradient_clipping()
+        for optim in self.optimizer_s:
+            optim.step()
+        assert len(result) == 2, f'前反向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
+        assert len(result[1]) == len(self.train_ls_names), \
+            f'前向传播返回的损失值数量{len(result[1])}与指定的损失名称数量{len(self.train_ls_names)}不匹配。'
         return result
+
+    @torch.enable_grad()
+    def _fine_tune(self, X, y):
+        return self._train(X, y)
+
+    @torch.no_grad()
+    def _predict(self, X, y):
+        result = self._forward_impl(X, y)
+        assert len(result) == 2, f'前向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
+        assert len(result[1]) == len(self.test_ls_names), \
+            f'前向传播返回的损失值数量{len(result[1])}与指定的损失名称数量{len(self.test_ls_names)}不匹配。'
+        return result
+
+    #
+    # def forward_backward(self, X, y):
+    #     """前向和反向传播。
+    #     在进行前向传播后，会利用self.ls_fn()进行损失值计算，随后根据backward的值选择是否进行反向传播。
+    #     若要更改optimizer.zero_grad()，optimizer.step()的操作顺序，请直接重载本函数。
+    #     :param X: 特征集
+    #     :param y: 标签集
+    #     :param backward: 是否进行反向传播
+    #     :return: 预测值，损失值集合
+    #     """
+    #     if backward:
+    #         with torch.enable_grad():
+    #             # 清除保存的梯度
+    #             for optim in self.optimizer_s:
+    #                 optim.zero_grad()
+    #             result = self._forward_impl(X, y)
+    #             self._backward_impl(*result[1])
+    #             # 根据梯度更新网络参数
+    #             if self._gradient_clipping is not None:
+    #                 self._gradient_clipping()
+    #             for optim in self.optimizer_s:
+    #                 optim.step()
+    #         assert len(result) == 2, f'前反向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
+    #         assert len(result[1]) == len(self.train_ls_names), \
+    #             f'前向传播返回的损失值数量{len(result[1])}与指定的损失名称数量{len(self.train_ls_names)}不匹配。'
+    #     else:
+    #         with torch.no_grad():
+    #             result = self._forward_impl(X, y)
+    #         assert len(result) == 2, f'前向传播需要返回元组（预测值，损失值集合），但实现返回的值为{result}'
+    #         assert len(result[1]) == len(self.test_ls_names), \
+    #             f'前向传播返回的损失值数量{len(result[1])}与指定的损失名称数量{len(self.test_ls_names)}不匹配。'
+    #     return result
 
     def _forward_impl(self, X, y) -> Tuple[torch.Tensor, List]:
         """前向传播实现。
@@ -239,28 +318,51 @@ class BasicNN(nn.Sequential):
             scheduler.step()
 
     def deactivate(self):
-        # 清除训练痕迹
-        if self.ready:
-            for name in ["optimizer_s", "scheduler_s", "lr_names",
+        # # 清除训练痕迹
+        # if self.ready:
+        #     for name in ["optimizer_s", "scheduler_s", "lr_names",
+        #                  "train_ls_fn_s", "test_ls_fn_s", "train_ls_names",
+        #                  "test_ls_names"]:
+        #         if hasattr(self, name):
+        #             delattr(self, name)
+        # self._ready = False
+        # for bnn in filter(lambda m: isinstance(m, BasicNN), self.children()):
+        #     bnn.deactivate()
+        if self.state == net_train_state or self.state == net_finetune_state:
+            to_be_deleted = ["optimizer_s", "scheduler_s", "lr_names",
                          "train_ls_fn_s", "test_ls_fn_s", "train_ls_names",
-                         "test_ls_names"]:
-                if hasattr(self, name):
-                    delattr(self, name)
-        self._ready = False
+                         "test_ls_names"]
+        elif self.state == net_predict_state:
+            to_be_deleted = ["test_ls_fn_s", "test_ls_names"]
+        else:
+            to_be_deleted = []
+        for name in to_be_deleted:
+            if hasattr(self, name):
+                delattr(self, name)
+        self.__state = net_idle_state
         for bnn in filter(lambda m: isinstance(m, BasicNN), self.children()):
             bnn.deactivate()
 
-    @property
-    def ready(self):
-        __ready = self._ready
-        if __ready:
-            for bnn in filter(lambda m: isinstance(m, BasicNN), self.children()):
-                __ready = bnn.ready and __ready
-        return __ready
+    # @property
+    # def ready(self):
+    #     __ready = self._ready
+    #     if __ready:
+    #         for bnn in filter(lambda m: isinstance(m, BasicNN), self.children()):
+    #             __ready = bnn.ready and __ready
+    #     return __ready
+    #
+    # @property
+    # def device(self):
+    #     return self._device
 
     @property
-    def device(self):
-        return self._device
+    def state(self):
+        return self.__state
+
+    @state.setter
+    def state(self, usage):
+        assert usage in net_states, f"不识别的网络状态指示{usage}！支持的网络状态包括：{usage}"
+        self.__state = usage
 
     def __str__(self):
         return ('网络结构：\n' + super().__str__() +

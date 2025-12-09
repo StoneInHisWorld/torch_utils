@@ -256,7 +256,7 @@ class GoogLeNet(BasicNN):
         else:
             raise NotImplementedError(f'不支持的版本{version}，目前支持{supported}')
 
-    def forward_backward(self, X, y, backward=True):
+    def forward_backward(self, X, y):
         """前向及反向传播
         通过改变训练状态来指示模型是否使用辅助分类器，以及进行损失值的计算。
         :param X: 特征集
@@ -266,7 +266,7 @@ class GoogLeNet(BasicNN):
         """
         pre_state = self.is_train
         self.is_train = backward and self.is_train
-        ret = super().forward_backward(X, y, backward)
+        ret = super().forward_backward(X, y)
         self.is_train = pre_state
         return ret
 
