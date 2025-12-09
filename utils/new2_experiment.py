@@ -5,6 +5,7 @@ from datetime import datetime
 
 import torch
 
+from networks import net_finetune_state
 from .func import pytools as ptools
 
 
@@ -102,9 +103,9 @@ class New2Experiment:
             warnings.warn(f'运行设备为{device}，不支持显存监控！请使用支持CUDA的处理机，或者设置cuda_memrecord为false')
         # 加载数据集
         self.data = self.__build_dao_ds(self.__hp)
-        net_builder = self.__build_net_builder()
-        self.trainer = self.__build_trainer(net_builder, self.data.get_criterion_a(), self.t_kwargs)
-        return self.data, net_builder, self.__hp
+        self.net_builder = self.__build_net_builder()
+        self.trainer = self.__build_trainer(self.net_builder, self.data.get_criterion_a(), self.t_kwargs)
+        return self.data, self.net_builder, self.__hp
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """训练器对象的退出动作。
@@ -269,6 +270,13 @@ class New2Experiment:
         test_iter = self.data.to_dataloaders(False, transit_fn, **dl_kwargs)
         self.test_histories = self.trainer.test(test_iter)
 
+    def fine_tune(self, where, transit_fn, **dl_kwargs):
+        train_iter = self.data.to_dataloaders(True, transit_fn, **dl_kwargs)
+        trained_net = self.net_builder.build(net_finetune_state)
+        self.net_builder.init_kwargs['init_meth'] = "state"
+        self.net_builder.init_kwargs["init_kwargs"].update(where=where)
+        setattr(self.trainer, "module", trained_net)
+        self.train_histories = self.trainer.train(train_iter)
 
     @property
     def device(self):
