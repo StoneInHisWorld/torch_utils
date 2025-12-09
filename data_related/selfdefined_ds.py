@@ -1,4 +1,3 @@
-import warnings
 from abc import abstractmethod
 from typing import List, Callable
 
@@ -75,7 +74,7 @@ class SelfDefinedDataSet:
         directories = self._check_path(where)
         # 获取数据转换器和数据读取器
         self.transformer = self._get_transformer()
-        self.reader = self._get_reader()
+        reader = self._get_reader()()
         if not self.bulk_preprocess:
             print(f'已选择单例预处理，将会在数据读取后立即进行预处理。本数据集将不会存储原始数据！')
             assert is_train, '测试模式下不允许单例预处理，否则将无法访问原始数据'
@@ -94,9 +93,9 @@ class SelfDefinedDataSet:
             # 按照数据比例切分数据集索引
             self._train_f, self._train_l = data_slicer(data_portion, shuffle, self._train_f, self._train_l)
             self._train_f = self._train_f if self._f_lazy \
-                else self.reader.fetch(self._train_f, None, not self.bulk_preprocess)[0]
+                else reader.fetch(self._train_f, None, not self.bulk_preprocess)[0]
             self._train_l = self._train_l if self._l_lazy \
-                else self.reader.fetch(None, self._train_l, not self.bulk_preprocess)[0]
+                else reader.fetch(None, self._train_l, not self.bulk_preprocess)[0]
             assert len(self._train_f) == len(self._train_l), \
                 f'训练集的特征集和标签集长度{len(self._train_f)}&{len(self._train_l)}不一致'
         # 加载测试集
@@ -106,9 +105,9 @@ class SelfDefinedDataSet:
         )]
         self._test_f, self._test_l = data_slicer(data_portion, shuffle, self._test_f, self._test_l)
         self._test_f = self._test_f if self._f_lazy \
-            else self.reader.fetch(self._test_f, None, not self.bulk_preprocess, False)[0]
+            else reader.fetch(self._test_f, None, not self.bulk_preprocess, False)[0]
         self._test_l = self._test_l if self._l_lazy \
-            else self.reader.fetch(None, self._test_l, not self.bulk_preprocess, False)[0]
+            else reader.fetch(None, self._test_l, not self.bulk_preprocess, False)[0]
 
         # 加载结果报告
         assert len(self._test_f) == len(
@@ -324,7 +323,7 @@ class SelfDefinedDataSet:
         def __get_a_dataset(f, l):
             if self._f_lazy or self._l_lazy:
                 ds = LazyDataSet(
-                    self.reader, self.bulk_preprocess, self._f_lazy, self._l_lazy,
+                    self._get_reader(), self.bulk_preprocess, self._f_lazy, self._l_lazy,
                     f, l, self.transformer, is_train, bulk_transit,
                     transit_fn, non_blocking, share_memory, transit_kwargs, device
                 )
@@ -529,7 +528,7 @@ class SelfDefinedDataSet:
         """告诉数据集，根据索引进行存储访问的数据读取器
         该数据处理器为StorageDataLoader的子类
 
-        :return: 数据读取器
+        :return: 返回创建数据读取器的方法
         """
         raise NotImplementedError(f'{self.__class__.__name__}没有指定数据集读取程序！')
 
