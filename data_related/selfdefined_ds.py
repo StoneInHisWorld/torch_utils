@@ -50,6 +50,7 @@ class SelfDefinedDataSet:
         where = ds_config['dataset_root']
         self.n_workers = ds_config['n_workers']
         data_portion = ds_config['data_portion']
+        assert is_train or ds_config['bulk_preprocess'], "测试模式下不允许单例预处理，否则将无法访问原始数据"
         self.bulk_preprocess = ds_config['bulk_preprocess']
         shuffle = ds_config['shuffle']
         # which = config['which_dataset']
