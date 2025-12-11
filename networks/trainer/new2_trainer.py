@@ -1,6 +1,7 @@
 import functools
 import time
 
+import torch
 from tqdm import tqdm
 
 from networks.decorators import prepare
@@ -32,9 +33,36 @@ def _prepare_test(fn):
         trainer.net_builder.activate_model(trainer.module, net_predict_state, True)
         # 设置进度条
         trainer.pbar = _get_a_progress_bar(len(test_iter), "正在进行测试准备", trainer.pbar_verbose)
-        result = fn(trainer, test_iter)
+        with torch.no_grad():
+            result = fn(trainer, test_iter)
         trainer.module.deactivate()
         trainer.pbar.set_description("\r测试完毕")
+        trainer.pbar.close()
+        del trainer.pbar
+        return result
+
+    return wrapper
+
+
+def _prepare_predict(fn):
+    """
+    Decorator for training preparation and cleanup.
+    Allows user-defined operations before and after training.
+    Usage:
+        @prepare_train
+        def train_fn(...): ...
+    """
+
+    @functools.wraps(fn)
+    def wrapper(trainer, test_iter):
+        # 创建网络
+        setattr(trainer, "module", trainer.net_builder.build(net_predict_state))
+        # 设置进度条
+        trainer.pbar = _get_a_progress_bar(len(test_iter), "正在进行预测准备", trainer.pbar_verbose)
+        with torch.no_grad():
+            result = fn(trainer, test_iter)
+        trainer.module.deactivate()
+        trainer.pbar.set_description("\r预测完毕")
         trainer.pbar.close()
         del trainer.pbar
         return result
@@ -66,6 +94,7 @@ class New2Trainer:
                              f"{net_builder.module.__name__}的评价指标赋值。")
         self.pbar = None
         self.net_builder = net_builder
+        self.pbar_verbose = self.config['pbar_verbose']
 
     def train(self, data_iter):
         """训练公共接口。
@@ -80,7 +109,7 @@ class New2Trainer:
         self.n_workers = self.config['n_workers']
         self.n_epochs = self.config['n_epochs']
         self.batch_size = self.config['batch_size']
-        self.pbar_verbose = self.config['pbar_verbose']
+        # self.pbar_verbose = self.config['pbar_verbose']
         # 判断是否是k折训练
         if self.k > 1:
             train_fn, train_args = train_with_k_fold, (self, data_iter)
@@ -109,8 +138,8 @@ class New2Trainer:
         return train_fn(*train_args)
         # self.train_histories = train_fn(*train_args)
 
-    @prepare('predict')
-    def predict(self, ret_ls_metric=True, ret_ds=True):
+    @_prepare_predict
+    def predict(self, predict_iter, ret_ls_metric=True, ret_ds=True):
         """根据参数创建网络并进行预测
         对于数据迭代器中的每一批次数据，根据需要保存输入数据、预测数据、标签集、评价指标、损失值数据，并打包返回。
 
@@ -127,11 +156,10 @@ class New2Trainer:
         # 提取训练器参数
         net = self.module
         criterion_a = self.criterion_a
-        pbar = self.pbar
         # 本次预测所产生的全部数据池
         inputs, predictions, labels, metrics, loss_pool = [], [], [], [], []
         # 对每个批次进行预测，并进行评价指标和损失值的计算
-        for fe_batch, lb_batch in pbar:
+        for fe_batch, lb_batch in predict_iter:
             result = net.forward_backward(fe_batch, lb_batch)
             pre_batch, ls_es = result
             predictions.append(pre_batch)
@@ -144,7 +172,8 @@ class New2Trainer:
                     for criterion in criterion_a
                 ])
                 loss_pool.append(ls_es)
-        pbar.set_description('结果计算完成')
+            self.pbar.update(1)
+        self.pbar.set_description('结果计算完成')
         # # 将所有批次的数据堆叠在一起
         # ret = [torch.cat(predictions, dim=0)]
         # if ret_ds:
@@ -162,9 +191,9 @@ class New2Trainer:
         if ret_ds:
             ret += [inputs, labels]
         if ret_ls_metric:
-            ret += [metrics, loss_pool, [
+            ret += [metrics, loss_pool, criterion_a, [
                 ptools.get_computer_name(criterion) for criterion in criterion_a
-            ], net.test_ls_names]
+            ], net.test_ls_fn_s, net.test_ls_names]
         return ret
 
     @_prepare_test
