@@ -160,7 +160,6 @@ def train_and_valid_impl(trainer, train_iter, valid_iter):
             [*tmetric_log, *vmetric_log],
             [*tmetric_log.values(), *vmetric_log.values()]
         )
-
         # duration_history.add(
         #     list(tduration_log.keys()) + list(vduration_log.keys()) +
         #     ["duration_valid"],
