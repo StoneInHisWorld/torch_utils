@@ -11,7 +11,7 @@ def init_log(path):
     log.to_csv(path, encoding='utf-8', index=False)
 
 
-def init_settings(path):
+def init_train_settings(path):
     """运行配置文件初始化方法
     运行配置文件初始化包括所有必要参数，用户无需修改
 
@@ -30,17 +30,55 @@ def init_settings(path):
             "with_checkpoint": False, "print_net": False
         },
         "t_kwargs": {
-            "with_hook": False, "hook_mute": True, "train_prefetch": 4, "valid_prefetch": 4,
-            "device": {"$ref": "#/device"}, "n_workers": {"$ref": "#/n_workers"}
+            "with_hook": False, "hook_mute": True, "train_prefetch": 2, "valid_prefetch": 2,
+            "tdata_q_len": 4, "vdata_q_len": 4, "device": {"$ref": "#/device"}, "n_workers": 5,
+            "pbar_verbose": True
         },
         "ds_kwargs": {
-            "dataset_root": "./", "n_workers": {"$ref": "#/n_workers"},
-            "data_portion": 0.01, "bulk_preprocess": True, "shuffle": True, "device": {"$ref": "#/device"},
-            "share_memory": False, "non_blocking": True, "transit_kwargs": {}, "f_req_shp": [128, 128],
-            "l_req_shp": [128, 128], "lazy": False, "bulk_transit": True
+            "dataset_root": ".", "n_workers": 8,
+            "data_portion": 0.1, "bulk_preprocess": False, "shuffle": True,
+            "device": {"$ref": "#/device"}, "share_memory": True,
+            "non_blocking": True, "transit_kwargs": {}, "f_req_shp": [128, 128],
+            "l_req_shp": [128, 128], "f_lazy": True, "l_lazy": True,
+            "bulk_transit": False
         },
         "dl_kwargs": {
-            "train_portion": 0.8, "pin_memory": True, "prefetch_factor": 2, "num_workers": {"$ref": "#/n_workers"}
+            "train_portion": 0.8, "pin_memory": False, "prefetch_factor": 2, "num_workers": 4
+        }
+    }
+
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(default_settings, f)
+
+
+def init_predict_settings(path):
+    """运行配置文件初始化方法
+    运行配置文件初始化包括所有必要参数，用户无需修改
+
+    :param path: 配置文件存储路径
+    """
+    default_settings = {
+        "log_root": "./log",
+        "ds_kwargs": {
+            "data_portion": 0.01,
+            "dataset_root": "./datasets",
+            "n_workers": 8,
+            "bulk_preprocess": True,
+            "shuffle": True,
+            "f_lazy": False,
+            "l_lazy": False,
+            "device": "cpu",
+            "non_blocking": True,
+            "share_memory": False,
+            "transit_kwargs": {},
+            "bulk_transit": True
+        },
+        "dl_kwargs": {
+            "batch_size": 4
+        },
+        "nb_kwargs": {},
+        "t_kwargs": {
+            "pbar_verbose": True
         }
     }
 
