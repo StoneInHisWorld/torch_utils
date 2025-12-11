@@ -180,8 +180,8 @@ class BasicNN(nn.Sequential):
         if init_str == "state":
             try:
                 where = kwargs['where']
-                paras = torch.load(where) if torch.cuda.is_available() else \
-                    torch.load(where, map_location=torch.device('cpu'), weights_only=True)
+                paras = torch.load(where) if torch.cuda.is_available() else torch.load(where, map_location=torch.device('cpu'), weights_only=True)
+                    # torch.load(where, map_location=torch.device('cpu'), weights_only=True)
                 self.load_state_dict(paras)
             except IndexError:
                 raise ValueError('选择预训练好的参数初始化网络，需要使用where关键词提供参数或者模型的路径！')
