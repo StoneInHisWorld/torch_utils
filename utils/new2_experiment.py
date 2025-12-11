@@ -49,7 +49,8 @@ class New2Experiment:
 
     def __init__(
             self, exp_no: int, datasource: type, net_type: type,
-            hyper_parameters: dict, runtime_cfg: dict, is_train: bool
+            hyper_parameters: dict, runtime_cfg: dict, is_train: bool, 
+            trained_net_p=None
     ):
         """实验对象
         进行神经网络训练的相关周边操作，计时、显存监控、日志编写、网络持久化、历史趋势图绘制及保存。
@@ -76,23 +77,37 @@ class New2Experiment:
         self.dao_ds = datasource
         self.net_type = net_type
         self.is_train = is_train
+        self.trained_net_p = trained_net_p
 
     def __enter__(self):
+        if self.is_train:
+            # 计时开始
+            self.start = time.time()
+            self.__train_enter__()
+            prompt = "超参数实验"
+        else:
+            self.__predict_enter__()
+            prompt = "结果可视化"
+        print(
+            f'\r-----------------输入Ctrl+C即可终止本组{prompt}'
+            '--------------------'
+        )
+        # 创建暴露的对象
+        self.data = self.__build_dao_ds(self.__hp)
+        self.net_builder = self.__build_net_builder()
+        self.__trainer = self.__build_trainer(self.net_builder, self.data.get_criterion_a(), self.t_kwargs)
+        return self.data, self.net_builder
+    
+    def __train_enter__(self):
         """训练对象的上下文管理进入方法
         负责进行计时、超参数打印以及显存监控。
         """
-        # 计时开始
-        self.start = time.time()
         # 提取框架固定配置参数
-        self.__rearrange_config()
+        self.__rearrange_train_config()
         # 打印本次训练超参数
         for k, v in self.__hp.items():
             print(k + ': ' + str(v))
-        print(f'data_portion: {self.ds_config["data_portion"]}')
-        print(
-            '\r-----------------输入Ctrl+C即可终止本组超参数实验'
-            '--------------------'
-        )
+        # print(f'data_portion: {self.ds_config["data_portion"]}')
         # 提取训练配置参数
         device = torch.device(self.cfg_dict['device'])
         cuda_memrecord = self.cfg_dict['cuda_memrecord']
@@ -101,11 +116,19 @@ class New2Experiment:
             torch.cuda.memory._record_memory_history(cuda_memrecord)
         elif device.type == 'cpu' and cuda_memrecord:
             warnings.warn(f'运行设备为{device}，不支持显存监控！请使用支持CUDA的处理机，或者设置cuda_memrecord为false')
-        # 加载数据集
-        self.data = self.__build_dao_ds(self.__hp)
-        self.net_builder = self.__build_net_builder()
-        self.trainer = self.__build_trainer(self.net_builder, self.data.get_criterion_a(), self.t_kwargs)
-        return self.data, self.net_builder, self.__hp
+        # # 创建暴露的对象
+        # self.data = self.__build_dao_ds(self.__hp)
+        # self.net_builder = self.__build_net_builder()
+        # self.trainer = self.__build_trainer(self.net_builder, self.data.get_criterion_a(), self.t_kwargs)
+        # return self.data, self.net_builder, self.__hp
+        
+    def __predict_enter__(self):
+        """预测对象的上下文管理进入方法
+        负责进行计时、超参数打印以及显存监控。
+        """
+        # 提取框架固定配置参数
+        self.__rearrange_predict_config()
+        print(f'data_portion: {self.ds_config["data_portion"]}')
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """训练器对象的退出动作。
@@ -115,8 +138,7 @@ class New2Experiment:
         :param exc_val: 出现的异常值
         :param exc_tb: 异常的路径回溯
         """
-        # 进行日志编写
-        # basic_perf_log = self.basic_perf_log if hasattr(self, 'basic_perf_log') else {}
+        # 处理异常出现的情况
         if exc_type is not None:
             if exc_type == MemoryError:
                 gc.collect()
@@ -130,40 +152,41 @@ class New2Experiment:
                     return True
                 except KeyboardInterrupt:
                     raise KeyboardInterrupt('实验被中断！')
-            # # 出现异常则记录
-            # print(f'\n出现{exc_type}异常\n描述为{exc_val}')
-        # 编辑日志条目，加入数据量、数据形状和显存消耗等内容
-        basic_metric_log, basic_perf_log = {}, {}
-        if self.device != torch.device('cpu') and self.cfg_dict["cuda_memrecord"]:
+        # 训练模式下进行日志记录，预测模式下退出不进行日志记录
+        if self.is_train:
+            # 编辑日志条目，加入数据量、数据形状和显存消耗等内容
+            basic_metric_log, basic_perf_log = {}, {}
+            if self.device != torch.device('cpu') and self.cfg_dict["cuda_memrecord"]:
+                basic_perf_log.update(
+                    max_GPUmemory_allocated=torch.cuda.max_memory_allocated(self.device) / (1024 ** 3),
+                    max_GPUmemory_reserved=torch.cuda.max_memory_reserved(self.device) / (1024 ** 3),
+                )
+                # 刷新显存消耗
+                torch.cuda.reset_peak_memory_stats(self.device)
+            if exc_type is None:
+                basic_metric_log.update(
+                    **self.__hp, exp_no=self.__exp_no, 
+                    dataset=self.dao_ds.__name__,
+                    data_portion=self.ds_config['data_portion'],
+                    f_req_shp=self.ds_config['f_req_shp'],
+                    l_req_shp=self.ds_config['l_req_shp'],
+                )
+                metric_log, perf_log = self.__register_result()
+                basic_metric_log.update(metric_log)
+                basic_perf_log.update(perf_log)
             basic_perf_log.update(
-                max_GPUmemory_allocated=torch.cuda.max_memory_allocated(self.device) / (1024 ** 3),
-                max_GPUmemory_reserved=torch.cuda.max_memory_reserved(self.device) / (1024 ** 3),
+                exp_no=self.__exp_no, n_workers=self.cfg_dict['n_workers'],
+                time_stamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                duration=time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start)),
+                n_workers_for_trainer=self.t_kwargs['n_workers'],
+                n_workers_for_dloader=self.dl_config['num_workers'],
+                n_workers_for_ds=self.ds_config['n_workers'],
+                exc_type=exc_type, exc_val=exc_val
             )
-            # 刷新显存消耗
-            torch.cuda.reset_peak_memory_stats(self.device)
-        if exc_type is None:
-            basic_metric_log.update(
-                **self.__hp, exp_no=self.__exp_no, dataset=self.dao_ds.__name__,
-                data_portion=self.ds_config['data_portion'],
-                f_req_shp=self.ds_config['f_req_shp'],
-                l_req_shp=self.ds_config['l_req_shp'],
-            )
-            metric_log, perf_log = self.__register_result()
-            basic_metric_log.update(metric_log)
-            basic_perf_log.update(perf_log)
-        basic_perf_log.update(
-            exp_no=self.__exp_no, n_workers=self.cfg_dict['n_workers'],
-            time_stamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            duration=time.strftime('%H:%M:%S', time.gmtime(time.time() - self.start)),
-            n_workers_for_trainer=self.t_kwargs['n_workers'],
-            n_workers_for_dloader=self.dl_config['num_workers'],
-            n_workers_for_ds=self.ds_config['n_workers'],
-            exc_type=exc_type, exc_val=exc_val
-        )
-        self.metric_log, self.perf_log = basic_metric_log, basic_perf_log
+            self.metric_log, self.perf_log = basic_metric_log, basic_perf_log
         return None
 
-    def __rearrange_config(self):
+    def __rearrange_train_config(self):
         # 数据集参数
         self.ds_config = self.cfg_dict.pop("ds_kwargs")
         # 数据迭代器参数
@@ -180,18 +203,43 @@ class New2Experiment:
         if self.is_train:
             self.t_kwargs["k"] = k
             self.t_kwargs["n_epochs"] = self.__hp.pop("n_epochs")
+            
+    def __rearrange_predict_config(self):
+        # 数据集参数
+        self.ds_config = self.cfg_dict.pop("ds_kwargs")
+        self.ds_config["f_req_shp"] = self.__hp.pop("f_req_shp")
+        self.ds_config["l_req_shp"] = self.__hp.pop("l_req_shp")
+        # 数据迭代器参数
+        self.dl_config = self.cfg_dict.pop("dl_kwargs")
+        # k = self.__hp.pop("k")
+        # batch_size = self.__hp.pop("batch_size")
+        # self.dl_config["k"] = k
+        # self.dl_config["batch_size"] = batch_size
+        # 网络创建器参数
+        self.nb_kwargs = self.cfg_dict.pop("nb_kwargs")
+        # 训练器参数
+        self.t_kwargs = self.cfg_dict.pop("t_kwargs")
+        # self.t_kwargs["batch_size"] = batch_size
+        # if self.is_train:
+        #     self.t_kwargs["k"] = k
+        #     self.t_kwargs["n_epochs"] = self.__hp.pop("n_epochs")
 
     def __build_dao_ds(self, hyper_params):
         pos_only_args, pos_or_kwargs, kwargs_only, _ = ptools.get_signature(self.dao_ds)
-        args = [hyper_params.pop(poa) for poa in pos_only_args + pos_or_kwargs]
-        kwargs = {ko: hyper_params.pop(ko) for ko in kwargs_only}
+        # args = [hyper_params.pop(poa) for poa in pos_only_args + pos_or_kwargs]
+        # kwargs = {ko: hyper_params.pop(ko) for ko in kwargs_only}
+        args = [hyper_params[poa] for poa in pos_only_args + pos_or_kwargs]
+        kwargs = {ko: hyper_params[ko] for ko in kwargs_only}
         return self.dao_ds(*args, **kwargs, module=self.net_type, is_train=self.is_train,
                            ds_config=self.ds_config, dl_config=self.dl_config)
 
     def __build_net_builder(self):
         from networks import NetBuilder
 
-        return NetBuilder(self.net_type, self.nb_kwargs)
+        if self.is_train:
+            return NetBuilder(self.net_type, self.nb_kwargs)
+        else:
+            return NetBuilder(self.net_type, {'with_checkpoint': False, 'print_net': False})
 
     def __build_trainer(self, net_builder, criteria_fns, t_kwargs):
         from networks import New2Trainer
@@ -208,7 +256,7 @@ class New2Experiment:
         :return: None
         """
         # 保存训练生成的网络
-        self.net = self.trainer.module if hasattr(self.trainer, "module") else None
+        self.net = self.__trainer.module if hasattr(self.__trainer, "module") else None
         # 提取训练的历史记录
         self.train_mlog, train_dlog = self.train_histories if hasattr(self, "train_histories") else ({}, {})
         test_mlog, test_dlog = self.test_histories if hasattr(self, "test_histories") else ({}, {})
@@ -263,21 +311,43 @@ class New2Experiment:
     def train(self, transit_fn=None, **dl_kwargs):
         # 将数据集转化为迭代器
         train_iter = self.data.to_dataloaders(True, transit_fn, **dl_kwargs)
-        self.train_histories = self.trainer.train(train_iter)
+        self.net_builder.init_kwargs['device'] = self.ds_config['device']
+        self.train_histories = self.__trainer.train(train_iter)
 
     def test(self, transit_fn=None, **dl_kwargs):
         # 将数据集转化为迭代器
         test_iter = self.data.to_dataloaders(False, transit_fn, **dl_kwargs)
-        self.test_histories = self.trainer.test(test_iter)
+        self.test_histories = self.__trainer.test(test_iter)
 
-    def fine_tune(self, where, transit_fn, **dl_kwargs):
+    def fine_tune(self, where, transit_fn=None, **dl_kwargs):
         train_iter = self.data.to_dataloaders(True, transit_fn, **dl_kwargs)
         trained_net = self.net_builder.build(net_finetune_state)
         self.net_builder.init_kwargs['init_meth'] = "state"
         self.net_builder.init_kwargs["init_kwargs"].update(where=where)
-        setattr(self.trainer, "module", trained_net)
-        self.train_histories = self.trainer.train(train_iter)
+        setattr(self.__trainer, "module", trained_net)
+        self.train_histories = self.__trainer.train(train_iter)
+        
+    def predict(self, transit_fn=None, **dl_kwargs):
+        # 预测数据
+        predict_iter = self.data.to_dataloaders(False, transit_fn, **dl_kwargs)
+        self.net_builder.init_kwargs['device'] = self.ds_config['device']
+        self.net_builder.init_kwargs['init_meth'] = "state"
+        self.net_builder.init_kwargs["init_kwargs"]= {"where": self.trained_net_p}
+        pred_results = self.__trainer.predict(predict_iter)
+        # # 对预测值进行打包
+        # if wrapped:
+        #     wrapper = self.data.get_wrapper()
+        #     wrapped_result = wrapper.wrap(pred_results, ret_ds, ret_ls_metric, **wrap_kwargs)
+        self.prediction_results = pred_results
+        # self.wrapped_results = wrapped_result
+        
+    def wrap_pred(self, ret_ds: bool = True, ret_ls_metric: bool = True, **wrap_kwargs):
+        wrapper = self.data.get_wrapper()
+        self.wrapped_results = wrapper.wrap(self.prediction_results, ret_ds, ret_ls_metric, **wrap_kwargs)
 
     @property
     def device(self):
         return torch.device(self.cfg_dict['device'])
+    
+    def __getitem__(self, item):
+        return self.__hp[item]
