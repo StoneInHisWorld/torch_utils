@@ -14,7 +14,7 @@ class YourDS_Reader(StorageDataLoader):
         ]))
         l_reader = toolz.compose(*reversed([
         ]))
-        super().__init__(f_reader, l_reader, *args, **kwargs)
+        super().__init__(f_reader, l_reader, **kwargs)
 
     def __del__(self):
         """可以在此处定义资源回收"""
