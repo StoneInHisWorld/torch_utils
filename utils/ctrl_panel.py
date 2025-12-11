@@ -5,7 +5,7 @@ import os.path
 import pandas as pd
 import torch
 
-from config.init_cfg import init_log, init_settings, init_hps
+from config.init_cfg import init_log, init_train_settings, init_hps
 from .experiment import Experiment
 from .func import pytools as ptools
 
@@ -41,7 +41,7 @@ class ControlPanel:
         # 生成运行动态配置
         self.__rcp = os.path.join(cfg_root, net_name, f'settings.json')  # 运行配置json文件路径
         # 读取运行配置
-        ptools.check_path(self.__rcp, init_settings)
+        ptools.check_path(self.__rcp, init_train_settings)
         self.__read_runtime_cfg()
         # 生成其他路径
         self.__hcp = os.path.join(cfg_root, net_name, f'hyper_param_s.json')  # 网络训练超参数文件路径
