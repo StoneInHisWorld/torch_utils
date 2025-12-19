@@ -49,7 +49,8 @@ def _after_training(trainer, *args):
             del trainer.pbar
         else:
             result_conn = args[-1]
-            result_conn.send(trainer.module)
+            # result_conn.send(trainer.module)
+            result_conn.close()
         trainer.module.deactivate()
 
 def _prepare_train(fn):

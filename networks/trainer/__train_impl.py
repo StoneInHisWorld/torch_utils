@@ -438,7 +438,11 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
     # 使用None通知子进程数据已经获取完毕
     epoch_q.put(None)
     # 处理随机顺序返回的结果
-    net_and_histories = [parent_conn.recv(), parent_conn.recv(), parent_conn.recv()]
+    net_and_histories = []
+    for _ in range(3):
+        net_and_histories.append(parent_conn.recv())
+        pbar.set_description(f"已接收训练结果{_ + 1}/3")
+    # net_and_histories = [parent_conn.recv(), parent_conn.recv(), parent_conn.recv()]
     tv_subp.join()
     histories = []
     for net_or_history in net_and_histories:
