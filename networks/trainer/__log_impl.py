@@ -60,6 +60,8 @@ def log_multiprocessing_impl(
     pbar_q.put(f"世代{epoch}{which}记录完毕")
 
 def log_summarize(metric_acc, duration_acc, c_names, l_names, duration_names):
+    assert len(metric_acc) - 1 == len(c_names + l_names), "指标与损失的数量与统计数量不一致！"  # -1是排除样本数量统计
+    assert len(duration_acc) - 1 == len(duration_names), "间隔的数量与统计数量不一致！"  # -1是排除样本数量统计
     if metric_acc[-1] > 0:
         metric_log = {
             name: metric_acc[i] / metric_acc[-1]
