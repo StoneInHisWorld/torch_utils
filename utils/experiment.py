@@ -199,6 +199,7 @@ class New2Experiment:
         self.dl_config["batch_size"] = batch_size
         # 网络创建器参数
         self.nb_kwargs = self.cfg_dict.pop("nb_kwargs")
+        self.nb_kwargs["batch_size"] = batch_size
         # 训练器参数
         self.t_kwargs = self.cfg_dict.pop("t_kwargs")
         self.t_kwargs["batch_size"] = batch_size
@@ -238,16 +239,17 @@ class New2Experiment:
     def __build_net_builder(self):
         from networks import NetBuilder
 
-        if self.is_train:
-            return NetBuilder(self.net_type, self.nb_kwargs)
-        else:
-            return NetBuilder(self.net_type, {'with_checkpoint': False, 'print_net': False})
+        return NetBuilder(self.net_type, self.nb_kwargs)
+        # if self.is_train:
+        #     return NetBuilder(self.net_type, self.nb_kwargs)
+        # else:
+        #     return NetBuilder(self.net_type, self.nb_kwargs)
 
     def __build_trainer(self, net_builder, criteria_fns, t_kwargs):
         from networks import New2Trainer
 
-        trainer = New2Trainer(net_builder, criteria_fns, t_kwargs)
-        return trainer
+        return New2Trainer(net_builder, criteria_fns, t_kwargs)
+        # return trainer
 
     def __register_result(self):
         """根据训练历史记录进行输出，并进行日志参数的记录。
@@ -313,28 +315,35 @@ class New2Experiment:
     def train(self, transit_fn=None, **dl_kwargs):
         # 将数据集转化为迭代器
         train_iter = self.data.to_dataloaders(True, transit_fn, **dl_kwargs)
-        self.net_builder.init_kwargs['device'] = self.ds_config['device']
+        self.net_builder.usage = "train"
+        # self.net_builder.init_kwargs['device'] = self.ds_config['device']
         self.train_histories = self.__trainer.train(train_iter)
 
     def test(self, transit_fn=None, **dl_kwargs):
         # 将数据集转化为迭代器
         test_iter = self.data.to_dataloaders(False, transit_fn, **dl_kwargs)
+        self.net_builder.usage = "predict"
         self.test_histories = self.__trainer.test(test_iter)
 
     def fine_tune(self, where, transit_fn=None, **dl_kwargs):
         train_iter = self.data.to_dataloaders(True, transit_fn, **dl_kwargs)
-        trained_net = self.net_builder.build(net_finetune_state)
+        # 处理网络的生成关键字参数
         self.net_builder.init_kwargs['init_meth'] = "state"
-        self.net_builder.init_kwargs["init_kwargs"].update(where=where)
-        setattr(self.__trainer, "module", trained_net)
+        net_init_kwargs = self.net_builder.init_kwargs.pop("init_kwargs", {})
+        net_init_kwargs.update(where=where)
+        self.net_builder.init_kwargs["init_kwargs"] = net_init_kwargs
+        self.net_builder.usage = "finetune"
+        # trained_net = self.net_builder.build()
+        # setattr(self.__trainer, "module", trained_net)
         self.train_histories = self.__trainer.train(train_iter)
         
     def predict(self, transit_fn=None, **dl_kwargs):
         # 预测数据
         predict_iter = self.data.to_dataloaders(False, transit_fn, **dl_kwargs)
-        self.net_builder.init_kwargs['device'] = self.ds_config['device']
+        # self.net_builder.init_kwargs['device'] = self.ds_config['device']
         self.net_builder.init_kwargs['init_meth'] = "state"
         self.net_builder.init_kwargs["init_kwargs"]= {"where": self.trained_net_p}
+        self.net_builder.usage = "predict"
         pred_results = self.__trainer.predict(predict_iter)
         # # 对预测值进行打包
         # if wrapped:
@@ -350,6 +359,9 @@ class New2Experiment:
     @property
     def device(self):
         return torch.device(self.cfg_dict['device'])
+
+    def update_hp(self, **kwargs):
+        self.__hp.update(**kwargs)
     
     def __getitem__(self, item):
         return self.__hp[item]
