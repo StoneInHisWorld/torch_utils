@@ -160,26 +160,6 @@ def train_and_valid_impl(trainer, train_iter, valid_iter):
             [*tmetric_log, *vmetric_log],
             [*tmetric_log.values(), *vmetric_log.values()]
         )
-        # duration_history.add(
-        #     list(tduration_log.keys()) + list(vduration_log.keys()) +
-        #     ["duration_valid"],
-        #     list(tduration_log.values()) + list(vduration_log.values()) +
-        #     [time.perf_counter() - logged_stamp]
-        # )
-        # metric_history.add(
-        #     list(tmetric_log.keys()) + list(vmetric_log.keys()),
-        #     list(tmetric_log.values()) + list(vmetric_log.values())
-        # )
-        # duration_history.add(
-        #     duration_names + list(vduration_log.keys()) + ["duration_valid"],
-        #     [duration_acc[i] / duration_acc[-1] for i in range(len(duration_acc) - 1)] +
-        #     list(vduration_log.values()) + [time.perf_counter() - logged_stamp]
-        # )
-        # metric_history.add(
-        #     c_names + l_names + list(vmetric_log.keys()),
-        #     [metric_acc[i] / metric_acc[-1] for i in range(len(metric_acc) - 1)] +
-        #     list(vmetric_log.values())
-        # )
     return metric_history, duration_history
 
 
@@ -371,7 +351,7 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
     :param valid_iter: 验证数据迭代器
     :return: 训练历史记录
     """
-    from networks.trainer.__new_subprocess_impl import train_valid_impl
+    from networks.trainer.__subprocess_impl import train_valid_impl
 
     # 提取训练器参数
     n_epochs = trainer.n_epochs
@@ -459,90 +439,8 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
         return train_metric * valid_metric
 
     histories = list(sorted(histories, key=priority, reverse=True))
-    # if isinstance(net_and_histories[0], History) and isinstance(net_and_histories[1], BasicNN):
-    #     history, trainer.module = net_and_histories
-    # elif isinstance(net_and_histories[0], BasicNN) and isinstance(net_and_histories[1], History):
-    #     trainer.module, history = net_and_histories
-    # else:
-    #     raise ValueError(f"多进程管道接收到了异常的数据类型，为{type(net_and_histories[0])}和{type(net_and_histories[1])}")
     pbar_update_thread.join()
     return histories
-
-#
-# def __pipe_train_and_valid_with_preprocessing(trainer, train_iter, valid_iter) -> History:
-#     """多进程训练实现
-#     :param train_iter: 训练数据迭代器
-#     :param valid_iter: 验证数据迭代器
-#     :return: 训练历史记录
-#     """
-#     from networks.trainer.__pipe_subprocess_impl import train_valid_impl
-#
-#     # 提取训练器参数
-#     pbar = trainer.pbar
-#     del trainer.pbar
-#     n_epochs = trainer.hps['epochs']
-#
-#     pbar.bar_format = None  # 使用默认的进度条格式
-#     pbar.set_description('\r正在创建队列和事件对象……')
-#     # 进程通信队列
-#     ctx = torch.multiprocessing.get_context("spawn")
-#     tdata_pc, tdata_cc = ctx.Pipe(False)  # 传递训练数据队列
-#     vdata_pc, vdata_cc = ctx.Pipe(False)  # 传递验证数据队列
-#     pbar_q = ctx.Queue()  # 传递进度条更新消息队列，会用于记录进程间通信
-#     epoch_pc, epoch_cc = ctx.Pipe(duplex=False)  # 传递世代更新消息队列
-#     parent_conn, child_conn = ctx.Pipe(duplex=False)  # 搭建输出结果通信管道
-#
-#     def update_pbar():
-#         msg = pbar_q.get()
-#         while msg is not None:
-#             assert isinstance(msg, int) or isinstance(msg, str), "进度条更新只接受数字或字符串更新！"
-#             if isinstance(msg, int):
-#                 pbar.update(msg)
-#             else:
-#                 pbar.set_description(msg)
-#             msg = pbar_q.get()
-#
-#     def send_data(data_iter, data_q, epoch, which):
-#         pbar.set_description(f'获取世代{epoch + 1}/{n_epochs}的{which}数据……')
-#         for X, y in data_iter:
-#             data_q.send((X, y))
-#         data_q.send(None)
-#
-#     # 生成子进程用于创建网络、执行网络更新并记录数据
-#     # 创建子线程进行训练和验证操作，并更新进度条
-#     tv_subp = ctx.Process(target=train_valid_impl, args=(
-#         trainer, tdata_pc, vdata_pc, pbar_q, epoch_pc, child_conn
-#     ))
-#     pbar_update_thread = Thread(target=update_pbar)  # 更新进度条
-#     # 开启两个子进程
-#     pbar_update_thread.start()
-#     tv_subp.start()
-#     # 获取所有的数据，并且发送给训练进程
-#     for epoch in range(1, n_epochs + 1):
-#         # 通知子进程新的世代开始了
-#         epoch_cc.send(epoch)
-#         # 不断从迭代器中取数据
-#         tsending = Thread(target=send_data, args=(train_iter, tdata_cc, epoch, "训练"))
-#         tsending.start()
-#         vsending = Thread(target=send_data, args=(valid_iter, vdata_cc, epoch, "验证"))
-#         vsending.start()
-#         # 等待数据发送完毕
-#         tsending.join()
-#         vsending.join()
-#         pbar.set_description(f'世代{epoch + 1}/{n_epochs} 数据获取完毕，等待网络消耗剩下的数据')
-#     # 使用None通知子进程数据已经获取完毕
-#     epoch_cc.send(None)
-#     # 处理随机顺序返回的结果
-#     ret = [parent_conn.recv(), parent_conn.recv()]
-#     if isinstance(ret[0], History) and isinstance(ret[1], BasicNN):
-#         history, trainer.module = ret
-#     elif isinstance(ret[0], BasicNN) and isinstance(ret[1], History):
-#         trainer.module, history = ret
-#     else:
-#         raise ValueError(f"多进程管道接收到了异常的数据类型，为{type(ret[0])}和{type(ret[1])}")
-#     pbar_update_thread.join()
-#     tv_subp.join()
-#     return history
 
 def train_with_profiler(trainer, data_iter, log_path):
     # 提取训练器参数

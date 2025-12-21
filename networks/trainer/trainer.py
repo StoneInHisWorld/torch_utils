@@ -3,7 +3,6 @@ import time
 
 import torch
 
-# from networks.decorators import prepare
 from data_related import SelfDefinedDataSet
 from utils.accumulator import Accumulator
 from utils.func import pytools as ptools
@@ -11,7 +10,6 @@ from . import _get_a_progress_bar, is_multiprocessing, test_duration_names
 from .__log_impl import log_impl, log_summarize
 from .__train_impl import train_impl, train_and_valid_impl, train_with_k_fold
 from .__train_impl import tv_multiprocessing_impl as tv_multiprocessing
-from .. import net_predict_state
 
 
 def _prepare_test(fn):
