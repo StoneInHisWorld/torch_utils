@@ -106,29 +106,6 @@ class BasicNN(nn.Sequential):
             )
         return fn_s, name_s
 
-    # def activate(self, is_train: bool,
-    #              o_args: Iterable, l_args: Iterable, tr_ls_args: Iterable,
-    #              ts_ls_args: Iterable):
-    #     if self.ready:
-    #         return
-    #     if is_train:
-    #         self.train()
-    #         assert isinstance(o_args, Iterable), ("优化器参数需要为可迭代对象，其中的每个元素均为二元组，"
-    #                                               "二元组的0号位为优化器类型字符串，1号位为优化器构造关键字参数")
-    #         self.optimizer_s, self.lr_names = self._get_optimizer(o_args)
-    #         assert isinstance(l_args, Iterable), ("学习率规划器参数需要为可迭代对象，其中的每个元素均为二元组，"
-    #                                               "二元组的0号位为规划器类型字符串，1号位为规划器构造关键字参数")
-    #         self.scheduler_s = self._get_lr_scheduler(l_args)
-    #         assert isinstance(tr_ls_args, Iterable), ("训练损失函数参数需要为可迭代对象，其中的每个元素均为二元组，"
-    #                                                   "二元组的0号位为损失函数类型字符串，1号位为损失函数构造关键字参数")
-    #         self.train_ls_fn_s, self.train_ls_names = self._get_ls_fn(tr_ls_args)
-    #     else:
-    #         self.eval()
-    #     assert isinstance(ts_ls_args, Iterable), ("测试损失函数参数需要为可迭代对象，其中的每个元素均为二元组，"
-    #                                               "二元组的0号位为损失函数类型字符串，1号位为损失函数构造关键字参数")
-    #     self.test_ls_fn_s, self.test_ls_names = self._get_ls_fn(ts_ls_args)
-    #     self._ready = True
-
     def activate(self, usage: str,
                  o_args: Iterable, l_args: Iterable, tr_ls_args: Iterable,
                  ts_ls_args: Iterable = None):
@@ -138,7 +115,6 @@ class BasicNN(nn.Sequential):
         assert isinstance(tr_ls_args, Iterable), ("训练损失函数参数需要为可迭代对象，其中的每个元素均为二元组，"
                                                   "二元组的0号位为损失函数类型字符串，1号位为损失函数构造关键字参数")
         if usage in [net_train_state, net_finetune_state]:
-            # self.train()
             assert isinstance(o_args, Iterable), ("优化器参数需要为可迭代对象，其中的每个元素均为二元组，"
                                                   "二元组的0号位为优化器类型字符串，1号位为优化器构造关键字参数")
             self.optimizer_s, self.lr_names = self._get_optimizer(*o_args)
@@ -146,8 +122,6 @@ class BasicNN(nn.Sequential):
                                                   "二元组的0号位为规划器类型字符串，1号位为规划器构造关键字参数")
             self.scheduler_s = self._get_lr_scheduler(*l_args)
             self.train_ls_fn_s, self.train_ls_names = self._get_ls_fn(*tr_ls_args)
-        # else:
-        #     self.eval()
         # 测试损失函数可以缺省，默认值为训练损失函数
         if ts_ls_args is None:
             print("未指定测试损失函数，将由训练损失函数来代替")
@@ -180,8 +154,8 @@ class BasicNN(nn.Sequential):
         if init_str == "state":
             try:
                 where = kwargs['where']
-                paras = torch.load(where) if torch.cuda.is_available() else \
-                    torch.load(where, map_location=torch.device('cpu'), weights_only=True)
+                paras = torch.load(where) if torch.cuda.is_available() else torch.load(where, map_location=torch.device('cpu'), weights_only=True)
+                    # torch.load(where, map_location=torch.device('cpu'), weights_only=True)
                 self.load_state_dict(paras)
             except IndexError:
                 raise ValueError('选择预训练好的参数初始化网络，需要使用where关键词提供参数或者模型的路径！')

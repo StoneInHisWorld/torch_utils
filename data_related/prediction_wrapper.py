@@ -32,16 +32,14 @@ class PredictionWrapper:
         Returns:
             包装好的结果
         """
-        self.predictions = prediciton_results[0]
+        self.predictions = prediciton_results.pop(0)
         if ret_ds:
-            self.inputs, self.labels = prediciton_results[1:3]
+            self.inputs, self.labels = prediciton_results.pop(0), prediciton_results.pop(0)
         if ret_ls_metric:
             (self.metrics, self.ls_es, self.criteria_fns, self.criteria_names,
-             self.ls_fns, self.ls_names) = prediciton_results[3:]
+             self.ls_fns, self.ls_names) = [prediciton_results.pop(0) for _ in range(6)]
         try:
-            wrapped_results = getattr(
-                self, f'{self.module_type.__name__}_wrap_fn'
-            )(**kwargs)
+            wrapped_results = getattr(self, f'{self.module_type.__name__}_wrap_fn')(**kwargs)
         except AttributeError:
             raise NotImplementedError(f"没有为{self.module_type.__name__}定制结果包装程序！"
                                       f"请在{self.__class__.__name__}类中创建{self.module_type.__name__}_wrap_fn()方法！")

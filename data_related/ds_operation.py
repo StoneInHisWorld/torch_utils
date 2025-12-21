@@ -7,7 +7,7 @@ import torch
 import torchvision.transforms.functional as F
 from torch.utils.data import DataLoader as DLoader
 
-from data_related.dataloader import DataLoader, LazyDataLoader
+# from data_related.dataloader import DataLoader, LazyDataLoader
 from data_related.datasets import DataSet, LazyDataSet
 
 

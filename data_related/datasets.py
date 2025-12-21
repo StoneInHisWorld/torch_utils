@@ -176,8 +176,7 @@ class DataSet(torch_ds):
 
 class LazyDataSet(DataSet):
 
-    def __init__(self, reader, bulk_preprocess,
-                 f_lazy=False, l_lazy=False, *ds_args, **ds_kwargs):
+    def __init__(self, reader_builder, bulk_preprocess, f_lazy=False, l_lazy=False, *ds_args, **ds_kwargs):
         """懒加载数据集，存储数据的索引供LazyDataLoader使用。
         LazyDataLoader取该数据集中实际的数据内容时，会使用`reader`进行数据内容的读取。
 
@@ -192,8 +191,8 @@ class LazyDataSet(DataSet):
             device参数在本类中不会奏效，因为索引集预处理后不会进行批量迁移。
         """
         self.bulk_preprocess = bulk_preprocess
-        self.reader = reader
-        self.reader.mute = True
+        self.reader_builder = reader_builder
+        # self.reader.mute = True
         assert f_lazy or l_lazy, "特征集和标签集都选择立即加载时，请使用DataSet！"
         self.f_lazy, self.l_lazy = f_lazy, l_lazy
         super().__init__(*ds_args, **ds_kwargs)
@@ -223,6 +222,10 @@ class LazyDataSet(DataSet):
         assert not self.bulk_transit, "懒加载数据集不可整体迁移！请将setting.json中的ds_kwargs.bulk_transit设置为False！"
 
     def __getitem__(self, item):
+        # 懒加载数据集需要使用reader读取数据
+        if not hasattr(self, 'reader'):
+            self.reader = self.reader_builder()
+            self.reader.mute = True  # 禁止输出
         batch = self.__get_fitem__(item), self.__get_litem__(item)
         if self.is_train:
             batch = self.transformer.augment_data(*batch)

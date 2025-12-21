@@ -7,12 +7,9 @@ from tqdm import tqdm
 
 class StorageDataLoader:
 
-    def __init__(
-            self,
-            f_reader: Callable, l_reader: Callable, transformer,
-            n_workers: int = 1, mute: bool = False, f_treader: Callable = None,
-            l_treader: Callable = None
-    ):
+    def __init__(self, transformer, n_workers: int = 1, mute: bool = False,
+                 f_reader: Callable = None, l_reader: Callable = None,
+                 f_treader: Callable = None, l_treader: Callable = None):
         """访问存储的数据加载器
         用户需要继承本类，并在子类的__init__()方法中对数据加载办法f_reader以及l_reader进行自定义
         f_reader/f_treader的签名需要为def f_reader/f_treader(index) -> data，只需接收一个索引，返回一个样本数据
@@ -30,6 +27,8 @@ class StorageDataLoader:
         self.__l_reader = l_reader
         self.__f_treader = f_reader if f_treader is None else f_treader
         self.__l_treader = l_reader if l_treader is None else l_treader
+        assert self.__f_treader is not None and self.__l_treader is not None, \
+            "当测试集读取器缺省时，训练集读取器不可缺省！"
         self.transformer = transformer
         self.__fw_reader, self.__lw_reader, self.__fw_treader, self.__lw_treader = self.__wrap_reader()
         self.n_workers = n_workers

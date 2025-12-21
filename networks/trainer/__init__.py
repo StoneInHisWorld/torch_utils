@@ -31,14 +31,14 @@ def _before_training(trainer, *args):
     if trainer.k == 1:
         print(f'\r本次训练位于设备{trainer.config["device"]}上')
         # 创建网络
-        setattr(trainer, "module", trainer.net_builder.build(net_train_state))
+        setattr(trainer, "module", trainer.net_builder.build())
         if not is_multiprocessing(trainer.n_workers):
             # 设置进度条
             pbar_len = trainer.n_epochs * functools.reduce(lambda x, y: len(x) + len(y), args)
             setattr(trainer, "pbar", _get_a_progress_bar(pbar_len, "正在进行训练准备", trainer.pbar_verbose))
     else:
         if not hasattr(trainer, "module"):
-            setattr(trainer, "module", trainer.net_builder.build(net_train_state))
+            setattr(trainer, "module", trainer.net_builder.build())
         if not hasattr(trainer, "pbar"):
             setattr(trainer, "pbar", _get_a_progress_bar(0, "正在进行训练准备", trainer.pbar_verbose))
     # trainer.module.train()
@@ -49,7 +49,8 @@ def _after_training(trainer, *args):
             del trainer.pbar
         else:
             result_conn = args[-1]
-            result_conn.send(trainer.module)
+            # result_conn.send(trainer.module)
+            result_conn.close()
         trainer.module.deactivate()
 
 def _prepare_train(fn):
@@ -63,22 +64,8 @@ def _prepare_train(fn):
 
     @functools.wraps(fn)
     def wrapper(trainer, *args):
-        # if trainer.k == 1:
-        #     pbar_len = trainer.n_epochs * functools.reduce(
-        #         lambda x, y: len(x) + len(y), args
-        #     )
-        #     # print(f'\r本次训练位于设备{trainer.runtime_cfg["device"]}上')
-        #     # # 创建网络
-        #     # setattr(trainer, "module", trainer.net_builder.build(True))
-        #     # # 设置进度条
-        #     # setattr(trainer, "pbar", get_a_training_progress_bar(pbar_len))
-        #     _before_training(trainer, pbar_len)
         _before_training(trainer, *args)
         result = fn(trainer, *args)
-        # if trainer.k == 1:
-        #     # trainer.module.deactivate()
-        #     # del trainer.pbar
-        #     _after_training(trainer)
         _after_training(trainer, *args)
         return result
 
@@ -106,14 +93,12 @@ def _prepare_valid(fn):
             vlog_q, pbar_q, epoch = args[-3:]
             pbar_q.put(f"世代{epoch}验证开始")
             result = fn(trainer, *args)
-            # trainer.module.train()
             vlog_q.put(None)
             pbar_q.put(f"世代{epoch}验证完毕")
         else:
             epoch = args[-1]
             trainer.pbar.set_description(f"世代{epoch + 1}验证中")
             result = fn(trainer, *args)
-            # trainer.module.train()
             trainer.pbar.set_description(f"世代{epoch + 1}验证完毕")
         # 网络状态复原
         module.state = pre_state
@@ -121,6 +106,5 @@ def _prepare_valid(fn):
 
     return wrapper
 
-# from .trainer import Trainer
-from .new_trainer import Trainer
-from .new2_trainer import New2Trainer
+
+from .trainer import New2Trainer

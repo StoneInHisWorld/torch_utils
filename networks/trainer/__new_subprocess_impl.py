@@ -77,13 +77,14 @@ def train_valid_impl(trainer,
     # 记录最后一次学习率，并通知学习率已经记录完毕
     log_epoch_q.put(None)
     lrlog_q.put(None)
-    # # 使用None来通知记录进程“训练已经结束”
-    # result_conn.send(net)
+    # 使用None来通知记录进程“训练已经结束”
+    result_conn.send(net)
     # if debug:
     #     print("网络已发送")
     log_subp.join()
     if debug:
         print("记录进程结束")
+    # result_conn.close()
 
 
 @_prepare_valid
@@ -202,6 +203,5 @@ def __train_and_valid_logging(
     pbar_q.put(None)
     result_conn.send(metric_history)
     result_conn.send(duration_history)
-    result_conn.close()
     if debug:
         print("历史记录发送完毕")
