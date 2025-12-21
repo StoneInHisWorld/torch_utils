@@ -56,45 +56,12 @@ class New2ControlPanel:
         self.net_type = net_type
         # 生成运行动态配置
         self.__rcp = os.path.join(cfg_root, net_name, f'settings.json')  # 运行配置json文件路径
-        # log_root = self.cfg_dict['log_root']
         if is_train:
             self.__train_init(cfg_root, net_name)
         else:
             self.__predict_init(net_name)
         # 读取运行配置
         self.__read_runtime_cfg()
-        # if is_train:
-        #     ptools.check_path(self.__rcp, init_train_settings)
-        # else:
-        #     ptools.check_path(self.__rcp, init_predict_settings)
-        # self.__read_runtime_cfg()
-        # 生成其他路径
-        # self.__hcp = os.path.join(cfg_root, net_name, f'hyper_param_s.json')  # 网络训练超参数文件路径
-        # self.log_root = self.cfg_dict['log_root']
-        # if is_train:
-        #     self.__mlp = os.path.join(self.log_root, net_name, 'metric_log.csv')  # 指标日志文件存储路径
-        #     self.__plp = os.path.join(self.log_root, net_name, 'perf_log.csv')  # 性能日志文件存储路径
-        #     self.__np = os.path.join(self.log_root, net_name, 'trained_net', "")  # 训练成果网络存储路径
-        #     self.__pp = os.path.join(self.log_root, net_name, 'imgs', "")  # 历史趋势图存储路径
-        #     # 路径检查
-        #     ptools.check_path(self.__hcp, init_hps)
-        #     ptools.check_path(self.__mlp, init_log)
-        #     ptools.check_path(self.__plp, init_log)
-        #     ptools.check_path(self.__np)
-        #     ptools.check_path(self.__pp)
-        # else:
-        #     self.__mlp = os.path.join(self.log_root, net_name, 'metric_log.csv')  # 指标日志文件存储路径
-        #     self.__plp = os.path.join(self.log_root, net_name, 'perf_log.csv')  # 性能日志文件存储路径
-        #     self.__np = os.path.join(self.log_root, net_name, 'trained_net', "")  # 训练成果网络存储路径
-        #     self.__pp = os.path.join(self.log_root, net_name, 'imgs', "")  # 历史趋势图存储路径
-        #     # 路径检查
-        #     ptools.check_path(self.__hcp, init_hps)
-        #     ptools.check_path(self.__mlp, init_log)
-        #     ptools.check_path(self.__plp, init_log)
-        #     ptools.check_path(self.__np)
-        #     ptools.check_path(self.__pp)
-        # # # 读取实验编号
-        # self.__read_expno()
         self.dao_ds = datasource
         self.is_train = is_train
         self.plot_kwargs = {}
@@ -158,28 +125,6 @@ class New2ControlPanel:
     @reading_queue.setter
     def reading_queue(self, queue):
         self.__reading_queue = queue
-        
-    # def set_reading_queue(self, *queue):
-    #     """设置读取实验编号队列
-    #     该方法用于设置读取实验编号的队列，通常用于预测模式下的实验编号读取。
-    #     :param queue: 实验编号队列
-    #     :return: None
-    #     """
-    #     assert all(isinstance(i, int) and i > 0 for i in queue), "实验编号必须为正整数！"
-    #     self.reading_queue = queue
-        
-    # def __read_exp(self, exp_no):
-    #     record = ltools.get_logData(self.__plp, exp_no)
-    #     assert exp_no > 0, f'训练序号需为正整数，但读取到的序号为{exp_no}'
-    #     self.exp_no = int(exp_no)
-    #     # 计算总共需要进行的实验组数
-    #     with open(self.__hcp, 'r', encoding='utf-8') as cfg:
-    #         hyper_params = json.load(cfg)
-    #         n_exp = 1
-    #         for v in hyper_params.values():
-    #             n_exp *= len(v)
-    #     # 最后一组实验的实验编号
-    #     self.last_expno = self.exp_no + n_exp - 1
 
     def __iter__(self):
         if self.is_train:
