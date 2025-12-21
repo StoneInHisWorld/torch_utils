@@ -376,8 +376,7 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
 
     # 提取训练器参数
     n_epochs = trainer.n_epochs
-    pbar = _get_a_progress_bar(n_epochs * (len(train_iter) + len(valid_iter)), trainer.pbar_verbose)
-    pbar.set_description('\r正在创建队列和事件对象')
+    pbar = _get_a_progress_bar(n_epochs * (len(train_iter) + len(valid_iter)), '\r正在创建队列和事件对象', trainer.pbar_verbose)
     # 进程通信队列
     ctx = torch.multiprocessing.get_context("spawn")
     tdata_q = ctx.Queue(trainer.train_prefetch)  # 传递训练数据队列
