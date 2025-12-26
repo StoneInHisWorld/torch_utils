@@ -145,7 +145,7 @@ def train_and_valid_impl(trainer, train_iter, valid_iter):
             logged_stamp = time.perf_counter()
         # 进行学习率更新
         net.update_lr()
-        vmetric_log, vduration_log = __valid(trainer, valid_iter, epoch)
+        vmetric_log, vduration_log = __valid(trainer, valid_iter)
         # 生成训练日志
         tmetric_log, tduration_log = log_summarize(
             metric_acc, duration_acc, c_names, l_names, duration_names
@@ -213,7 +213,7 @@ def train_with_k_fold(trainer, train_loaders_iter) -> History:
 
 
 @_prepare_valid
-def __valid(trainer, valid_iter, epoch) -> Tuple[dict, dict]:
+def __valid(trainer, valid_iter) -> Tuple[dict, dict]:
     """验证函数实现
     每次取出验证数据供给器中的下一批次数据进行前向传播，之后计算评价指标和损失，生成验证日志。
 
@@ -225,7 +225,6 @@ def __valid(trainer, valid_iter, epoch) -> Tuple[dict, dict]:
     net = trainer.module
     # 要统计的数据种类数目
     l_names = [f'valid_{item}' for item in net.test_ls_names]
-    # duration_names = ["duration_vdata_fetch", "duration_vpredict", "duration_vlog"]
     duration_names = vduration_names
     c_names = [f'valid_{ptools.get_computer_name(criterion)}' for criterion in criterion_a]
     # 记录对象
@@ -251,24 +250,10 @@ def __valid(trainer, valid_iter, epoch) -> Tuple[dict, dict]:
         )
         logged_stamp = time.perf_counter()
     # 生成验证日志。迭代轮数大于1时，才生成记录日志。
-    return log_summarize(metric_acc, duration_acc, 
+    metric_log, duration_log = log_summarize(metric_acc, duration_acc,
                          c_names, l_names, duration_names)
-    # if metric_acc[-1] > 0:
-    #     metric_log = {
-    #         name: metric_acc[i] / metric_acc[-1]
-    #         for i, name in enumerate(c_names + l_names)
-    #     }
-    #     duration_log = {
-    #         name: duration_acc[i] / duration_acc[-1]
-    #         for i, name in enumerate(duration_names)
-    #     }
-    # else:
-    #     metric_log, duration_log = {}, {}
-    # i += 1
-    # for j, n in enumerate(l_names + duration_names):
-    #     metric_log[n] = metric_acc[i + j] / metric_acc[-1]
-    # for
-    # return metric_log, duration_log
+    # TODO：跟先前的验证指标进行比较compare（用户自定义的方法），然后输出日志
+    return metric_log, duration_log
 
 #
 # def __train_and_valid_with_preprocessing(self, train_iter, valid_iter) -> History:
