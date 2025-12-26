@@ -360,7 +360,7 @@ class BasicNN(nn.Sequential):
             x = checkpoint.checkpoint(
                 super(BasicNN, self).__call__, x, use_reentrant=False
             )
-            _check_first = True
+            # _check_first = True
             return x
         else:
             # 启用普通的调用函数
