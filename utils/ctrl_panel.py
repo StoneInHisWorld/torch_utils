@@ -1,6 +1,12 @@
+import functools
+from io import BytesIO
 import json
 import math
 import os.path
+<<<<<<< HEAD
+=======
+import pickle
+>>>>>>> fe67262f0be35bf6395172a41ccd9efe30baa9c9
 import re
 import warnings
 
@@ -9,7 +15,11 @@ import pandas as pd
 import torch
 from jsonref import JsonRef
 
+<<<<<<< HEAD
 from config.init_cfg import init_log, init_predict_settings, init_train_settings, init_hps
+=======
+from config.init_cfg import init_predict_settings, init_train_settings, init_hps
+>>>>>>> fe67262f0be35bf6395172a41ccd9efe30baa9c9
 from .experiment import New2Experiment
 from .func import pytools as ptools
 from .func import log_tools as ltools
@@ -40,6 +50,32 @@ save_net_range = ['no', 'entire', 'state']
 plot_history_range = ['plot', 'save', 'no']
 
 
+<<<<<<< HEAD
+=======
+def save_net_fn(
+    net, before_log, after_log,
+    compare, exp_no, save_path, save_format
+):
+    """保存实验对象持有网络
+    根据动态运行参数进行相应的网络保存动作，具有三种保存模式，保存模式由动态运行参数save_net指定：
+    entire：指持久化整个网络对象
+    state：指持久化网络对象参数
+    no：指不进行持久化
+
+    :return: None
+    """
+    if compare(before_log, after_log):
+        assert isinstance(net, torch.nn.Module), f"输入的网络需要为torch.nn.Module对象！"
+        if save_format == 'entire':
+            obj_to_be_saved, posfix = net, ".ptm"
+        elif save_format == 'state':
+            obj_to_be_saved, posfix = net.state_dict(), ".ptsd"
+        else:
+            raise ValueError(f"收到了不正确的网络保存格式{save_format}！")
+        torch.save(obj_to_be_saved, os.path.join(save_path, f'{exp_no}{posfix}'))
+
+
+>>>>>>> fe67262f0be35bf6395172a41ccd9efe30baa9c9
 class New2ControlPanel:
     """控制台类负责读取、管理动态运行参数、超参数组合，以及实验对象的提供"""
 
@@ -56,13 +92,17 @@ class New2ControlPanel:
         self.net_type = net_type
         # 生成运行动态配置
         self.__rcp = os.path.join(cfg_root, net_name, f'settings.json')  # 运行配置json文件路径
+<<<<<<< HEAD
         # log_root = self.cfg_dict['log_root']
+=======
+>>>>>>> fe67262f0be35bf6395172a41ccd9efe30baa9c9
         if is_train:
             self.__train_init(cfg_root, net_name)
         else:
             self.__predict_init(net_name)
         # 读取运行配置
         self.__read_runtime_cfg()
+<<<<<<< HEAD
         # if is_train:
         #     ptools.check_path(self.__rcp, init_train_settings)
         # else:
@@ -95,6 +135,8 @@ class New2ControlPanel:
         #     ptools.check_path(self.__pp)
         # # # 读取实验编号
         # self.__read_expno()
+=======
+>>>>>>> fe67262f0be35bf6395172a41ccd9efe30baa9c9
         self.dao_ds = datasource
         self.is_train = is_train
         self.plot_kwargs = {}
@@ -158,6 +200,7 @@ class New2ControlPanel:
     @reading_queue.setter
     def reading_queue(self, queue):
         self.__reading_queue = queue
+<<<<<<< HEAD
         
     # def set_reading_queue(self, *queue):
     #     """设置读取实验编号队列
@@ -180,6 +223,8 @@ class New2ControlPanel:
     #             n_exp *= len(v)
     #     # 最后一组实验的实验编号
     #     self.last_expno = self.exp_no + n_exp - 1
+=======
+>>>>>>> fe67262f0be35bf6395172a41ccd9efe30baa9c9
 
     def __iter__(self):
         if self.is_train:
@@ -208,7 +253,12 @@ class New2ControlPanel:
             )
             cur_exp = New2Experiment(
                 self.exp_no, self.dao_ds, self.net_type,
+<<<<<<< HEAD
                 hyper_params, self.cfg_dict, self.is_train
+=======
+                hyper_params, self.cfg_dict, self.is_train,
+                save_net_fn=self.get_save_net_fn()
+>>>>>>> fe67262f0be35bf6395172a41ccd9efe30baa9c9
             )
             yield cur_exp
             # 记录
@@ -218,10 +268,17 @@ class New2ControlPanel:
                 else:
                     print("没有为实验对象注入指标结果，本次实验不记录指标数据！")
                 self.__write_log(self.__plp, **cur_exp.perf_log)
+<<<<<<< HEAD
                 if cur_exp.net is None:
                     print('训练器对象未得到训练网络对象，因此不予保存网络！')
                 else:
                     self.__save_net(cur_exp.net)
+=======
+                # if cur_exp.net is None:
+                #     print('训练器对象未得到训练网络对象，因此不予保存网络！')
+                # else:
+                #     self.__save_net(cur_exp.net)
+>>>>>>> fe67262f0be35bf6395172a41ccd9efe30baa9c9
                 self.__plot_history(cur_exp.train_mlog)
             else:
                 print("没有指定保存目录，本次实验不记录结果！")
@@ -367,6 +424,34 @@ class New2ControlPanel:
         torch.save(obj_to_be_saved, path)
         print(f'已在{self.__np}保存网络，保存路径为：{path}')
 
+<<<<<<< HEAD
+=======
+    def get_save_net_fn(self):
+        """保存实验对象持有网络
+        根据动态运行参数进行相应的网络保存动作，具有三种保存模式，保存模式由动态运行参数save_net指定：
+        entire：指持久化整个网络对象
+        state：指持久化网络对象参数
+        no：指不进行持久化
+
+        :return: None
+        """
+        if self.__np is None:
+            print("未指定模型保存路径，不予保存模型！")
+            return
+        save_net = self.cfg_dict['save_net']
+        if save_net in save_net_range:
+            return functools.partial(
+                save_net_fn, 
+                compare=self.compare, exp_no=self.exp_no, save_path=self.__np, save_format=save_net
+            )
+        else:
+            warnings.warn(
+                f'请检查setting.json中参数save_net设置是否正确，可设置取值为：{save_net_range}'
+                f'本次不予保存模型！', UserWarning
+            )
+            return
+
+>>>>>>> fe67262f0be35bf6395172a41ccd9efe30baa9c9
     def __plot_history(self, history) -> None:
         """绘制历史趋势图
         根据需要绘制历史趋势图，有三种模式可选，模式选择由动态运行参数plot_history指定：
@@ -408,9 +493,30 @@ class New2ControlPanel:
         self.plot_kwargs = kwargs
 
     @property
-    def runtime_cfg(self):
+    def config(self):
         return self.cfg_dict
 
     @property
     def device(self):
         return torch.device(self['device'])
+    
+    @property
+    def compare(self):
+        return self.__compare_fn
+    
+    @compare.setter
+    def compare(self, fn):
+        try:
+            # 创建字节流缓冲区，用于临时存储序列化数据
+            buffer = BytesIO()
+            # 尝试序列化对象（使用最高协议以兼容更多类型）
+            pickle.dump(fn, buffer, protocol=pickle.HIGHEST_PROTOCOL)
+            # 可选：验证反序列化是否正常（确保序列化后的对象可恢复）
+            buffer.seek(0)
+            pickle.load(buffer)
+        except (pickle.PicklingError, AttributeError, TypeError, ImportError) as e:
+            # 捕获常见的序列化失败异常
+            raise ValueError(f"请设置可以被序列化的比较方法！")
+        _, pos_or_kwargs, _, _ = ptools.get_signature(fn)
+        assert len(pos_or_kwargs) == 2, f"比较方法接受的参数需要为两个字典对象！检测到输入的比较方法签名中，需要的位置参数数量为{len(pos_or_kwargs)}"
+        self.__compare_fn = fn

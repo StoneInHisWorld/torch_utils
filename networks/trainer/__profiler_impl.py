@@ -6,8 +6,7 @@ from torch.profiler import ProfilerActivity
 from torch.profiler import record_function
 
 from networks.trainer import _prepare_train
-from utils.accumulator import Accumulator
-from utils.history import History
+from utils import History, Accumulator
 
 
 @_prepare_train
@@ -55,7 +54,6 @@ def profiling_impl(n_epochs, log_path, trainer, data_iter):
                                 *correct_s, *[ls * num_examples for ls in ls_es],
                                 num_examples
                             )
-                    # with torch.profiler.record_function("batch_switch_consume"):
                     trainer.pbar.update(1)
             with record_function("epoch_switch_consume"):
                 for scheduler in scheduler_s:
@@ -64,7 +62,6 @@ def profiling_impl(n_epochs, log_path, trainer, data_iter):
                     criteria_names + loss_names,
                     [metric[i] / metric[-1] for i in range(len(metric) - 1)]
                 )
-        # prof.step()
     trainer.pbar.close()
     with open(os.path.join(
             log_path,
