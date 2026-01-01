@@ -56,7 +56,6 @@ def log_multiprocessing_impl(
         data = log_q.get()
         n_data += 1
         # print(f"线程拿到了第{epoch}世代的{n_data}批次的{which}数据")
-    # print(f"世代{epoch}的{which}记录线程退出")
     pbar_q.put(f"世代{epoch}{which}记录完毕")
 
 def log_summarize(metric_acc, duration_acc, c_names, l_names, duration_names):

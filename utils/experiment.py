@@ -5,7 +5,6 @@ from datetime import datetime
 
 import torch
 
-from networks import net_finetune_state
 from .func import pytools as ptools
 
 
@@ -44,13 +43,37 @@ def _print_result(history, test_log):
     return metrics_ls_msg
 
 
+# save_net_range = ['no', 'entire', 'state']
+# def save_net_fn(net, exp_no, save_path, save_format):
+#     """保存实验对象持有网络
+#     根据动态运行参数进行相应的网络保存动作，具有三种保存模式，保存模式由动态运行参数save_net指定：
+#     entire：指持久化整个网络对象
+#     state：指持久化网络对象参数
+#     no：指不进行持久化
+#
+#     :return: None
+#     """
+#     if save_format == 'entire':
+#         obj_to_be_saved, posfix = net, ".ptm"
+#     elif save_format == 'state':
+#         obj_to_be_saved, posfix = net.state_dict(), ".ptsd"
+#     else:
+#         warnings.warn(
+#             f'请检查setting.json中参数save_net设置是否正确，可设置取值为：{save_net_range}'
+#             f'本次不予保存模型！', UserWarning
+#         )
+#         return
+#     torch.save(obj_to_be_saved, os.path.join(save_path, f'{exp_no}{posfix}'))
+
+
+
 class New2Experiment:
     """实验对象负责神经网络训练的相关周边操作，计时、显存监控、日志编写、网络持久化、历史趋势图绘制及保存"""
 
     def __init__(
             self, exp_no: int, datasource: type, net_type: type,
-            hyper_parameters: dict, runtime_cfg: dict, is_train: bool, 
-            trained_net_p=None
+            hyper_parameters: dict, config: dict, is_train: bool, 
+            trained_net_p=None, save_net_fn=None
     ):
         """实验对象
         进行神经网络训练的相关周边操作，计时、显存监控、日志编写、网络持久化、历史趋势图绘制及保存。
@@ -73,11 +96,12 @@ class New2Experiment:
         # self.__plp = perf_log_path
         # self.__np = net_path
         self.__exp_no = exp_no
-        self.cfg_dict = runtime_cfg
+        self.config = config
         self.dao_ds = datasource
         self.net_type = net_type
         self.is_train = is_train
         self.trained_net_p = trained_net_p
+        self.save_net_fn = save_net_fn
 
     def __enter__(self):
         if self.is_train:
@@ -109,8 +133,8 @@ class New2Experiment:
             print(k + ': ' + str(v))
         # print(f'data_portion: {self.ds_config["data_portion"]}')
         # 提取训练配置参数
-        device = torch.device(self.cfg_dict['device'])
-        cuda_memrecord = self.cfg_dict['cuda_memrecord']
+        device = torch.device(self.config['device'])
+        cuda_memrecord = self.config['cuda_memrecord']
         # 开启显存监控
         if device.type == 'cuda' and cuda_memrecord:
             torch.cuda.memory._record_memory_history(cuda_memrecord)
@@ -156,7 +180,7 @@ class New2Experiment:
         if self.is_train:
             # 编辑日志条目，加入数据量、数据形状和显存消耗等内容
             basic_metric_log, basic_perf_log = {}, {}
-            if self.device != torch.device('cpu') and self.cfg_dict["cuda_memrecord"]:
+            if self.device != torch.device('cpu') and self.config["cuda_memrecord"]:
                 basic_perf_log.update(
                     max_GPUmemory_allocated=torch.cuda.max_memory_allocated(self.device) / (1024 ** 3),
                     max_GPUmemory_reserved=torch.cuda.max_memory_reserved(self.device) / (1024 ** 3),
@@ -175,7 +199,7 @@ class New2Experiment:
                 basic_metric_log.update(metric_log)
                 basic_perf_log.update(perf_log)
             basic_perf_log.update(
-                exp_no=self.__exp_no, n_workers=self.cfg_dict['n_workers'],
+                exp_no=self.__exp_no, n_workers=self.config['n_workers'],
                 k=self.t_kwargs["k"], n_epochs=self.t_kwargs["n_epochs"], 
                 batch_size=self.t_kwargs["batch_size"],
                 time_stamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -190,18 +214,18 @@ class New2Experiment:
 
     def __rearrange_train_config(self):
         # 数据集参数
-        self.ds_config = self.cfg_dict.pop("ds_kwargs")
+        self.ds_config = self.config.pop("ds_kwargs")
         # 数据迭代器参数
-        self.dl_config = self.cfg_dict.pop("dl_kwargs")
+        self.dl_config = self.config.pop("dl_kwargs")
         k = self.__hp.pop("k")
         batch_size = self.__hp.pop("batch_size")
         self.dl_config["k"] = k
         self.dl_config["batch_size"] = batch_size
         # 网络创建器参数
-        self.nb_kwargs = self.cfg_dict.pop("nb_kwargs")
+        self.nb_kwargs = self.config.pop("nb_kwargs")
         self.nb_kwargs["batch_size"] = batch_size
         # 训练器参数
-        self.t_kwargs = self.cfg_dict.pop("t_kwargs")
+        self.t_kwargs = self.config.pop("t_kwargs")
         self.t_kwargs["batch_size"] = batch_size
         if self.is_train:
             self.t_kwargs["k"] = k
@@ -209,19 +233,19 @@ class New2Experiment:
             
     def __rearrange_predict_config(self):
         # 数据集参数
-        self.ds_config = self.cfg_dict.pop("ds_kwargs")
+        self.ds_config = self.config.pop("ds_kwargs")
         self.ds_config["f_req_shp"] = self.__hp.pop("f_req_shp")
         self.ds_config["l_req_shp"] = self.__hp.pop("l_req_shp")
         # 数据迭代器参数
-        self.dl_config = self.cfg_dict.pop("dl_kwargs")
+        self.dl_config = self.config.pop("dl_kwargs")
         # k = self.__hp.pop("k")
         # batch_size = self.__hp.pop("batch_size")
         # self.dl_config["k"] = k
         # self.dl_config["batch_size"] = batch_size
         # 网络创建器参数
-        self.nb_kwargs = self.cfg_dict.pop("nb_kwargs")
+        self.nb_kwargs = self.config.pop("nb_kwargs")
         # 训练器参数
-        self.t_kwargs = self.cfg_dict.pop("t_kwargs")
+        self.t_kwargs = self.config.pop("t_kwargs")
         # self.t_kwargs["batch_size"] = batch_size
         # if self.is_train:
         #     self.t_kwargs["k"] = k
@@ -342,7 +366,7 @@ class New2Experiment:
         predict_iter = self.data.to_dataloaders(False, transit_fn, **dl_kwargs)
         # self.net_builder.init_kwargs['device'] = self.ds_config['device']
         self.net_builder.init_kwargs['init_meth'] = "state"
-        self.net_builder.init_kwargs["init_kwargs"]= {"where": self.trained_net_p}
+        self.net_builder.init_kwargs["init_kwargs"]= {"where": self.config["trained_net_p"]}
         self.net_builder.usage = "predict"
         pred_results = self.__trainer.predict(predict_iter)
         # # 对预测值进行打包
@@ -358,7 +382,7 @@ class New2Experiment:
 
     @property
     def device(self):
-        return torch.device(self.cfg_dict['device'])
+        return torch.device(self.config['device'])
 
     def update_hp(self, **kwargs):
         self.__hp.update(**kwargs)
