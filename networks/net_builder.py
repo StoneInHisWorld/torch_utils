@@ -40,7 +40,8 @@ class NetBuilder:
         _, bn_pok, bn_ko, _ = ptools.get_signature(BasicNN)
         n_valid_argments = len(init_args) + len(init_kwargs.keys() - [b[0] for b in bn_ko])
         if n_valid_argments < len(m_needed):
-            msg = (f"输入的参数不完整！{module.__name__}的构造参数包括位置参数{m_po}, 位置/关键字参数{m_pok}, "
+            msg = (f"输入的参数不完整，只收到了{n_valid_argments}组有效参数！"
+                   f"{module.__name__}的构造参数包括位置参数{m_po}, 位置/关键字参数{m_pok}, "
                    f"关键字参数{m_ko}。\n{BasicNN.__name__}可以输入的参数包括{bn_ko}。\n"
                    f"创建{module.__name__}必需的参数为{m_needed}。")
             raise ValueError(msg)
