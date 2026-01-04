@@ -68,7 +68,7 @@ def _prepare_predict(fn):
 class New2Trainer:
     """神经网络训练器对象，提供所有针对神经网络的操作，包括训练、验证、测试、预测"""
 
-    def __init__(self, net_builder, criterion_a, runtime_cfg):  # 训练、验证、测试依赖参数
+    def __init__(self, net_builder, net_saver, criterion_a, runtime_cfg):  # 训练、验证、测试依赖参数
         """神经网络训练器对象，提供所有针对神经网络的操作，包括训练、验证、测试、预测。
         Trainer类负责进行网络构建以及网络训练方法实现，可以通过Trainer.module获取训练完成或正在训练的网络对象。
 
@@ -89,6 +89,7 @@ class New2Trainer:
                              f"{net_builder.module.__name__}的评价指标赋值。")
         self.pbar = None
         self.net_builder = net_builder
+        self.net_saver = net_saver
         self.pbar_verbose = self.config['pbar_verbose']
 
     def train(self, data_iter):

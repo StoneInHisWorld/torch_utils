@@ -70,10 +70,15 @@ def _print_result(history, test_log):
 class New2Experiment:
     """实验对象负责神经网络训练的相关周边操作，计时、显存监控、日志编写、网络持久化、历史趋势图绘制及保存"""
 
+    # def __init__(
+    #         self, exp_no: int, datasource: type, net_type: type,
+    #         hyper_parameters: dict, config: dict, is_train: bool,
+    #         trained_net_p=None, save_net_fn=None
+    # ):
     def __init__(
             self, exp_no: int, datasource: type, net_type: type,
-            hyper_parameters: dict, config: dict, is_train: bool, 
-            trained_net_p=None, save_net_fn=None
+            hyper_parameters: dict, config: dict, is_train: bool,
+            trained_net_p=None, net_saver=None
     ):
         """实验对象
         进行神经网络训练的相关周边操作，计时、显存监控、日志编写、网络持久化、历史趋势图绘制及保存。
@@ -100,8 +105,12 @@ class New2Experiment:
         self.dao_ds = datasource
         self.net_type = net_type
         self.is_train = is_train
+        if is_train:
+            assert net_saver is not None, "训练模式下需要指定网络保存器！"
+        else:
+            assert trained_net_p is not None, "预测模式下需要指定使用的网络路径！"
         self.trained_net_p = trained_net_p
-        self.save_net_fn = save_net_fn
+        self.net_saver = net_saver
 
     def __enter__(self):
         if self.is_train:
@@ -119,7 +128,7 @@ class New2Experiment:
         # 创建暴露的对象
         self.data = self.__build_dao_ds(self.__hp)
         self.net_builder = self.__build_net_builder()
-        self.__trainer = self.__build_trainer(self.net_builder, self.data.get_criterion_a(), self.t_kwargs)
+        self.__trainer = self.__build_trainer(self.net_builder, self.net_saver, self.data.get_criterion_a(), self.t_kwargs)
         return self.data, self.net_builder
     
     def __train_enter__(self):
@@ -269,10 +278,10 @@ class New2Experiment:
         # else:
         #     return NetBuilder(self.net_type, self.nb_kwargs)
 
-    def __build_trainer(self, net_builder, criteria_fns, t_kwargs):
+    def __build_trainer(self, net_builder, net_saver, criteria_fns, t_kwargs):
         from networks import New2Trainer
 
-        return New2Trainer(net_builder, criteria_fns, t_kwargs)
+        return New2Trainer(net_builder, net_saver, criteria_fns, t_kwargs)
         # return trainer
 
     def __register_result(self):
