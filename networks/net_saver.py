@@ -11,7 +11,7 @@ save_net_range = ['no', 'entire', 'state']
 debug = True
 
 
-class Net_Saver:
+class NetSaver:
 
     def __init__(self, exp_no, save_root, save_format):
         self.save_root = save_root
@@ -20,23 +20,9 @@ class Net_Saver:
                                                f'可设置取值为：{save_net_range}!')
         self.save_format = save_format
 
-    def save(self, net, record, n_epoch = ""):
-        """保存实验对象持有网络
-        根据动态运行参数进行相应的网络保存动作，具有三种保存模式，保存模式由动态运行参数save_net指定：
-        entire：指持久化整个网络对象
-        state：指持久化网络对象参数
-        no：指不进行持久化
-
-        :return: None
-        """
-        assert isinstance(net, torch.nn.Module), f"输入的网络需要为torch.nn.Module对象！"
-        # 对结果进行比较，如果当前结果更好则进行接下来的保存，否则退出
-        if not hasattr(self, "best_record"):
-            pass
-        elif not self.compare(self.best_record, record):
-            return
-        self.best_record = record
+    def save_nocompare(self, net, n_epoch = ""):
         # 根据设置的网络保存要求进行网络的保存
+        assert isinstance(net, torch.nn.Module), f"输入的网络需要为torch.nn.Module对象！"
         if self.save_format == 'entire':
             obj_to_be_saved, posfix = net, ".ptm"
         elif self.save_format == 'state':
@@ -47,6 +33,45 @@ class Net_Saver:
                                                  f'{self.exp_no}_epoch{n_epoch}{posfix}'))
         if debug:
             print(f"保存网络{os.path.join(self.save_root, f'{self.exp_no}_epoch{n_epoch}{posfix}')}")
+
+    def compare_update_record(self, record):
+        # 对结果进行比较，如果当前结果更好则进行接下来的保存，否则退出
+        if not hasattr(self, "best_record"):
+            pass
+        elif not self.compare(self.best_record, record):
+            return False
+        self.best_record = record
+        return True
+
+    def save(self, net, record, n_epoch = ""):
+        """保存实验对象持有网络
+        根据动态运行参数进行相应的网络保存动作，具有三种保存模式，保存模式由动态运行参数save_net指定：
+        entire：指持久化整个网络对象
+        state：指持久化网络对象参数
+        no：指不进行持久化
+
+        :return: None
+        """
+        self.compare_update_record(record)
+        self.save_nocompare(net, n_epoch)
+        # assert isinstance(net, torch.nn.Module), f"输入的网络需要为torch.nn.Module对象！"
+        # # 对结果进行比较，如果当前结果更好则进行接下来的保存，否则退出
+        # if not hasattr(self, "best_record"):
+        #     pass
+        # elif not self.compare(self.best_record, record):
+        #     return
+        # self.best_record = record
+        # # 根据设置的网络保存要求进行网络的保存
+        # if self.save_format == 'entire':
+        #     obj_to_be_saved, posfix = net, ".ptm"
+        # elif self.save_format == 'state':
+        #     obj_to_be_saved, posfix = net.state_dict(), ".ptsd"
+        # else:
+        #     raise ValueError(f"收到了不正确的网络保存格式{self.save_format}！")
+        # torch.save(obj_to_be_saved, os.path.join(self.save_root,
+        #                                          f'{self.exp_no}_epoch{n_epoch}{posfix}'))
+        # if debug:
+        #     print(f"保存网络{os.path.join(self.save_root, f'{self.exp_no}_epoch{n_epoch}{posfix}')}")
 
     @property
     def compare(self):

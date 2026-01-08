@@ -84,27 +84,27 @@ def _prepare_valid(fn):
     @functools.wraps(fn)
     @torch.no_grad()
     def wrapper(trainer, *args):
-        module = trainer.module
-        # 将网络状态更改为预测态
-        pre_state = module.state
-        module.state = net_predict_state
         n_workers = trainer.n_workers
         if is_multiprocessing(n_workers):
-            vlog_q, pbar_q, epoch = args[-3:]
-            pbar_q.put(f"世代{epoch}验证开始")
+            # vlog_q, pbar_q, epoch = args[-3:]
+            # pbar_q.put(f"世代{epoch}验证开始")
             result = fn(trainer, *args)
-            vlog_q.put(None)
-            pbar_q.put(f"世代{epoch}验证完毕")
+            # vlog_q.put(None)
+            # pbar_q.put(f"世代{epoch}验证完毕")
         else:
             epoch = args[-1]
+            module = trainer.module
+            # 将网络状态更改为预测态
+            pre_state = module.state
+            module.state = net_predict_state
             trainer.pbar.set_description(f"世代{epoch + 1}验证中")
             result = fn(trainer, *args)
             trainer.pbar.set_description(f"世代{epoch + 1}验证完毕")
-        # 网络状态复原
-        module.state = pre_state
+            # 网络状态复原
+            module.state = pre_state
         return result
 
     return wrapper
 
 
-from .trainer import New2Trainer
+from .trainer import NetTrainer
