@@ -8,8 +8,8 @@ from utils.accumulator import Accumulator
 from utils.func import pytools as ptools
 from . import _get_a_progress_bar, is_multiprocessing, test_duration_names
 from .__log_impl import log_impl, log_summarize
-from .__train_impl import train_impl, train_and_valid_impl, train_with_k_fold
-from .__train_impl import tv_multiprocessing_impl as tv_multiprocessing
+from .__train_impl import train, train_and_valid, train_with_k_fold
+from .__train_impl import tv_multiprocessing as tv_multiprocessing
 
 
 def _prepare_test(fn):
@@ -65,7 +65,7 @@ def _prepare_predict(fn):
     return wrapper
 
 
-class New2Trainer:
+class NetTrainer:
     """神经网络训练器对象，提供所有针对神经网络的操作，包括训练、验证、测试、预测"""
 
     def __init__(self, net_builder, net_saver, criterion_a, runtime_cfg):  # 训练、验证、测试依赖参数
@@ -105,7 +105,6 @@ class New2Trainer:
         self.n_workers = self.config['n_workers']
         self.n_epochs = self.config['n_epochs']
         self.batch_size = self.config['batch_size']
-        # self.pbar_verbose = self.config['pbar_verbose']
         # 判断是否是k折训练
         if self.k > 1:
             train_fn, train_args = train_with_k_fold, (self, data_iter)
@@ -117,10 +116,10 @@ class New2Trainer:
                 # 不启用多线程训练
                 if len(data_iters) == 2:
                     # 进行训练和验证
-                    train_fn = train_and_valid_impl
+                    train_fn = train_and_valid
                 elif len(data_iters) == 1:
                     # 进行训练
-                    train_fn = train_impl
+                    train_fn = train
                 else:
                     raise ValueError(f"无法识别的数据迭代器，其提供的长度为{len(data_iters)}")
                 train_args = (self, *data_iters)
@@ -132,7 +131,6 @@ class New2Trainer:
                 self.vdata_q_len = int(self.config['vdata_q_len'])
                 train_fn, train_args = tv_multiprocessing, (self, *data_iters)
         return train_fn(*train_args)
-        # self.train_histories = train_fn(*train_args)
 
     @_prepare_predict
     def predict(self, predict_iter, ret_ls_metric=True, ret_ds=True):
@@ -170,19 +168,7 @@ class New2Trainer:
                 loss_pool.append(ls_es)
             self.pbar.update(1)
         self.pbar.set_description('结果计算完成')
-        # # 将所有批次的数据堆叠在一起
-        # ret = [torch.cat(predictions, dim=0)]
-        # if ret_ds:
-        #     ret.append(torch.cat(inputs, dim=0))
-        #     ret.append(torch.cat(labels, dim=0))
-        # if ret_ls_metric:
-        #     ret.append(torch.cat(metrics, dim=0))
-        #     ret.append(torch.cat(loss_pool, dim=0))
-        #     ret.append([
-        #         ptools.get_computer_name(criterion) for criterion in criterion_a
-        #     ])
-        #     ret.append(net.test_ls_names)
-        # return ret
+        # 根据要求整理返回的结果
         ret = [predictions]
         if ret_ds:
             ret += [inputs, labels]
@@ -226,5 +212,3 @@ class New2Trainer:
             log_stamp = time.perf_counter()
         # 生成测试日志
         return log_summarize(metric_acc, duration_acc, c_names, l_names, test_duration_names)
-        # self.test_histories = log_summarize(metric_acc, duration_acc,
-        #                                     c_names, l_names, test_duration_names)

@@ -1,6 +1,6 @@
 import utils.func.log_tools as ltools
 from data_related import ds_operation as dso
-from networks.trainer import Trainer
+from networks.trainer import NetTrainer
 # TODO: 选择读取数据集的类
 from your_DAO_module import your_DAO_class as DataSet
 # TODO: 选择训练的网络架构类型
@@ -50,7 +50,7 @@ for exp_no in read_queue:
     # TODO：在此处设置网络预测参数。训练位置参数有三个，按位序为优化器参数、学习率规划器参数、损失函数参数。
     # 预测操作只需要损失函数参数，其要求为二元组列表，二元组内容为（损失函数类型字符串，损失函数构造关键字参数）
     prepare_args = ([], [], [...])
-    trainer = Trainer(
+    trainer = NetTrainer(
         Net, net_init_args, net_init_kwargs, prepare_args,
         DataSet
     )

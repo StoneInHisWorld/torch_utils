@@ -17,7 +17,7 @@ from .basic_nn import BasicNN
 
 
 # from .trainer import Trainer
-from .trainer import New2Trainer
+from .trainer import NetTrainer
 from .net_builder import NetBuilder
 from .nets import *
 

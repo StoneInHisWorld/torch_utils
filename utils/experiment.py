@@ -279,9 +279,9 @@ class New2Experiment:
         #     return NetBuilder(self.net_type, self.nb_kwargs)
 
     def __build_trainer(self, net_builder, net_saver, criteria_fns, t_kwargs):
-        from networks import New2Trainer
+        from networks import NetTrainer
 
-        return New2Trainer(net_builder, net_saver, criteria_fns, t_kwargs)
+        return NetTrainer(net_builder, net_saver, criteria_fns, t_kwargs)
         # return trainer
 
     def __register_result(self):

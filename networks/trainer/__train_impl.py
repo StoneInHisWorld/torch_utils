@@ -24,7 +24,7 @@ def __add_lr_to_history(net, history):
 
 @_prepare_train
 @hook()
-def train_impl(trainer, train_iter) -> History:
+def train(trainer, train_iter) -> History:
     """简单训练实现。
     从train_iter中每次取出一批次数据进行前反向传播后计算评价指标，记录到History对象中。
 
@@ -87,7 +87,7 @@ def train_impl(trainer, train_iter) -> History:
 
 @_prepare_train
 @hook()
-def train_and_valid_impl(trainer, train_iter, valid_iter):
+def train_and_valid(trainer, train_iter, valid_iter):
     """训练和验证实现函数。
     从train_iter中每次取出一批次数据进行前反向传播后计算评价指标获得训练日志，随后调用__valid()函数进行验证获得验证日志，
     最后将两者记录到History对象中。
@@ -197,9 +197,9 @@ def train_with_k_fold(trainer, train_loaders_iter) -> History:
         pbar.total = trainer.k * trainer.n_epochs * (len(train_iter) + len(valid_iter))
         if ptools.is_multiprocessing(trainer.n_workers):
             raise NotImplementedError("暂未实现k_fold的多进程训练！")
-            histories = tv_multiprocessing_impl(trainer, train_iter, valid_iter)
+            histories = tv_multiprocessing(trainer, train_iter, valid_iter)
         else:
-            histories = train_and_valid_impl(trainer, train_iter, valid_iter)
+            histories = train_and_valid(trainer, train_iter, valid_iter)
         k_fold_history = histories if k_fold_history is None else (
             k_fold_history[0] + histories[0], k_fold_history[1] + histories[1]
         )
@@ -256,14 +256,12 @@ def __valid(trainer, valid_iter, epoch) -> Tuple[dict, dict]:
     return metric_log, duration_log
 
 
-def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
+def tv_multiprocessing(trainer, train_iter, valid_iter):
     """多进程训练实现
     :param train_iter: 训练数据迭代器
     :param valid_iter: 验证数据迭代器
     :return: 训练历史记录
     """
-    from networks.trainer.__subprocess_impl import train_valid_impl
-
     # 提取训练器参数
     n_epochs = trainer.n_epochs
     pbar = _get_a_progress_bar(n_epochs * (len(train_iter) + len(valid_iter)), '\r正在创建队列和事件对象', trainer.pbar_verbose)
@@ -286,7 +284,6 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
             else:
                 raise ValueError(f"不支持的进度条更新消息{msg}，进度条更新只接受数字、字符串或词典更新！")
             msg = pbar_q.get()
-            # print(msg)
 
     def send_data(data_iter, data_q, epoch, which):
         pbar.set_description(f'获取世代{epoch}/{n_epochs}的{which}数据')
@@ -298,11 +295,11 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
             n_data += 1
         data_q.put(None)
 
-    # 生成子进程用于创建网络、执行网络更新并记录数据
     # 搭建输出结果通信管道
     parent_conn, child_conn = ctx.Pipe(duplex=False)
     # 创建子线程进行训练和验证操作，并更新进度条
-    tv_subp = ctx.Process(target=train_valid_impl, args=(
+    from networks.trainer.__subprocess_impl import train_and_valid as tv_impl
+    tv_subp = ctx.Process(target=tv_impl, args=(
         trainer, 
         tdata_q, vdata_q, pbar_q, epoch_q,
         ctx, trainer.tdata_q_len, trainer.vdata_q_len,
@@ -332,7 +329,6 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
     for _ in range(3):
         net_and_histories.append(parent_conn.recv())
         pbar.set_description(f"已接收训练结果{_ + 1}/3")
-    # net_and_histories = [parent_conn.recv(), parent_conn.recv(), parent_conn.recv()]
     tv_subp.join()
     histories = []
     for net_or_history in net_and_histories:
@@ -351,6 +347,7 @@ def tv_multiprocessing_impl(trainer, train_iter, valid_iter):
     histories = list(sorted(histories, key=priority, reverse=True))
     pbar_update_thread.join()
     return histories
+
 
 def train_with_profiler(trainer, data_iter, log_path):
     # 提取训练器参数

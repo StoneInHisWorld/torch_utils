@@ -13,7 +13,7 @@ import torch
 from jsonref import JsonRef
 
 from config.init_cfg import init_predict_settings, init_train_settings, init_hps
-from networks.net_saver import Net_Saver
+from networks.net_saver import NetSaver
 from .experiment import New2Experiment
 from .func import pytools as ptools
 from .func import log_tools as ltools
@@ -182,7 +182,7 @@ class New2ControlPanel:
                 f'---------------------------'
             )
             # 创建网络保存对象
-            net_saver = Net_Saver(self.exp_no, self.__np, self["save_net"])
+            net_saver = NetSaver(self.exp_no, self.__np, self["save_net"])
             net_saver.compare = self.compare
             cur_exp = New2Experiment(
                 self.exp_no, self.dao_ds, self.net_type,
