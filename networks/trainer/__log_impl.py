@@ -2,6 +2,7 @@ import time
 
 import torch
 
+debug = False
 
 @torch.no_grad()
 def log_impl(
@@ -25,20 +26,21 @@ def log_impl(
 
 @torch.no_grad()
 def log_multiprocessing_impl(
-        epoch, which, log_q,
-        c_fns, c_names, l_names, metric_acc,
-        duration_acc, pbar_q
+        epoch, which,
+        c_fns, c_names, l_names,
+        metric_acc, duration_acc,
+        log_q, pbar_q
 ):
     """管理训练过程单个世代
     :param metric_acc: 主进程提供的数据累加器，只用于累加训练指标、损失值和样本数
     """
     n_data = 0
     data = log_q.get()
-    # print(f"线程拿到了第{epoch}世代的{n_data}批次的{which}数据")
     logged_stamp = time.perf_counter()
     while data is not None:
         """训练数据记录"""
-        preds, labels, ls_es, durations = data
+        n_batch, preds, labels, ls_es, durations = data
+        if debug: print(f"收到世代{epoch}批次{n_batch}的{which}前反向传播数据")
         n_samples = len(preds)
         # 记录和计算指标，记录损失
         # 计算指标并记录
@@ -46,16 +48,15 @@ def log_multiprocessing_impl(
         metric_acc.add(*metrics, *[ls * n_samples for ls in ls_es], n_samples)
         durations.append(time.perf_counter() - logged_stamp)
         duration_acc.add(*[d for d in durations], n_samples)
+        if debug: print(f"世代{epoch}批次{n_batch}的{which}指标数据计算完毕")
         logged_stamp = time.perf_counter()
         pbar_q.put({
             **{k: v.item() / n_samples for k, v in zip(l_names, ls_es)},
             **{k: v.item() / n_samples for k, v in zip(c_names, metrics)}
         })
         pbar_q.put(1)
-        # print(f"线程记录了第{epoch}世代的{n_data}批次的{which}数据")
         data = log_q.get()
         n_data += 1
-        # print(f"线程拿到了第{epoch}世代的{n_data}批次的{which}数据")
     pbar_q.put(f"世代{epoch}{which}记录完毕")
 
 def log_summarize(metric_acc, duration_acc, c_names, l_names, duration_names):
