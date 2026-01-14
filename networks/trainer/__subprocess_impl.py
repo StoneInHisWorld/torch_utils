@@ -9,6 +9,7 @@ from .__hook_impl import hook
 from .__log_impl import log_multiprocessing_impl, log_summarize
 from .. import net_predict_state
 
+
 debug = False
 
 
@@ -250,7 +251,7 @@ def __valid(trainer, training, vdata_q, vlog_q, pbar_q, vepoch_q):
         training.clear()
         pre_state = net.state
         net.state = net_predict_state
-        print("训练信号设置为False")
+        if debug: print("训练信号设置为False")
         pbar_q.put(f"世代{epoch}开始验证")
         n_batch = 0
         # 计时：数据获取
@@ -276,9 +277,10 @@ def __valid(trainer, training, vdata_q, vlog_q, pbar_q, vepoch_q):
             # 计时：获取下一批数据
             batch = vdata_q.get()
             n_batch += 1
+        # 验证完毕，通知训练线程可以开始训练了，并将网络状态复原
         training.set()
         net.state = pre_state
-        print("训练信号设置为True")
+        if debug: print("训练信号设置为True")
         # 通知记录进程，本世代的验证前向传播已经计算完毕
         vlog_q.put(None)
         pbar_q.put(f"世代{epoch}验证完毕")
