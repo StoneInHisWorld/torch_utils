@@ -116,7 +116,7 @@ class Pix2Pix_D(BasicNN):
         return sequence
 
     def __getPixelD(self, input_nc, ndf=64, norm_layer=nn.BatchNorm2d):
-        """构造一个1x1 PathGAN分辨器
+        """构造一个1x1 PixelGAN分辨器
 
         :param input_nc: 输入图片的通道数
         :param ndf: 末卷积层的过滤层数
