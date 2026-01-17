@@ -96,7 +96,7 @@ def init_hps(path):
     """
     default_hps = {
         "k": [10],
-        "epochs": [100],
+        "n_epochs": [100],
         "batch_size": [8],
         "ls_fn": ["mse"],
         "lr": [5e-5],
