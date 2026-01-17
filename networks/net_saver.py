@@ -8,7 +8,7 @@ from utils import ptools
 
 
 save_net_range = ['no', 'entire', 'state']
-debug = True
+debug = False
 
 
 class NetSaver:
@@ -29,10 +29,15 @@ class NetSaver:
             obj_to_be_saved, posfix = net.state_dict(), ".ptsd"
         else:
             raise ValueError(f"收到了不正确的网络保存格式{self.save_format}！")
-        torch.save(obj_to_be_saved, os.path.join(self.save_root,
-                                                 f'{self.exp_no}_epoch{n_epoch}{posfix}'))
-        if debug:
-            print(f"保存网络{os.path.join(self.save_root, f'{self.exp_no}_epoch{n_epoch}{posfix}')}")
+        save_path = os.path.join(self.save_root, f'{self.exp_no}_epoch{n_epoch}{posfix}')
+        # 删除上次保存的网络文件，用更好的网络文件代替
+        if hasattr(self, "last_save_path"):
+            os.remove(self.last_save_path)
+            if debug: print(f"删除网络{self.last_save_path}")
+        self.last_save_path = save_path
+        # 保存更好的网络文件
+        torch.save(obj_to_be_saved, save_path)
+        if debug: print(f"保存网络{save_path}")
 
     def compare_update_record(self, record):
         # 对结果进行比较，如果当前结果更好则进行接下来的保存，否则退出
