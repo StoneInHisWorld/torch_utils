@@ -5,7 +5,6 @@ from typing import Tuple
 import torch
 from tqdm import tqdm
 
-from networks import BasicNN
 from utils import History, Accumulator
 from utils import ptools
 from . import _prepare_train, _before_training, _after_training
@@ -14,8 +13,10 @@ from . import vduration_names, tduration_names
 from .__hook_impl import hook
 from .__log_impl import log_impl, log_summarize
 from .__profiler_impl import profiling_impl
+from .__subprocess_impl import receive_tv_results
 
 debug = False
+
 
 def __add_lr_to_history(net, history):
     lr_names, lrs = net.get_lr_groups()
@@ -64,16 +65,6 @@ def train(trainer, train_iter) -> History:
         for X, y in train_iter:
             net.train()
             preds, ls_es = net.forward_backward(X, y)
-            # with torch.no_grad():
-            #     num_examples = len(preds)
-            #     correct_s = []
-            #     for criterion in criterion_a:
-            #         correct = criterion(preds, y)
-            #         correct_s.append(correct)
-            #     metric.add(
-            #         *correct_s, *[ls * num_examples for ls in ls_es],
-            #         num_examples
-            #     )
             log_impl(preds, y, ls_es, criterion_a, metric)
             pbar.update(1)
         for scheduler in scheduler_s:
@@ -299,6 +290,7 @@ def tv_multiprocessing(trainer, train_iter, valid_iter):
     parent_conn, child_conn = ctx.Pipe(duplex=False)
     # 创建子线程进行训练和验证操作，并更新进度条
     from networks.trainer.__subprocess_impl import train_and_valid as tv_impl
+
     tv_subp = ctx.Process(target=tv_impl, args=(
         trainer, 
         tdata_q, vdata_q, pbar_q, epoch_q,
@@ -324,27 +316,29 @@ def tv_multiprocessing(trainer, train_iter, valid_iter):
         pbar.set_description(f'世代{epoch}/{n_epochs}数据获取完毕，等待网络消耗剩下的数据')
     # 使用None通知子进程数据已经获取完毕
     epoch_q.put(None)
-    # 处理随机顺序返回的结果
-    net_and_histories = []
-    for _ in range(3):
-        net_and_histories.append(parent_conn.recv())
-        pbar.set_description(f"已接收训练结果{_ + 1}/3")
+    # # 处理随机顺序返回的结果
+    # net_and_histories = []
+    # for _ in range(3):
+    #     net_and_histories.append(parent_conn.recv())
+    #     pbar.set_description(f"已接收训练结果{_ + 1}/3")
+    # tv_subp.join()
+    # histories = []
+    # for net_or_history in net_and_histories:
+    #     if isinstance(net_or_history, History):
+    #         histories.append(net_or_history)
+    #     elif isinstance(net_or_history, BasicNN):
+    #         trainer.module = net_or_history
+    #     else:
+    #         raise ValueError(f"多进程管道接收到了异常的数据类型为{type(net_or_history)}")
+    #
+    # def priority(history):
+    #     train_metric = sum(prop_name.startswith("train_") for prop_name in dir(history))
+    #     valid_metric = sum(prop_name.startswith("valid_") for prop_name in dir(history))
+    #     return train_metric * valid_metric
+    #
+    # histories = list(sorted(histories, key=priority, reverse=True))
+    histories = receive_tv_results(trainer, parent_conn)
     tv_subp.join()
-    histories = []
-    for net_or_history in net_and_histories:
-        if isinstance(net_or_history, History):
-            histories.append(net_or_history)
-        elif isinstance(net_or_history, BasicNN):
-            trainer.module = net_or_history
-        else:
-            raise ValueError(f"多进程管道接收到了异常的数据类型为{type(net_or_history)}")
-
-    def priority(history):
-        train_metric = sum(prop_name.startswith("train_") for prop_name in dir(history))
-        valid_metric = sum(prop_name.startswith("valid_") for prop_name in dir(history))
-        return train_metric * valid_metric
-
-    histories = list(sorted(histories, key=priority, reverse=True))
     pbar_update_thread.join()
     return histories
 

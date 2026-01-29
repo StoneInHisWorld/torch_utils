@@ -1,6 +1,8 @@
 import bisect
+import queue
 import threading
 import time
+from collections import OrderedDict
 
 from utils import ptools, History, Thread
 from utils.accumulator import Accumulator
@@ -9,9 +11,33 @@ from .__hook_impl import hook
 from .__log_impl import log_multiprocessing_impl, log_summarize
 from .. import net_predict_state
 
-
 debug = False
 
+
+def receive_tv_results(trainer, result_conn):
+    # 处理随机顺序返回的结果
+    net_state_and_histories = []
+    for _ in range(3):
+        net_state_and_histories.append(result_conn.recv())
+        if debug: print(f"已接收训练结果{_ + 1}/3")
+    # 整理历史记录对象
+    histories = []
+    for net_state_or_history in net_state_and_histories:
+        if isinstance(net_state_or_history, History):
+            histories.append(net_state_or_history)
+        elif isinstance(net_state_or_history, OrderedDict):
+            trainer.net_builder.usage = "idle"
+            trainer.module = trainer.net_builder.build(True)
+            trainer.module.load_state_dict(net_state_or_history)
+        else:
+            raise ValueError(f"多进程管道接收到了异常的数据类型为{type(net_state_or_history)}")
+
+    def priority(history):
+        train_metric = sum(prop_name.startswith("train_") for prop_name in dir(history))
+        valid_metric = sum(prop_name.startswith("valid_") for prop_name in dir(history))
+        return train_metric * valid_metric
+
+    return list(sorted(histories, key=priority, reverse=True))
 
 def __save_net(saver, net_q, save_msg_q):
     """使用bisect维护有序列表，无日志输出"""
@@ -68,7 +94,7 @@ def train_and_valid(trainer,
     lrlog_q = ctx.Queue()  # 学习率
     log_epoch_q = ctx.Queue()  # 日志世代更新队列
     vepoch_q = ctx.Queue()  # 验证世代更新队列
-    net_q = ctx.Queue()
+    net_q = queue.Queue()
     save_msg_q = ctx.Queue()
     # 设置网络是否进行训练事件
     training = threading.Event()
@@ -130,7 +156,10 @@ def train_and_valid(trainer,
         pbar_q.put(f"世代{epoch}训练完毕")
         # 验证并通知网络保存线程
         vepoch_q.put(epoch)
+        # net.requires_grad_(False)
+        # net.detach_()
         net_q.put((epoch, net))
+        # net.requires_grad_(True)
         if debug: print(f"世代{epoch}的网络参数已发送")
         # 等待下一世代开始信号
         epoch = epoch_q.get()
@@ -140,7 +169,7 @@ def train_and_valid(trainer,
     log_epoch_q.put(None)
     lrlog_q.put(None)
     vepoch_q.put(None)
-    result_conn.send(net)
+    result_conn.send(net.state_dict())
     # 等待所有进程、线程执行完毕
     log_subp.join()
     save_thread.join()
@@ -263,6 +292,7 @@ def __valid(trainer, training, vdata_q, vlog_q, pbar_q, vepoch_q):
             data_fetched_stamp = time.perf_counter()
             # 计时：前反向传播
             pred_s, ls_es = net.forward_backward(X, y)
+            if debug: print(f"世代{epoch}的{n_batch}批次的验证前向传播完成")
             predicted_stamp = time.perf_counter()
             # 计时：数据传递给记录进程，进行评价指标计算、历史记录更新（损失值、评价指标、学习率）
             durations = [
@@ -361,8 +391,7 @@ def __train_and_valid_log(
     vduration_acc = Accumulator(len(vduration_names) + 1)
     # 接收世代更新消息
     epoch = epoch_q.get()
-    if debug:
-        print(f"开始记录世代{epoch}")
+    if debug: print(f"开始记录世代{epoch}")
     while epoch is not None:
         # 创建训练数据记录线程
         tmetric_acc.reset()
@@ -382,11 +411,9 @@ def __train_and_valid_log(
         vlog_thread.start()
         # 等待数据记录完毕
         tlog_thread.join()
-        if debug:
-            print(f"世代{epoch}训练数据计算完毕")
+        if debug: print(f"世代{epoch}训练数据计算完毕")
         vlog_thread.join()
-        if debug:
-            print(f"世代{epoch}验证数据计算完毕")
+        if debug: print(f"世代{epoch}验证数据计算完毕")
         # 统计指标数据并加入到历史记录中
         tmetric_log, tduration_log = log_summarize(
             tmetric_acc, tduration_acc,
@@ -396,17 +423,6 @@ def __train_and_valid_log(
             vmetric_acc, vduration_acc,
             vc_names, vl_names, vduration_names
         )
-        # metric_history.add(
-        #     list(filter(lambda k: "_lrs" not in k, history_keys)), [
-        #         *[tmetric_acc[i] / tmetric_acc[-1] for i in range(len(tmetric_acc) - 1)],
-        #         *[vmetric_acc[i] / vmetric_acc[-1] for i in range(len(vmetric_acc) - 1)]
-        #     ]
-        # )
-        # duration_history.add(
-        #     tduration_names + vduration_names,
-        #     [tduration_acc[i] / tduration_acc[-1] for i in range(len(tduration_acc) - 1)] +
-        #     [vduration_acc[i] / vduration_acc[-1] for i in range(len(vduration_acc) - 1)]
-        # )
         metric_history.add(
             list(tmetric_log.keys()) + list(vmetric_log.keys()),
             list(tmetric_log.values()) + list(vmetric_log.values())
