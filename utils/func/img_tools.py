@@ -6,7 +6,6 @@ import numpy as np
 from PIL import Image as IMAGE, ImageDraw, ImageFont
 from PIL.Image import Image
 from tqdm import tqdm
-# from numba import jit
 
 
 from utils.func.pytools import check_para
@@ -370,7 +369,6 @@ def get_mean_LI_of_holes(images: np.ndarray,
     assert len(hole_poses) == len(hole_sizes), \
         f'挖孔位置需要和挖孔大小一一对应，提供了{len(hole_poses)}个位置但只收到了{len(hole_sizes)}个大小要求。'
 
-    # @jit
     def __dig_holes(image):
         """挖孔函数"""
         mean_LIs = []
