@@ -10,22 +10,19 @@ from . import _get_a_progress_bar, is_multiprocessing, test_duration_names
 from .__log_impl import log_impl, log_summarize
 from .__train_impl import train, train_and_valid, train_with_k_fold
 from .__train_impl import tv_multiprocessing as tv_multiprocessing
+from networks import net_predict_state
 
 
 def _prepare_test(fn):
     """
-    Decorator for training preparation and cleanup.
-    Allows user-defined operations before and after training.
-    Usage:
-        @prepare_train
-        def train_fn(...): ...
+    完成测试准备的装饰器，负责进行模型对象的检查以及进度条的设置
     """
 
     @functools.wraps(fn)
     def wrapper(trainer, test_iter):
         # 创建网络
         assert hasattr(trainer, 'module'), "训练器中不含模型对象，是否是尚未训练模型？"
-        trainer.net_builder.activate_model(trainer.module, True)
+        trainer.net_builder.activate_model(trainer.module, net_predict_state, True)
         # 设置进度条
         trainer.pbar = _get_a_progress_bar(len(test_iter), "正在进行测试准备", trainer.pbar_verbose)
         with torch.no_grad():
