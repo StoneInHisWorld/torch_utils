@@ -67,14 +67,9 @@ def _print_result(history, test_log):
 
 
 
-class New2Experiment:
+class Experiment:
     """实验对象负责神经网络训练的相关周边操作，计时、显存监控、日志编写、网络持久化、历史趋势图绘制及保存"""
 
-    # def __init__(
-    #         self, exp_no: int, datasource: type, net_type: type,
-    #         hyper_parameters: dict, config: dict, is_train: bool,
-    #         trained_net_p=None, save_net_fn=None
-    # ):
     def __init__(
             self, exp_no: int, datasource: type, net_type: type,
             hyper_parameters: dict, config: dict, is_train: bool,
@@ -94,12 +89,7 @@ class New2Experiment:
         :param metric_log_path: 日志所在路径
         :param net_path: 网络保存路径
         """
-        # self.__extra_lm = {}
         self.__hp = hyper_parameters
-        # self.__pp = plot_path
-        # self.__mlp = metric_log_path
-        # self.__plp = perf_log_path
-        # self.__np = net_path
         self.__exp_no = exp_no
         self.config = config
         self.dao_ds = datasource
@@ -272,7 +262,7 @@ class New2Experiment:
     def __build_net_builder(self):
         from networks import NetBuilder
 
-        return NetBuilder(self.net_type, self.nb_kwargs)
+        return NetBuilder(self.net_type, **self.nb_kwargs)
         # if self.is_train:
         #     return NetBuilder(self.net_type, self.nb_kwargs)
         # else:
@@ -358,13 +348,13 @@ class New2Experiment:
         self.net_builder.usage = "predict"
         self.test_histories = self.__trainer.test(test_iter)
 
-    def fine_tune(self, where, transit_fn=None, **dl_kwargs):
+    def fine_tune(self, transit_fn=None, **dl_kwargs):
         train_iter = self.data.to_dataloaders(True, transit_fn, **dl_kwargs)
-        # 处理网络的生成关键字参数
-        self.net_builder.init_kwargs['init_meth'] = "state"
-        net_init_kwargs = self.net_builder.init_kwargs.pop("init_kwargs", {})
-        net_init_kwargs.update(where=where)
-        self.net_builder.init_kwargs["init_kwargs"] = net_init_kwargs
+        # # 处理网络的生成关键字参数
+        # self.net_builder.init_kwargs['init_meth'] = "state"
+        # net_init_kwargs = self.net_builder.init_kwargs.pop("init_kwargs", {})
+        # net_init_kwargs.update(where=where)
+        # self.net_builder.init_kwargs["init_kwargs"] = net_init_kwargs
         self.net_builder.usage = "finetune"
         # trained_net = self.net_builder.build()
         # setattr(self.__trainer, "module", trained_net)

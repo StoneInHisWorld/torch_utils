@@ -14,7 +14,7 @@ from jsonref import JsonRef
 
 from config.init_cfg import init_predict_settings, init_train_settings, init_hps
 from networks.net_saver import NetSaver
-from .experiment import New2Experiment
+from .experiment import Experiment
 from .func import pytools as ptools
 from .func import log_tools as ltools
 
@@ -67,7 +67,7 @@ plot_history_range = ['plot', 'save', 'no']
 #         torch.save(obj_to_be_saved, os.path.join(save_path, f'{exp_no}{posfix}'))
 
 
-class New2ControlPanel:
+class ControlPanel:
     """控制台类负责读取、管理动态运行参数、超参数组合，以及实验对象的提供"""
 
     def __init__(self, datasource, net_type, cfg_root=os.path.join(".", "config"), is_train=True, compare=None):
@@ -184,7 +184,7 @@ class New2ControlPanel:
             # 创建网络保存对象
             net_saver = NetSaver(self.exp_no, self.__np, self["save_net"])
             net_saver.compare = self.compare
-            cur_exp = New2Experiment(
+            cur_exp = Experiment(
                 self.exp_no, self.dao_ds, self.net_type,
                 hyper_params, self.cfg_dict, self.is_train,
                 net_saver=net_saver
@@ -228,7 +228,7 @@ class New2ControlPanel:
             record["f_req_shp"] = get_req_sha(record['f_req_shp']) 
             record["l_req_shp"] = get_req_sha(record['l_req_shp'])
             # 判断是否需要加载数据集
-            cur_exp = New2Experiment(
+            cur_exp = Experiment(
                 exp_no, self.dao_ds, self.net_type,
                 record, self.cfg_dict, self.is_train, 
                 trained_net_p=os.path.join(self.__np, f"{exp_no}.ptsd")

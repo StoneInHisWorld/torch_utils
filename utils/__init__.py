@@ -7,6 +7,6 @@ from .func import log_tools as ltools
 from .func import pytools as ptools
 from .func import tensor_tools as tstools
 from .func import torch_tools as ttools
-from .ctrl_panel import New2ControlPanel
-from .experiment import New2Experiment
+from .ctrl_panel import ControlPanel
+from .experiment import Experiment
 
