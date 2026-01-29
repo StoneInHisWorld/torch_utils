@@ -1,8 +1,9 @@
 import torch
 from torch import nn
+from ...basic_nn import BasicNN
 
 
-class UNet256Genarator(nn.Sequential):
+class UNet256(BasicNN):
 
     def __init__(self, input_channel, out_channel,
                  base_channel=64, kernel_size=4, bn_momen=0.8, dropout=0.):
@@ -56,7 +57,7 @@ class UNet256Genarator(nn.Sequential):
             nn.Tanh()
         ]
         self.input_size = (input_channel, 256, 256)
-        super(UNet256Genarator, self).__init__(
+        super(UNet256, self).__init__(
             *self.contracting_path, *self.expanding_path, *self.output_path
         )
 

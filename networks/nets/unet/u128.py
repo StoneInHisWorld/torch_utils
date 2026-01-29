@@ -1,11 +1,14 @@
 import torch
 from torch import nn
+from ...basic_nn import BasicNN
 
 
-class UNet128Genarator(nn.Sequential):
+class UNet128(BasicNN):
 
-    def __init__(self, input_channel, out_channel,
-                 base_channel=64, kernel_size=4, bn_momen=0.8, dropout=0.):
+    def __init__(self,
+                 input_channel, out_channel,
+                 base_channel=64, kernel_size=4, bn_momen=0.8, dropout=0.,
+                 **kwargs):
         """适用于图片翻译、转换任务的学习模型。
 
         参考：
@@ -55,8 +58,9 @@ class UNet128Genarator(nn.Sequential):
             nn.Tanh()
         ]
         self.input_size = (input_channel, 128, 128)
-        super(UNet128Genarator, self).__init__(
-            *self.contracting_path, *self.expanding_path, *self.output_path
+        super(UNet128, self).__init__(
+            *self.contracting_path, *self.expanding_path, *self.output_path,
+            **kwargs
         )
 
     def forward(self, input):
@@ -73,12 +77,12 @@ class UNet128Genarator(nn.Sequential):
         for layer in self.output_path:
             input = layer(input)
         return input
-
-
-i_channels = 1
-ipt_shape = (128, 128)
-o_channels = 1
-net = UNet128Genarator(i_channels, o_channels)
-X = torch.randn(4, i_channels, *ipt_shape)
-out = net(X)
-print(out.shape)
+#
+#
+# i_channels = 1
+# ipt_shape = (128, 128)
+# o_channels = 1
+# net = UNet128Genarator(i_channels, o_channels)
+# X = torch.randn(4, i_channels, *ipt_shape)
+# out = net(X)
+# print(out.shape)

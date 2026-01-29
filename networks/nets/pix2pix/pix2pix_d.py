@@ -4,9 +4,9 @@ from typing import List, Tuple
 import torch
 from torch import nn
 
-from networks.basic_nn import BasicNN
 from layers.identity import Identity
-from networks.nets.pix2pix import _get_ls_fn, _get_optimizer, _get_lr_scheduler, _backward_impl
+from networks.basic_nn import BasicNN
+from networks.nets.pix2pix import _get_ls_fn, _get_optimizer, _get_lr_scheduler
 
 
 class Pix2Pix_D(BasicNN):

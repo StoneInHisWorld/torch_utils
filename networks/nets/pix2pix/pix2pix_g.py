@@ -1,5 +1,4 @@
 import functools
-from typing import List
 
 import torch
 from torch import nn
@@ -108,7 +107,7 @@ class Pix2Pix_G(BasicNN):
         else:
             return _get_ls_fn(True, self.__class__, *ls_args)
 
-    def _get_optimizer(self, o_args) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
+    def _get_optimizer(self, o_args):
         return _get_optimizer(self, *o_args)
 
     def _get_lr_scheduler(self, l_args):
