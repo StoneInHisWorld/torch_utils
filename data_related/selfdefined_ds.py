@@ -9,16 +9,9 @@ from data_related.datasets import LazyDataSet, DataSet
 from data_related.ds_operation import data_slicer
 from data_related.prediction_wrapper import PredictionWrapper
 from data_related.storage_dloader import StorageDataLoader
-# from utils import ControlPanel
 
 
 class SelfDefinedDataSet:
-
-    # # 数据基本信息
-    # f_channel = 1
-    # l_channel = 1
-    # f_mode = 'L'
-    # l_mode = '1'
 
     def __init__(self, module: type, is_train: bool, ds_config: dict, dl_config: dict):
         """自定义DAO数据集
@@ -79,9 +72,6 @@ class SelfDefinedDataSet:
         if not self.bulk_preprocess:
             print(f'已选择单例预处理，将会在数据读取后立即进行预处理。本数据集将不会存储原始数据！')
             assert is_train, '测试模式下不允许单例预处理，否则将无法访问原始数据'
-            # if ds_config['lazy']:
-            #     warnings.warn('懒加载和单例预处理冲突，优先选择单例预处理！')
-            #     ds_config['lazy'] = False
         else:
             if self._f_lazy or self._l_lazy:
                 print("懒加载与批量预处理冲突，将会在读取数据后立即进行预处理!")
@@ -200,109 +190,6 @@ class SelfDefinedDataSet:
     def refresh_preprocess(self):
         self.transformer.refresh()
 
-    # def _to_dataset(self, i_cfn, collate_fn) -> list[LazyDataSet] or list[DataSet]:
-    #     """根据自身模式，转换为合适的数据集，并对数据集进行预处理函数注册和执行。
-    #     对于懒加载数据集，需要提供read_fn()，签名须为：
-    #         read_fn(fea_index: Iterable[path], lb_index: Iterable[path]) -> Tuple[features: Iterable, labels: Iterable]
-    #         数据加载器会自动提供数据读取路径index
-    #     PS: 懒加载数据集生成方式不支持特征集或标签集的单独懒加载模式
-    #
-    #     :return: (训练数据集、测试数据集)，两者均为pytorch框架下数据集
-    #     """
-    #     # gen_datasets = []
-    #     # fl_pairs = [(self._train_f, self._train_l), (self._test_f, self._test_l)] if self.is_train \
-    #     #     else [(self._test_f, self._test_l)]
-    #     # # TODO：这里的懒加载数据集生成方式不支持特征集或标签集的单独懒加载模式
-    #     # if self._f_lazy or self._l_lazy:
-    #     #     gen_datasets += [
-    #     #         LazyDataSet(
-    #     #             f, l, i_cfn, self.reader, self.transformer, collate_fn
-    #     #         ) for f, l in fl_pairs
-    #     #     ]
-    #     #     train_preprocess_desc, test_preprocess_desc = \
-    #     #         '\r正在对训练数据索引集进行预处理……', '\r正在对测试数据索引集进行预处理……'
-    #     # else:
-    #     #     # 生成数据集
-    #     #     gen_datasets += [
-    #     #         DataSet(f, l, self.transformer, collate_fn, self.device)
-    #     #         for f, l in fl_pairs
-    #     #     ]
-    #     #     train_preprocess_desc, test_preprocess_desc = \
-    #     #         '\r正在对训练数据集进行预处理……', '\r正在对测试数据集进行预处理……'
-    #     # # 如进行批量预处理
-    #     # if self.bulk_preprocess:
-    #     #     for ds, desc in zip(gen_datasets, [train_preprocess_desc, test_preprocess_desc]):
-    #     #         print(desc, flush=True)
-    #     #         ds.preprocess()
-    #     # # return gen_datasets
-    #
-    #     def __get_a_dataset(f, l, is_train):
-    #         # TODO：这里的懒加载数据集生成方式不支持特征集或标签集的单独懒加载模式
-    #         if self._f_lazy or self._l_lazy:
-    #             ds = LazyDataSet(
-    #                 i_cfn, self.reader,
-    #                 f, l, self.transformer, collate_fn, is_train=is_train
-    #             )
-    #             desc = '训练数据索引集' if is_train else '测试数据索引集'
-    #         else:
-    #             # 生成数据集
-    #             ds = DataSet(f, l, self.transformer, collate_fn, is_train=is_train, device=self.device)
-    #             desc = '训练数据集' if is_train else '测试数据集'
-    #         if self.bulk_preprocess:
-    #             print(f"正在对{desc}进行预处理……", flush=True, end="")
-    #             ds.preprocess(desc)
-    #             print(f"\r{desc}预处理后长度为{len(ds)}")
-    #         return ds
-    #
-    #     test_ds = __get_a_dataset(self._test_f, self._test_l, False)
-    #     if self.is_train:
-    #         train_ds = __get_a_dataset(self._train_f, self._train_l, True)
-    #         return train_ds, test_ds
-    #     return test_ds
-
-    # def _to_dataset(self, i_cfn, collate_fn, transit_fn) -> list[LazyDataSet] or list[DataSet]:
-    #     """根据自身模式，转换为合适的数据集，并对数据集进行预处理函数注册和执行。
-    #     对于懒加载数据集，需要提供read_fn()，签名须为：
-    #         read_fn(fea_index: Iterable[path], lb_index: Iterable[path]) -> Tuple[features: Iterable, labels: Iterable]
-    #         数据加载器会自动提供数据读取路径index
-    #     PS: 懒加载数据集生成方式不支持特征集或标签集的单独懒加载模式
-    #
-    #     :return: (训练数据集、测试数据集)，两者均为pytorch框架下数据集
-    #     """
-    #     non_blocking = self.config['non_blocking']
-    #     share_memory = self.config['share_memory']
-    #     transit_kwargs = self.config['transit_kwargs']
-    #     device = self.config['device']
-    #     bulk_transit = self.config['bulk_transit']
-    #
-    #     def __get_a_dataset(f, l, is_train):
-    #         # TODO：这里的懒加载数据集生成方式不支持特征集或标签集的单独懒加载模式
-    #         if self._f_lazy or self._l_lazy:
-    #             raise NotImplementedError('懒加载模式还在维护当中')
-    #             # ds = LazyDataSet(
-    #             #     i_cfn, self.reader,
-    #             #     f, l, self.transformer, collate_fn, is_train=is_train
-    #             # )
-    #             # desc = '训练数据索引集' if is_train else '测试数据索引集'
-    #         else:
-    #             # 生成数据集
-    #             ds = DataSet(
-    #                 f, l, self.transformer, is_train, bulk_transit, transit_fn,
-    #                 non_blocking, share_memory, transit_kwargs, device, collate_fn
-    #             )
-    #             desc = '训练数据集' if is_train else '测试数据集'
-    #         if self.bulk_preprocess:
-    #             print(f"正在对{desc}进行预处理……", flush=True, end="")
-    #             ds.preprocess(desc)
-    #             print(f"\r{desc}预处理后长度为{len(ds)}")
-    #         return ds
-    #
-    #     test_ds = __get_a_dataset(self._test_f, self._test_l, False)
-    #     if self.is_train:
-    #         train_ds = __get_a_dataset(self._train_f, self._train_l, True)
-    #         return train_ds, test_ds
-    #     return test_ds
-
     def _to_dataset(self, is_train, transit_fn) -> list[LazyDataSet] or list[DataSet]:
         """根据自身模式，转换为合适的数据集，并对数据集进行预处理函数注册和执行。
         对于懒加载数据集，需要提供read_fn()，签名须为：
@@ -349,93 +236,6 @@ class SelfDefinedDataSet:
         else:
             return __get_a_dataset(self._test_f, self._test_l)
 
-    # def _to_dataset(self, transit_fn) -> list[LazyDataSet] or list[DataSet]:
-    #     """根据自身模式，转换为合适的数据集，并对数据集进行预处理函数注册和执行。
-    #     对于懒加载数据集，需要提供read_fn()，签名须为：
-    #         read_fn(fea_index: Iterable[path], lb_index: Iterable[path]) -> Tuple[features: Iterable, labels: Iterable]
-    #         数据加载器会自动提供数据读取路径index
-    #     PS: 懒加载数据集生成方式不支持特征集或标签集的单独懒加载模式
-    #
-    #     :return: (训练数据集、测试数据集)，两者均为pytorch框架下数据集
-    #     """
-    #     non_blocking = self.ds_config['non_blocking']
-    #     share_memory = self.ds_config['share_memory']
-    #     transit_kwargs = self.ds_config['transit_kwargs']
-    #     device = self.ds_config['device']
-    #     bulk_transit = self.ds_config['bulk_transit']
-    #
-    #     def __get_a_dataset(f, l, is_train):
-    #         # TODO：这里的懒加载数据集生成方式不支持特征集或标签集的单独懒加载模式
-    #         if self._f_lazy or self._l_lazy:
-    #             raise NotImplementedError('懒加载模式还在维护当中')
-    #             # ds = LazyDataSet(
-    #             #     i_cfn, self.reader,
-    #             #     f, l, self.transformer, collate_fn, is_train=is_train
-    #             # )
-    #             # desc = '训练数据索引集' if is_train else '测试数据索引集'
-    #         else:
-    #             # 生成数据集
-    #             ds = DataSet(
-    #                 f, l, self.transformer, is_train, bulk_transit, transit_fn,
-    #                 non_blocking, share_memory, transit_kwargs, device
-    #             )
-    #             desc = '训练数据集' if is_train else '测试数据集'
-    #         if self.bulk_preprocess:
-    #             print(f"正在对{desc}进行预处理……", flush=True, end="")
-    #             ds.preprocess(desc)
-    #             print(f"\r{desc}预处理后长度为{len(ds)}")
-    #         return ds
-    #
-    #     test_ds = __get_a_dataset(self._test_f, self._test_l, False)
-    #     if self.is_train:
-    #         train_ds = __get_a_dataset(self._train_f, self._train_l, True)
-    #         return train_ds, test_ds
-    #     return test_ds
-
-    # def to_dataloaders(self,
-    #                    k, batch_size, i_cfn=None, collate_fn=None,
-    #                    transit_fn: Callable = None, **dl_kwargs):
-    #     """将自定义数据集转化为数据集迭代器
-    #
-    #     Args:
-    #         k: 指定k折训练
-    #         batch_size: 指定训练批量大小
-    #         i_cfn: LazyDataSet所用索引整理函数
-    #         collate_fn: torch.utils.data.DataLoader所用数据整理函数
-    #         transit_fn: 数据迁移函数
-    #         **dl_kwargs: torch.utils.data.DataLoader所用关键字参数
-    #
-    #     Returns:
-    #         训练模式返回（训练数据迭代器，测试数据迭代器），测试模式返回测试数据迭代器
-    #     """
-    #     ret = []
-    #     if self.is_train:
-    #         train_ds, test_ds = self._to_dataset(i_cfn, collate_fn, transit_fn)
-    #         assert 'train_portion' in dl_kwargs.keys(), "DataLoader参数缺少训练验证比'train_portion'！"
-    #         train_portion = dl_kwargs.pop('train_portion')
-    #         assert 'sampler' not in dl_kwargs.keys(), "请不要为DataLoader定制sampler，框架会自动生成！"
-    #         # 使用k-fold机制
-    #         data_iter_generator = (
-    #             [
-    #                 # dso.to_loader(train_ds, batch_size, transit_fn, sampler=sampler, **dl_kwargs)
-    #                 train_ds.to_loader(batch_size, sampler=sampler, **dl_kwargs)
-    #                 for sampler in sampler_group
-    #             ]
-    #             for sampler_group in dso.split_data(train_ds, k, train_portion)
-    #         )  # 将抽取器遍历，构造加载器
-    #         ret.append(data_iter_generator)
-    #     else:
-    #         if 'train_portion' in dl_kwargs.keys():
-    #             warnings.warn("数据集的测试模式下train_portion参数将无效！")
-    #             dl_kwargs.pop('train_portion')
-    #         test_ds = self._to_dataset(i_cfn, collate_fn, transit_fn)
-    #     # 获取测试集数据迭代器
-    #     # test_iter = dso.to_loader(
-    #     #     test_ds, batch_size, transit_fn, **dl_kwargs
-    #     # )
-    #     test_iter = test_ds.to_loader(batch_size, **dl_kwargs)
-    #     return [*ret, test_iter]
-
     def to_dataloaders(self, is_train, transit_fn: Callable = None, **dl_kwargs):
         """将自定义数据集转化为数据集迭代器
 
@@ -475,47 +275,6 @@ class SelfDefinedDataSet:
             # 获取测试集数据迭代器
             return test_ds.to_loader(batch_size, **dl_kwargs)
 
-    # def to_dataloaders(self, transit_fn: Callable = None, **dl_kwargs):
-    #     """将自定义数据集转化为数据集迭代器
-    #
-    #     Args:
-    #         k: 指定k折训练
-    #         batch_size: 指定训练批量大小
-    #         i_cfn: LazyDataSet所用索引整理函数
-    #         collate_fn: torch.utils.data.DataLoader所用数据整理函数
-    #         transit_fn: 数据迁移函数
-    #         **dl_kwargs: torch.utils.data.DataLoader所用关键字参数
-    #
-    #     Returns:
-    #         训练模式返回（训练数据迭代器，测试数据迭代器），测试模式返回测试数据迭代器
-    #     """
-    #     ret = []
-    #     # 将框架的固定配置参数提取出来，合并到dl_kwargs中
-    #     batch_size = self.dl_config.pop('batch_size')
-    #     k = self.dl_config.pop('k')
-    #     dl_kwargs.update(self.dl_config)
-    #     # 根据训练模式进行数据集创建
-    #     if self.is_train:
-    #         train_portion = dl_kwargs.pop('train_portion')
-    #         train_ds, test_ds = self._to_dataset(transit_fn)
-    #         # assert 'train_portion' in dl_kwargs.keys(), "DataLoader参数缺少训练验证比'train_portion'！"
-    #         assert 'sampler' not in dl_kwargs.keys(), "请不要为DataLoader定制sampler，框架会自动生成！"
-    #         # 使用k-fold机制
-    #         data_iter_generator = (
-    #             [train_ds.to_loader(batch_size, sampler=sampler, **dl_kwargs)
-    #              for sampler in sampler_group]
-    #             for sampler_group in dso.split_data(train_ds, k, train_portion)
-    #         )  # 将抽取器遍历，构造加载器
-    #         ret.append(data_iter_generator)
-    #     else:
-    #         if 'train_portion' in dl_kwargs.keys():
-    #             warnings.warn("数据集的测试模式下train_portion参数将无效！")
-    #             dl_kwargs.pop('train_portion')
-    #         test_ds = self._to_dataset(transit_fn)
-    #     # 获取测试集数据迭代器
-    #     test_iter = test_ds.to_loader(batch_size, **dl_kwargs)
-    #     return [*ret, test_iter]
-
     @abstractmethod
     def _get_transformer(self) -> DataTransformer:
         """告诉数据集，数据预处理的数据转换器
@@ -526,8 +285,15 @@ class SelfDefinedDataSet:
 
     @abstractmethod
     def _get_reader(self) -> StorageDataLoader:
-        """告诉数据集，根据索引进行存储访问的数据读取器
-        该数据处理器为StorageDataLoader的子类
+        """告诉数据集，根据索引进行存储访问的数据读取器应该怎么创建。
+        该函数需要返回一个临时函数，调用该函数会返回一个数据读取器，该数据处理器为StorageDataLoader的子类。
+        注意，框架在调用该函数时不会给出任何参数
+        返回的函数对象签名需要为：def construct() -> StorageDataLoader
+        最佳重载方式为：
+        def _get_reader(self) -> callable:
+            return functools.partial(
+                Your_Reader, *your_reader_args, **your_reader_kwargs
+            )
 
         :return: 返回创建数据读取器的方法
         """
@@ -548,17 +314,57 @@ class SelfDefinedDataSet:
 
     @property
     def train_len(self):
-        """数据集长度
-        :return: 训练集长度，测试集长度
         """
-        if self.is_train:
-            return len(self._train_f)
-        else:
-            return 0
+        训练数据集长度，默认由self._train_f的长度len()给出。
+
+        :return: 训练集长度
+        """
+        assert self.is_train, "数据集处于测试模式，未加载训练数据集"
+        return len(self._train_f)
+
+    @property
+    def train_f_shp(self):
+        """
+        训练数据集样本形状，默认由self._train_f的形状给出。
+
+        :return: 训练特征集样本形状
+        """
+        assert self.is_train, "数据集处于测试模式，未加载训练数据集"
+        return dso.judge_shape(self._train_f)
+
+    @property
+    def train_l_shp(self):
+        """
+        训练数据集样本形状，默认由self._train_f的形状给出。
+
+        :return: 训练标签集样本形状
+        """
+        assert self.is_train, "数据集处于测试模式，未加载训练数据集"
+        return dso.judge_shape(self._test_l)
 
     @property
     def test_len(self):
-        """数据集长度
+        """
+        测试数据集长度，默认由self._test_f的长度给出。
+
         :return: 测试集长度
         """
         return len(self._test_f)
+
+    @property
+    def test_f_shp(self):
+        """
+        测试数据集样本形状，默认由self._test_f的形状给出。
+
+        :return: 测试特征集样本形状
+        """
+        return dso.judge_shape(self._test_f)
+
+    @property
+    def test_l_shp(self):
+        """
+        测试标签集样本形状，默认由self._test_l的形状给出。
+
+        :return: 测试标签集样本形状
+        """
+        return dso.judge_shape(self._test_l)
