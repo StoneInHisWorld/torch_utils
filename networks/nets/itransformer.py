@@ -7,8 +7,6 @@ from torch import nn
 import torch.nn.functional as F
 
 from networks import BasicNN
-from layers.add_positionEmbeddings import AddPositionEmbs
-from layers import KVCacheTransformerBlock, auto_regression
 
 
 def SEQ_ENTROLOSS(pred, y, unwrapped_entroloss):
@@ -36,6 +34,9 @@ class ITransformer(BasicNN):
             auto_regression: bool = True, pos_emb='original', tran_kwargs=None,
             **kwargs
     ):
+        from layers.add_positionEmbeddings import AddPositionEmbs
+        from layers import KVCacheTransformerBlock
+
         if tran_kwargs is None:
             tran_kwargs = {}
         self.pixel_range = max(in_pixel_range, out_pixel_range)
@@ -73,6 +74,8 @@ class ITransformer(BasicNN):
         Returns:
 
         """
+        from layers import KVCacheTransformerBlock, auto_regression
+
         if self.auto_reg and not torch.is_grad_enabled():
             inputs = self.pos_embedding(self.f_embedding(inputs))
             b, _, d = inputs.shape
