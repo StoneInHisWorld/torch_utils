@@ -5,7 +5,7 @@ from torch import nn as nn
 from torch.nn import init as init
 
 loss_es = ["l1", "entro", "mse", "huber", "ssim", "pcc", 'gan']
-init_funcs = ["normal", "xavier", "zero", "state", 'constant', 'trunc_norm', "kaiming_normal"]
+init_funcs = ["normal", "xavier_uni", "xavier_norm", "zero", "state", 'constant', 'trunc_norm', "kaiming_normal"]
 optimizers = ["sgd", "asgd", "adagrad", "adadelta", "rmsprop", "adam", "adamax"]
 activations = ['sigmoid', 'relu', 'lrelu', 'tanh']
 lr_schedulers = ["lambda", "step", 'constant', 'multistep', 'cosine', 'plateau']
@@ -115,8 +115,10 @@ def init_wb(func_str, **kwargs):
         mean, std = kwargs.pop('mean', 0), kwargs.pop('std', 1)
         w_init = functools.partial(init.normal_, mean=mean, std=std)
         b_init = functools.partial(init.normal_, mean=mean, std=std)
-    elif func_str == "xavier":
+    elif func_str == "xavier_uni":
         w_init, b_init = init.xavier_uniform_, init.zeros_
+    elif func_str == "xavier_norm":
+        w_init, b_init = init.xavier_normal, init.zeros_
     elif func_str == "zero":
         w_init, b_init = init.zeros_, init.zeros_
     elif func_str == 'constant':
