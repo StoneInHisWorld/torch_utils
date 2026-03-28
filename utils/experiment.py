@@ -139,11 +139,6 @@ class Experiment:
             torch.cuda.memory._record_memory_history(cuda_memrecord)
         elif device.type == 'cpu' and cuda_memrecord:
             warnings.warn(f'运行设备为{device}，不支持显存监控！请使用支持CUDA的处理机，或者设置cuda_memrecord为false')
-        # # 创建暴露的对象
-        # self.data = self.__build_dao_ds(self.__hp)
-        # self.net_builder = self.__build_net_builder()
-        # self.trainer = self.__build_trainer(self.net_builder, self.data.get_criterion_a(), self.t_kwargs)
-        # return self.data, self.net_builder, self.__hp
         
     def __predict_enter__(self):
         """预测对象的上下文管理进入方法
@@ -385,6 +380,22 @@ class Experiment:
 
     def update_hp(self, **kwargs):
         self.__hp.update(**kwargs)
+
+    @property
+    def netbuilder_kwargs(self):
+        return self.config["nb_kwargs"]
+
+    @property
+    def trainer_kwargs(self):
+        return self.config["t_kwargs"]
+
+    @property
+    def dataset_kwargs(self):
+        return self.config["ds_kwargs"]
+
+    @property
+    def dataloader_kwargs(self):
+        return self.config["dl_kwargs"]
     
     def __getitem__(self, item):
         return self.__hp[item]
