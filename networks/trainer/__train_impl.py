@@ -98,14 +98,12 @@ def train_and_valid(trainer, train_iter, valid_iter):
     # 提取训练器参数
     net = trainer.module
     criterion_a = trainer.criterion_a
-    # n_epochs = trainer.hps['epochs']
     # 损失项
     l_names = [f'train_{item}' for item in net.train_ls_names]
     # 评价项
     c_names = [f'train_{ptools.get_computer_name(criterion)}' for criterion in criterion_a]
     # 学习率项
     lr_names = [f'{lr}_lrs' for lr in net.lr_names]
-    # duration_names = ["duration_train_data_fetch", "duration_for_back_ward", "duration_train_log"]
     duration_names = tduration_names
     # 记录对象
     metric_history = History(*(c_names + l_names + lr_names))

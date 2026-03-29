@@ -46,7 +46,6 @@ class SelfDefinedDataSet:
         assert is_train or ds_config['bulk_preprocess'], "测试模式下不允许单例预处理，否则将无法访问原始数据"
         self.bulk_preprocess = ds_config['bulk_preprocess']
         shuffle = ds_config['shuffle']
-        # which = config['which_dataset']
         self.device = ds_config['device']
         # 判断图片指定形状
         self.f_req_shp = tuple(ds_config['f_req_shp']) if ds_config['f_req_shp'] else None
