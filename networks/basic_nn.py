@@ -275,12 +275,20 @@ class BasicNN(nn.Sequential):
             bnn.deactivate()
 
     @property
+    def device(self):
+        return self._device
+
+    @property
     def state(self):
         return self.__state
 
     @state.setter
     def state(self, usage):
         assert usage in net_states, f"不识别的网络状态指示{usage}！支持的网络状态包括：{usage}"
+        # 将所有子模块（除了自身）设置为usage
+        bnn_s = list(filter(lambda m: isinstance(m, BasicNN), reversed(list(self.modules()))))[:-1]
+        for bnn in bnn_s:
+            bnn.state = usage
         self.__state = usage
 
     def __str__(self):
