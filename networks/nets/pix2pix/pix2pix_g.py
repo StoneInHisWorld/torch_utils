@@ -98,19 +98,20 @@ class Pix2Pix_G(BasicNN):
         else:
             raise NotImplementedError(f'不支持的生成器版本{version}，支持的生成器版本包括{supported}')
         assert "input_size" not in kwargs.keys(), f"{self.__class__.__name__}不支持赋值输入大小！"
-        super(Pix2Pix_G, self).__init__(model, device=device, input_size=model.input_size, **kwargs)
+        super(Pix2Pix_G, self).__init__(model, device=device, input_size=model.input_size[1:],
+                                        **kwargs)
 
-    def _get_ls_fn(self, ls_args):
+    def _get_ls_fn(self, *ls_args):
         if hasattr(self, "train_ls_fn_s"):
             # 如果本网络已经指定了训练损失函数，则说明此时赋予的是测试损失函数
             return _get_ls_fn(False, self.__class__, *ls_args)
         else:
             return _get_ls_fn(True, self.__class__, *ls_args)
 
-    def _get_optimizer(self, o_args):
+    def _get_optimizer(self, *o_args):
         return _get_optimizer(self, *o_args)
 
-    def _get_lr_scheduler(self, l_args):
+    def _get_lr_scheduler(self, *l_args):
         return _get_lr_scheduler(self.__class__, self.optimizer_s[0], *l_args)
 
     def _forward_impl(self, X, y):
