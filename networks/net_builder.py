@@ -199,7 +199,9 @@ class NetBuilder:
             input_size = net.input_size
             if input_size:
                 try:
-                    summary(net, input_size=(self.config['batch_size'], *input_size), device=net.device)
+                    # 设置输入参数为(batch_size, 要求维度)
+                    # BasicNN的要求维度格式为（-1, *input_size），“-1”代表批量大小维
+                    summary(net, input_size=input_size[1:], batch_size=self.config['batch_size'], device=net.device)
                     return
                 except Exception as e:
                     warnings.warn(f"打印网络时遇到错误：{e}，只显示网络结构！")
