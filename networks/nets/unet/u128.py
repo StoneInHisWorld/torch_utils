@@ -57,10 +57,9 @@ class UNet128(BasicNN):
             nn.Conv2d(base_channel, out_channel, kernel_size=kernel_size + 1, stride=1, padding=2),
             nn.Tanh()
         ]
-        self.input_size = (input_channel, 128, 128)
         super(UNet128, self).__init__(
             *self.contracting_path, *self.expanding_path, *self.output_path,
-            **kwargs
+            input_size=(input_channel, 128, 128), **kwargs
         )
 
     def forward(self, input):

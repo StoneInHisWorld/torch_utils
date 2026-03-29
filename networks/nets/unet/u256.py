@@ -6,7 +6,8 @@ from ...basic_nn import BasicNN
 class UNet256(BasicNN):
 
     def __init__(self, input_channel, out_channel,
-                 base_channel=64, kernel_size=4, bn_momen=0.8, dropout=0.):
+                 base_channel=64, kernel_size=4, bn_momen=0.8, dropout=0.,
+                 **kwargs):
         """
         适用于图片翻译、转换任务的学习模型。
 
@@ -56,9 +57,9 @@ class UNet256(BasicNN):
             nn.Conv2d(base_channel, out_channel, kernel_size=kernel_size + 1, stride=1, padding=2),
             nn.Tanh()
         ]
-        self.input_size = (input_channel, 256, 256)
         super(UNet256, self).__init__(
-            *self.contracting_path, *self.expanding_path, *self.output_path
+            *self.contracting_path, *self.expanding_path, *self.output_path,
+            input_size=(input_channel, 256, 256), **kwargs
         )
 
     def forward(self, input):
