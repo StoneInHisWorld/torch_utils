@@ -249,8 +249,12 @@ class Experiment:
         pos_only_args, pos_or_kwargs, kwargs_only, _ = ptools.get_signature(self.dao_ds)
         # args = [hyper_params.pop(poa) for poa in pos_only_args + pos_or_kwargs]
         # kwargs = {ko: hyper_params.pop(ko) for ko in kwargs_only}
-        args = [hyper_params[poa] for poa in pos_only_args + pos_or_kwargs]
-        kwargs = {ko: hyper_params[ko] for ko in kwargs_only}
+        try:
+            args = [hyper_params[poa] for poa in pos_only_args + pos_or_kwargs]
+            kwargs = {ko: hyper_params[ko] for ko in kwargs_only}
+        except KeyError as e:
+            raise KeyError(f"自定义数据集找不到{self.dao_ds.__name__}的超参数{e.args[0]}，"
+                           f"请在config/{self.net_type.__name__.lower()}/hyper_param_s.json下添加该超参数！")
         return self.dao_ds(*args, **kwargs, module=self.net_type, is_train=self.is_train,
                            ds_config=self.ds_config, dl_config=self.dl_config)
 
