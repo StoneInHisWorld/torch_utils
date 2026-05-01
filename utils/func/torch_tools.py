@@ -12,6 +12,15 @@ lr_schedulers = ["lambda", "step", 'constant', 'multistep', 'cosine', 'plateau']
 
 
 def get_optimizer(net: torch.nn.Module, optim_str, lr, w_decay, **kwargs):
+    """根据字符串标识创建并返回对应的 PyTorch 优化器。
+
+    :param net: 需要被优化的网络模块。
+    :param optim_str: 优化器名称字符串。
+    :param lr: 学习率。
+    :param w_decay: 权重衰减系数。
+    :param kwargs: 传递给优化器构造函数的其他关键字参数。
+    :return: 已构造完成的 PyTorch 优化器实例。
+    """
     if optim_str == "asgd":
         # 使用随机平均梯度下降优化器
         return torch.optim.ASGD(
