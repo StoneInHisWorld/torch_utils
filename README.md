@@ -5,6 +5,11 @@
 ## 更新日志
 ### _v0.5_（即将推出）
 1. 添加了`ResNet50`以及`VisionTransformer`
+2. 强化网络构建与状态管理：将网络状态收敛到 `net_state` 体系，`net_builder` 负责模块初始化，并支持按指定 `net_state` 构建网络。
+3. 增加设备与并发相关能力：新增 `device` 属性，支持对子模块递归切换状态，并改进多进程/多线程场景下的状态与队列处理。
+4. 完善训练元信息：重构 `train_len` 逻辑，补充训练/测试阶段的数据形状属性，提升训练过程可观测性。
+5. 优化初始化与接口：区分 `xavier_uniform` 与 `xavier_normal` 初始化路径，`_get_fn()` 支持可变参数，修复 `input_size` 相关问题。
+6. 规范命名并提升可维护性：统一部分模块命名（如 U-Net 生成器命名），持续清理无用代码、完善 pydoc、优化导入，并修复 `torchsummary` 与 JSON 缺参提示等稳定性问题。
 ### _v0.4_
 1. `settings.json`文件现在包含了训练器、自定义数据集以及数据加载器的关键字参数，`checkpoint`以及`hook`功能都将在这里进行开关。
 2. 完善了多线程数据读取、多线程数据预处理、数据集单例预处理、懒加载数据集以及这些功能的组合使用。
@@ -135,6 +140,13 @@ def transit_fn(batch, **kwargs):
 此文件用于为训练过程指定超参数。
 5. `README.md`  
 编辑项目说明。  
+
+## 子模块说明索引
+- `config`：维护环境依赖与运行配置约定，提供环境同步方式与配置说明。见 [config/README.md](config/README.md)。
+- `data_related`：负责数据读取、预处理、数据集封装、批次加载与数据集级操作。见 [data_related/README.md](data_related/README.md)。
+- `networks`：负责网络结构定义、构建初始化、训练编排与模型保存策略。见 [networks/README.md](networks/README.md)。
+- `utils`：提供实验管理、日志并发与图像/张量/PyTorch 辅助工具函数。见 [utils/README.md](utils/README.md)。
+- `examples`：提供最小可运行工程模板与落地参考流程。见 [examples/README.md](examples/README.md)。
 
 ## settings.json
 `settings.json`包括了所有目前支持的运行动态参数，以及训练器、自定义数据集和数据加载器的关键字参数。

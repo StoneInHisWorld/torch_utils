@@ -1,155 +1,13 @@
 import functools
-from typing import List
 
 import torch
 from torch import nn
 
 from layers.resnet_blocks import ResnetBlock
 from networks.basic_nn import BasicNN
-from networks.nets.pix2pix import _get_ls_fn, _get_lr_scheduler, _get_optimizer, _backward_impl
-
-
-class UNet128Genarator(nn.Sequential):
-
-    def __init__(self, input_channel, out_channel,
-                 base_channel=64, kernel_size=4, bn_momen=0.8, dropout=0.):
-        """适用于图片翻译、转换任务的学习模型。
-
-        参考：
-
-        [1] 王志远. 基于深度学习的散斑光场信息恢复[D]. 厦门：华侨大学，2023
-
-        [2] Phillip Isola, Jun-Yan Zhu, Tinghui Zhou and Alexei A. Efros. Image-to-Image Translation with Conditional Adversarial Networks[J]. CVF, 2017. 1125, 1134
-        :param input_channel: 输入数据通道，一般是图片通道数。
-        :param out_channel: 输出特征通道数，一般是图片通道数。
-        :param base_channel: 决定网络复杂度的基础通道数，需为大于0的整数。数值越高决定提取的特征维度越高。
-        :param kernel_size: 卷积层使用的感受野大小
-        :param bn_momen: 批量标准化层的动量超参数
-        """
-        cp_layer = lambda i, o: nn.Sequential(
-            nn.LeakyReLU(0.2, True),
-            nn.Conv2d(i, o, kernel_size=kernel_size, stride=2, padding=1),
-            nn.BatchNorm2d(o, momentum=bn_momen)
-        )
-        ep_layer = lambda i, o: nn.Sequential(
-            nn.ReLU(True),
-            nn.ConvTranspose2d(i, o, kernel_size=kernel_size, stride=2, padding=1),
-            nn.BatchNorm2d(o, momentum=bn_momen),
-            nn.Dropout(dropout, True)
-        )
-        base_channel = int(base_channel)
-        self.contracting_path = [
-            nn.Conv2d(input_channel, base_channel, kernel_size=kernel_size, stride=2, padding=1),  # 128^2 -> 64^2
-            cp_layer(base_channel, base_channel * 2),  # 64^2 -> 32^2
-            cp_layer(base_channel * 2, base_channel * 4),  # 32^2 -> 16^2
-            cp_layer(base_channel * 4, base_channel * 8),  # 16^2 -> 8^2
-            cp_layer(base_channel * 8, base_channel * 8),  # 8^2 -> 4^2
-            cp_layer(base_channel * 8, base_channel * 8),  # 4^2 -> 2^2
-            cp_layer(base_channel * 8, base_channel * 8),  # 2^2 -> 1^2
-        ]
-        self.expanding_path = [
-            ep_layer(base_channel * 8, base_channel * 8),  # 1^2 -> 2^2
-            ep_layer(base_channel * 16, base_channel * 8),  # 2^2 -> 4^2
-            ep_layer(base_channel * 16, base_channel * 8),  # 4^2 -> 8^2
-            ep_layer(base_channel * 16, base_channel * 4),  # 8^2 -> 16^2
-            ep_layer(base_channel * 8, base_channel * 2),  # 16^2 -> 32^2
-            ep_layer(base_channel * 4, base_channel),  # 32^2 -> 64^2
-        ]
-        self.output_path = [
-            ep_layer(base_channel * 2, base_channel),  # 64^2 -> 128^2
-            nn.ReLU(True),
-            nn.Conv2d(base_channel, out_channel, kernel_size=kernel_size + 1, stride=1, padding=2),
-            nn.Tanh()
-        ]
-        self.input_size = (input_channel, 128, 128)
-        super(UNet128Genarator, self).__init__(
-            *self.contracting_path, *self.expanding_path, *self.output_path
-        )
-
-    def forward(self, input):
-        cp_results = []
-        for layer in self.contracting_path:
-            input = layer(input)
-            cp_results.append(input)
-        cp_results = reversed(cp_results[:-1])  # 需要去除掉最后一个结果
-        for layer in self.expanding_path:
-            input = layer(input)
-            input = torch.hstack((input, next(cp_results)))
-        for layer in self.output_path:
-            input = layer(input)
-        return input
-
-
-class UNet256Genarator(nn.Sequential):
-
-    def __init__(self, input_channel, out_channel,
-                 base_channel=64, kernel_size=4, bn_momen=0.8, dropout=0.):
-        """
-        适用于图片翻译、转换任务的学习模型。
-
-        参考：
-
-        [1] 王志远. 基于深度学习的散斑光场信息恢复[D]. 厦门：华侨大学，2023
-
-        [2] Phillip Isola, Jun-Yan Zhu, Tinghui Zhou and Alexei A. Efros. Image-to-Image Translation with Conditional Adversarial Networks[J]. CVF, 2017. 1125, 1134
-        :param input_channel: 输入数据通道，一般是图片通道数。
-        :param out_channel: 输出特征通道数，一般是图片通道数。
-        :param base_channel: 决定网络复杂度的基础通道数，需为大于0的整数。数值越高决定提取的特征维度越高。
-        :param kernel_size: 卷积层使用的感受野大小
-        :param bn_momen: 批量标准化层的动量超参数
-        """
-        cp_layer = lambda i, o: nn.Sequential(
-            nn.LeakyReLU(0.2, True),
-            nn.Conv2d(i, o, kernel_size=kernel_size, stride=2, padding=1),
-            nn.BatchNorm2d(o, momentum=bn_momen)
-        )
-        ep_layer = lambda i, o: nn.Sequential(
-            nn.ReLU(True),
-            nn.ConvTranspose2d(i, o, kernel_size=kernel_size, stride=2, padding=1),
-            nn.BatchNorm2d(o, momentum=bn_momen),
-            nn.Dropout(dropout, True),
-        )
-        base_channel = int(base_channel)
-        self.contracting_path = [
-            nn.Conv2d(input_channel, base_channel, kernel_size=kernel_size, stride=2, padding=1),  # 256^2 -> 128^2
-            cp_layer(base_channel, base_channel * 2),  # 128^2 -> 64^2
-            cp_layer(base_channel * 2, base_channel * 4),  # 64^2 -> 32^2
-            cp_layer(base_channel * 4, base_channel * 8),  # 32^2 -> 16^2
-            cp_layer(base_channel * 8, base_channel * 8),  # 16^2 -> 8^2
-            cp_layer(base_channel * 8, base_channel * 8),  # 8^2 -> 4^2
-            cp_layer(base_channel * 8, base_channel * 8),  # 4^2 -> 2^2
-        ]
-        self.expanding_path = [
-            ep_layer(base_channel * 8, base_channel * 8),  # 2^2 -> 4^2
-            ep_layer(base_channel * 16, base_channel * 8),  # 4^2 -> 8^2
-            ep_layer(base_channel * 16, base_channel * 8),  # 8^2 -> 16^2
-            ep_layer(base_channel * 16, base_channel * 4),  # 16^2 -> 32^2
-            ep_layer(base_channel * 8, base_channel * 2),  # 32^2 -> 64^2
-            ep_layer(base_channel * 4, base_channel),  # 64^2 -> 128^2
-        ]
-        self.output_path = [
-            ep_layer(base_channel * 2, base_channel),  # 128^2 -> 256^2
-            nn.ReLU(True),
-            nn.Conv2d(base_channel, out_channel, kernel_size=kernel_size + 1, stride=1, padding=2),
-            nn.Tanh()
-        ]
-        self.input_size = (input_channel, 256, 256)
-        super(UNet256Genarator, self).__init__(
-            *self.contracting_path, *self.expanding_path, *self.output_path
-        )
-
-    def forward(self, input):
-        cp_results = []
-        for layer in self.contracting_path:
-            input = layer(input)
-            cp_results.append(input)
-        cp_results = reversed(cp_results[:-1])  # 需要去除掉最后一个结果
-        for layer in self.expanding_path:
-            input = layer(input)
-            input = torch.hstack((input, next(cp_results)))
-        for layer in self.output_path:
-            input = layer(input)
-        return input
+from networks.nets.pix2pix import _get_ls_fn, _get_lr_scheduler, _get_optimizer
+from networks.nets.unet import UNet128 as UNet128Genarator
+from networks.nets.unet import UNet256 as UNet256Genarator
 
 
 class ResNetGenerator(nn.Sequential):
@@ -215,7 +73,7 @@ class ResNetGenerator(nn.Sequential):
 
 class Pix2Pix_G(BasicNN):
 
-    def __init__(self, version='u256', *args, **kwargs):
+    def __init__(self, version='u256', *layers, **kwargs):
         """适用于图片翻译、转换任务的学习模型。
         参考：
 
@@ -224,35 +82,36 @@ class Pix2Pix_G(BasicNN):
         [2] Phillip Isola, Jun-Yan Zhu, Tinghui Zhou and Alexei A. Efros. Image-to-Image Translation with Conditional Adversarial Networks[J]. CVF, 2017. 1125, 1134
         :param version: 指定pix2pix生成器版本的字符串。
             支持['u256', 'r9', 'u128']，要求的图片大小分别为[(256, 256), (256, 256), (128, 128)]
-        :param args: 参见各个生成器的位置参数
+        :param layers: 参见各个生成器的位置参数
             包括UNet256Generator、UNet128Generator、ResNetGenerator
         :param kwargs: 参见各个生成器的关键字参数
         """
         supported = ['u256', 'r9', 'u128']
         device = kwargs.pop("device")
         if version == 'u256':
-            model = UNet256Genarator(*args, **kwargs)
+            model = UNet256Genarator(*layers, **kwargs)
         elif version == 'u128':
-            model = UNet128Genarator(*args, **kwargs)
+            model = UNet128Genarator(*layers, **kwargs)
         elif version == 'r9':
             kwargs['n_blocks'] = 9
-            model = ResNetGenerator(*args, **kwargs)
+            model = ResNetGenerator(*layers, **kwargs)
         else:
             raise NotImplementedError(f'不支持的生成器版本{version}，支持的生成器版本包括{supported}')
         assert "input_size" not in kwargs.keys(), f"{self.__class__.__name__}不支持赋值输入大小！"
-        super(Pix2Pix_G, self).__init__(model, device=device, input_size=model.input_size, **kwargs)
+        super(Pix2Pix_G, self).__init__(model, device=device, input_size=model.input_size[1:],
+                                        **kwargs)
 
-    def _get_ls_fn(self, ls_args):
+    def _get_ls_fn(self, *ls_args):
         if hasattr(self, "train_ls_fn_s"):
             # 如果本网络已经指定了训练损失函数，则说明此时赋予的是测试损失函数
             return _get_ls_fn(False, self.__class__, *ls_args)
         else:
             return _get_ls_fn(True, self.__class__, *ls_args)
 
-    def _get_optimizer(self, o_args) -> torch.optim.Optimizer or List[torch.optim.Optimizer]:
+    def _get_optimizer(self, *o_args):
         return _get_optimizer(self, *o_args)
 
-    def _get_lr_scheduler(self, l_args):
+    def _get_lr_scheduler(self, *l_args):
         return _get_lr_scheduler(self.__class__, self.optimizer_s[0], *l_args)
 
     def _forward_impl(self, X, y):

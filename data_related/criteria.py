@@ -1,8 +1,6 @@
 import torch
 from torchmetrics.image import StructuralSimilarityIndexMeasure, PeakSignalNoiseRatio
 
-from layers import PCC as PearsonCorrCoef
-
 
 """请勿编写无法使用CUDA加速的函数，否则会大大影响CUDA设备的训练速度！"""
 
@@ -81,6 +79,8 @@ def PCC(Y_HAT: torch.Tensor, Y: torch.Tensor, size_averaged: bool = True):
     :param size_averaged: 是否进行批量平均
     :return: 计算结果张量
     """
+    from layers import PCC as PearsonCorrCoef
+
     if size_averaged:
         kwargs = {'reduction': 'sum'}
     else:

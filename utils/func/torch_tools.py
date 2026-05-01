@@ -1,21 +1,26 @@
 import functools
 
 import torch
-from torch import cuda, nn as nn
+from torch import nn as nn
 from torch.nn import init as init
 
-from layers import GANLoss
-from layers import PCCLoss
-from layers import SSIMLoss
-
 loss_es = ["l1", "entro", "mse", "huber", "ssim", "pcc", 'gan']
-init_funcs = ["normal", "xavier", "zero", "state", 'constant', 'trunc_norm']
+init_funcs = ["normal", "xavier_uni", "xavier_norm", "zero", "state", 'constant', 'trunc_norm', "kaiming_normal"]
 optimizers = ["sgd", "asgd", "adagrad", "adadelta", "rmsprop", "adam", "adamax"]
 activations = ['sigmoid', 'relu', 'lrelu', 'tanh']
 lr_schedulers = ["lambda", "step", 'constant', 'multistep', 'cosine', 'plateau']
 
 
 def get_optimizer(net: torch.nn.Module, optim_str, lr, w_decay, **kwargs):
+    """根据字符串标识创建并返回对应的 PyTorch 优化器。
+
+    :param net: 需要被优化的网络模块。
+    :param optim_str: 优化器名称字符串。
+    :param lr: 学习率。
+    :param w_decay: 权重衰减系数。
+    :param kwargs: 传递给优化器构造函数的其他关键字参数。
+    :return: 已构造完成的 PyTorch 优化器实例。
+    """
     if optim_str == "asgd":
         # 使用随机平均梯度下降优化器
         return torch.optim.ASGD(
@@ -83,6 +88,10 @@ def get_ls_fn(ls_str, **kwargs):
     :param kwargs: 输入到损失值计算模块中的关键词参数。请注意，每个损失值计算模块的关键词参数可能不同！建议输入关键词参数时只选用一种损失值计算模块。
     :return: 损失函数模块
     """
+    from layers import GANLoss
+    from layers import PCCLoss
+    from layers import SSIMLoss
+
     if ls_str == "l1":
         return nn.L1Loss(**kwargs)
     elif ls_str == "entro":
@@ -115,8 +124,10 @@ def init_wb(func_str, **kwargs):
         mean, std = kwargs.pop('mean', 0), kwargs.pop('std', 1)
         w_init = functools.partial(init.normal_, mean=mean, std=std)
         b_init = functools.partial(init.normal_, mean=mean, std=std)
-    elif func_str == "xavier":
+    elif func_str == "xavier_uni":
         w_init, b_init = init.xavier_uniform_, init.zeros_
+    elif func_str == "xavier_norm":
+        w_init, b_init = init.xavier_normal, init.zeros_
     elif func_str == "zero":
         w_init, b_init = init.zeros_, init.zeros_
     elif func_str == 'constant':
@@ -130,6 +141,8 @@ def init_wb(func_str, **kwargs):
         b_init = init.zeros_
     elif func_str == 'skip':
         w_init, b_init = lambda ts: None, lambda ts: None
+    elif func_str == "kaiming_normal":
+        w_init, b_init = init.kaiming_normal_, init.zeros_
     else:
         raise NotImplementedError(f"不支持的初始化方式{func_str}, 当前支持的初始化方式包括{init_funcs}")
 
@@ -148,12 +161,12 @@ def init_wb(func_str, **kwargs):
         elif isinstance(module_s, nn.modules.batchnorm._NormBase):
             # 使用"全0法"初始化批次标准化层的权重和偏置量会导致计算结果均为0，因此将被跳过！
             # 泽维尔初始化不支持低于二维的张量初始化，因此将替换为正态初始化！
-            if func_str == 'xavier' or func_str == 'zero':
+            if func_str == 'xavier' or func_str == 'kaiming_normal' or func_str == 'zero':
                 w_init_impl, b_init_impl = init.normal_, init.normal_
         elif module_s.__module__ == 'torch.nn.modules.normalization':
             # 使用"全0法"初始化批次标准化层的权重和偏置量会导致计算结果均为0，因此将被跳过！
             # 泽维尔初始化不支持低于二维的张量初始化，因此将替换为正态初始化！
-            if func_str == 'xavier' or func_str == 'zero':
+            if func_str == 'xavier' or func_str == 'kaiming_normal' or func_str == 'zero':
                 w_init_impl, b_init_impl = init.normal_, init.normal_
 
         if hasattr(module_s, 'weight') and module_s.weight is not None:

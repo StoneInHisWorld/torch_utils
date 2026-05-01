@@ -1,7 +1,5 @@
 import functools
 
-from sympy import false
-
 from ... import check_prepare_args
 
 supported_ls_fns = ['pcc', 'cGAN']

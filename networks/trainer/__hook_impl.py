@@ -15,8 +15,8 @@ class hook:
         @wraps(func)
         def wrapper(*args, **kwargs):
             self.trainer = args[0]
-            self.with_hook = self.trainer.runtime_cfg['with_hook']
-            self.hook_mute = self.trainer.runtime_cfg['hook_mute']
+            self.with_hook = self.trainer.config['with_hook']
+            self.hook_mute = self.trainer.config['hook_mute']
             if self.with_hook:
                 __f_handles, __b_handles = self.__deal_with_hook(self.trainer)
             ret = func(*args, **kwargs)

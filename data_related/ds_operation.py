@@ -1,4 +1,5 @@
 import random
+import warnings
 from typing import Sized, Tuple
 
 import numpy as np
@@ -6,7 +7,6 @@ import torch
 import torchvision.transforms.functional as F
 from torch.utils.data import DataLoader as DLoader
 
-from data_related.dataloader import DataLoader, LazyDataLoader
 from data_related.datasets import DataSet, LazyDataSet
 
 
@@ -22,89 +22,29 @@ def k1_split_data(dataset: DataSet or LazyDataSet,
     """
     assert 0 < train <= 1.0, '训练集、验证集比例之和须为1'
     # 数据集分割
-    print('\r正在进行数据集分割……', flush=True)
+    # print('\r正在进行数据集分割……', flush=True)
     data_len = len(dataset)
     train_len = int(data_len * train)
     ranger = (r for r in np.split(np.arange(data_len), (train_len,)) if len(r) > 0)
     return (
-        [
-            DLoader(
-                r, shuffle=shuffle,
-                collate_fn=lambda d: d[0]  # 避免让数据升维。每次只抽取一个数字
-            )
+        [   # collate_fn避免让数据升维。每次只抽取一个数字
+            DLoader(r, shuffle=shuffle, collate_fn=lambda d: d[0])
         ]
         for r in ranger
     )
 
 
-def split_data(dataset: DataSet or LazyDataSet, k, train=0.8, shuffle=True):
+def split_data(dataset: DataSet or LazyDataSet, k, train_portion=0.8, shuffle=True):
     # 提取超参数
     if k == 1:
-        return k1_split_data(dataset, train, shuffle)
+        assert 0 <= train_portion <= 1.0, f'训练验证比参数需要在[0, 1]范围内，收到的训练验证比为{train_portion}'
+        return k1_split_data(dataset, train_portion, shuffle)
     elif k > 1:
+        if train_portion < 1.0:
+            warnings.warn(f"训练验证比参数train_portion{train_portion}与k折参数{k}冲突，k>1时训练比例参数将无效！")
         return k_fold_split(dataset, k, shuffle)
     else:
         raise ValueError(f'不正确的k值={k}，k值应该大于0，且为整数！')
-
-
-# def default_transit_fn(batch, **kwargs):
-#     """默认数据供给传输函数，本函数不进行任何操作。
-#     DataLoader每次从内存取出数据后，都会调用本函数对批次进行预处理。
-#     数据传输函数用于进行数据批量的设备迁移等操作。
-#
-#     :param batch: 需要预处理的数据批
-#     :param kwargs: 预处理所用关键字参数
-#     :return: 数据批次
-#     """
-#     return batch
-
-
-def to_loader(
-        dataset: DataSet or LazyDataSet, batch_size: int = 1, transit_fn=None,
-        transit_kwargs=None, bkg_gen=True, max_prefetch=3, device=torch.device('cpu'),
-        non_blocking=True, share_memory=True,  # 数据迁移参数
-        **kwargs
-):
-    """根据数据集类型转化为数据集加载器。
-    为了适配多进程处理，Dataset对象在转化为DataLoader对象前，会删除所携带的预处理方法。
-
-    :param dataset: 将要转换成数据集加载器的数据集
-    :param transit_fn: 数据供给传输函数，用于进行数据批量的设备迁移等操作。
-        DataLoader每次从内存取出数据后，都会调用transit_fn对数据批次进行迁移操作。
-        方法签名要求为def transit_fn(batch, **kwargs) -> batch:  。
-        没有指定迁移方法时会指定默认迁移方法，不进行任何操作
-    :param transit_kwargs: 数据供给传输函数的关键字参数。
-        调用transit_fn时，一并输入到transit_fn中的关键字参数
-    :param batch_size: 数据批次大小
-    :param bkg_gen: 是否采用BackgroundGenerator
-        BackgroundGenerator可利用多线程机制提前取出数据批
-    :param max_prefetch: BackgroundGenerator提前取出的数据批数目
-    :param kwargs: pytorch.utils.data.DataLoader的额外参数
-    :return: 数据集加载器
-    """
-    if transit_kwargs is None:
-        transit_kwargs = {}
-    assert isinstance(max_prefetch, int), "数据集加载器的max_prefetch最大预先加载数需为整型int!" \
-                                          "请检查settings.json文件夹中的dl_kwargs赋值是否合法"
-    if isinstance(dataset, LazyDataSet):
-        # 懒加载需要保存有数据集预处理方法
-        return LazyDataLoader(
-            dataset, transit_fn, transit_kwargs, batch_size,
-            dataset.i_cfn, bkg_gen, max_prefetch,
-            collate_fn=dataset.collate_fn, **kwargs
-        )
-    elif isinstance(dataset, DataSet):
-        # 删除预处理方法，以便DataLoader的多进程加载
-        dataset.pop_preprocesses()
-        # if hasattr(dataset, 'transformer')
-        # del dataset.transformer
-        return DataLoader(
-            dataset, transit_fn, transit_kwargs,
-            bkg_gen, max_prefetch, device, non_blocking, share_memory,
-            batch_size, collate_fn=dataset.collate_fn, **kwargs
-        )
-    else:
-        raise TypeError('接收到的dataset并非LazyDataSet或是DataSet类型！')
 
 
 def k_fold_split(dataset: DataSet or LazyDataSet, k: int = 10, shuffle: bool = True):
@@ -211,3 +151,21 @@ def denormalize(data: torch.Tensor, mean=None, std=None, range=None) -> torch.Te
         return ((data - d_min) * range / (d_max - d_min)) + low
     else:
         raise ValueError("反标准化需要指定均值和方差，或者指定数据区间")
+
+
+def judge_shape(variable):
+    """
+    判断variable的形状。支持的variable类型包括PIL.Image.Image，torch.Tensor，numpy.ndarray
+
+    :param variable: 待判断的变量
+    :return: 判断的形状
+    :throws: NotImplementedError: 不支持判断时抛出
+    """
+    from PIL.Image import Image
+
+    if isinstance(Image, variable):
+        return variable.size
+    elif isinstance(torch.Tensor, variable) or isinstance(np.ndarray, variable):
+        return variable.shape
+    else:
+        raise NotImplementedError(f'不支持识别的类型{variable}，无法判断其形状！')

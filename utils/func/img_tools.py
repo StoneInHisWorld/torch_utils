@@ -6,7 +6,6 @@ import numpy as np
 from PIL import Image as IMAGE, ImageDraw, ImageFont
 from PIL.Image import Image
 from tqdm import tqdm
-# from numba import jit
 
 
 from utils.func.pytools import check_para
@@ -77,7 +76,7 @@ def crop_img(img: Image, required_shape, loc: str or Tuple[int, int]) -> Image:
     iw, ih = img_size
     rw, rh = required_shape
     assert rh <= ih and rw <= iw, (
-        f'裁剪尺寸{required_shape}不能超出图片尺寸{img_size}！'
+        f'裁剪尺寸{required_shape}的其中之一不能超出图片尺寸{img_size}的任一维度！'
     )
     if isinstance(loc, str):
         if loc == 'lt':
@@ -173,7 +172,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
     else:
         raise NotImplementedError(f'暂未识别的图片模式组合{modes}，无法进行背景板颜色定义以及返图模式推断')
     # 设置字体大小
-    # font = ImageFont.truetype(font_path, text_size)
+    font = ImageFont.truetype(font_path, text_size)
 
     def _impl(footnotes: str = "",
               *imgs_and_labels: Tuple[Image, str]
@@ -210,7 +209,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
             draw.text(
                 ((i + 1) * border_size + i * cb_width, border_size),
                 label, fill=text_color
-                # , font=font
+                , font=font
             )
             # 拼接图片
             whiteboard.paste(
@@ -224,7 +223,7 @@ def concat_imgs(*groups_of_imgs_labels_list: Tuple[Image, str],
         draw.text(
             (border_size, wb_height - ftn_height - border_size),
             'COMMENT: \n' + footnotes, fill=text_color
-            # , font=font
+            , font=font
         )
         return whiteboard
 
@@ -370,7 +369,6 @@ def get_mean_LI_of_holes(images: np.ndarray,
     assert len(hole_poses) == len(hole_sizes), \
         f'挖孔位置需要和挖孔大小一一对应，提供了{len(hole_poses)}个位置但只收到了{len(hole_sizes)}个大小要求。'
 
-    # @jit
     def __dig_holes(image):
         """挖孔函数"""
         mean_LIs = []

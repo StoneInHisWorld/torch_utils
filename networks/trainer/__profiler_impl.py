@@ -5,12 +5,11 @@ import torch
 from torch.profiler import ProfilerActivity
 from torch.profiler import record_function
 
-from utils.accumulator import Accumulator
-from networks.decorators import prepare
-from utils.history import History
+from networks.trainer import _prepare_train
+from utils import History, Accumulator
 
 
-@prepare('train')
+@_prepare_train
 def profiling_impl(n_epochs, log_path, trainer, data_iter):
     # 提取训练器参数
     net = trainer.module
@@ -25,11 +24,8 @@ def profiling_impl(n_epochs, log_path, trainer, data_iter):
     # 进行性能测试
     with torch.profiler.profile(
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-            # schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
-            # on_trace_ready=torch.profiler.tensorboard_trace_handler('./log'),
             record_shapes=True,
             profile_memory=True,
-            # with_stack=True,
     ) as prof:
         for epoch in range(n_epochs):
             with record_function("epoch_switch_consume"):
@@ -58,7 +54,6 @@ def profiling_impl(n_epochs, log_path, trainer, data_iter):
                                 *correct_s, *[ls * num_examples for ls in ls_es],
                                 num_examples
                             )
-                    # with torch.profiler.record_function("batch_switch_consume"):
                     trainer.pbar.update(1)
             with record_function("epoch_switch_consume"):
                 for scheduler in scheduler_s:
@@ -67,7 +62,6 @@ def profiling_impl(n_epochs, log_path, trainer, data_iter):
                     criteria_names + loss_names,
                     [metric[i] / metric[-1] for i in range(len(metric) - 1)]
                 )
-        # prof.step()
     trainer.pbar.close()
     with open(os.path.join(
             log_path,

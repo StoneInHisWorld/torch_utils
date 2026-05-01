@@ -3,7 +3,7 @@ import sys
 sys.path.append('where/you/put/torch_utils')
 sys.path.append('where/you/put/project')
 
-from networks.trainer import Trainer
+from networks.trainer import NetTrainer
 from utils.ctrl_panel import ControlPanel
 # TODO: 选择读取数据集的类
 from your_DAO_module import your_DAO_class as DataSet
@@ -61,7 +61,7 @@ if __name__ == '__main__':
                 [(hps['ls_fn'], {'lambda_l1': hps['lambda_l1']})]
             )
 
-            trainer = Trainer(
+            trainer = NetTrainer(
                 Net, net_init_args, net_init_kwargs, (fea_chan, *fea_shape),
                 prepare_args, criterion_a, cp['t_kwargs'], hps
             )

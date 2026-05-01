@@ -10,14 +10,16 @@ class History:
         """
         self.__keys = list(args)
         for k in args:
-            self.__setattr__(k, [])
+            setattr(self, k, [])
+            # self.__setattr__(k, [])
 
     def __getitem__(self, key):
         try:
             return getattr(self, key)
         except AttributeError:
             # 如果没有该记录项名，则自动创建
-            self.__setattr__(key, [])
+            setattr(self, key, [])
+            # self.__setattr__(key, [])
             self.__keys.append(key)
             return getattr(self, key)
 
@@ -37,6 +39,12 @@ class History:
         return ret
 
     def __iadd__(self, other):
+        for k, h in other:
+            assert hasattr(self, k), f'另一项历史记录有本项不记录的项{k}'
+            self[k].extend(h)
+        return self
+
+    def __add__(self, other):
         for k, h in other:
             assert hasattr(self, k), f'另一项历史记录有本项不记录的项{k}'
             self[k].extend(h)

@@ -84,21 +84,32 @@ def plot_history(history,
         matplotlib.use('TkAgg')
     # 设置整张图片的属性
     fig, axes = plt.subplots(
-        min(max_nrows, len(subplots_titles)), n_cols,
-        sharex='col', figsize=(7, 7.5)
+        min(max_nrows, len(subplots_titles)), 
+        n_cols,
+        # sharex='col', 
+        figsize=figsize
     )
-    fig.set_figheight(figsize[1])
-    fig.set_figwidth(figsize[0])
-    # 设置子图横轴标签
-    if n_cols > 1:
-        for axi in axes.T:
-            axi[-1].set_xlabel('epochs')
-    else:
-        axes[-1].set_xlabel('epochs')
+    # fig.set_figheight(figsize[1])
+    # fig.set_figwidth(figsize[0])
+    # # 设置子图横轴标签
+    # if n_cols > 1:
+    #     for axi in axes.T:
+    #         axi[-1].set_xlabel('epochs')
+    # else:
+    #     axes[-1].set_xlabel('epochs')
     axes = axes.flatten()
-    # 设置子图纵轴标签
-    for subplots_title, axi in zip(subplots_titles, axes):
+    # 设置子图横纵轴标签
+    for i, (subplots_title, axi) in enumerate(zip(subplots_titles, axes)):
+        if i < len(subplots_titles) - n_cols:
+            # 将非最后行的子图横轴标签设置为不可见
+            axi.get_xaxis().set_visible(False)
+        else:
+            axi.set_xlabel('epochs')
         axi.set_ylabel(subplots_title)
+    # for _ in range(n_cols):
+    #     # 将最后列数个子图的横轴标签设置为epochs
+    #     axes[-(_ + 1)].get_xaxis().set_visible(True)
+    #     axes[-(_ + 1)].set_xlabel('epochs')
     # 绘制日志内容
     for label, log in history:
         l_type = filter_common_label(label)
@@ -113,16 +124,19 @@ def plot_history(history,
     # 设置图片的注解部分
     if title:
         fig.suptitle(title)
+    # 设置子图的图例，如果有数据则设置，无数据则将子图进行隐藏
     for ax in axes:
-        ax.legend()
+        if len(ax.lines) > 0:
+            ax.legend()
+        else:
+            ax.set_visible(False)
+    fig.tight_layout()
     # 保存图片
     if savefig_as:
         if not os.path.exists(os.path.split(savefig_as)[0]):
             os.makedirs(os.path.split(savefig_as)[0])
         plt.savefig(savefig_as)
         print(f'已保存历史趋势图于{savefig_as}')
-    # if not mute:
-    #     plt.show()
     plt.show()
     if not accumulative:
         plt.close(fig)

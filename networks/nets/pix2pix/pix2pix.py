@@ -1,9 +1,9 @@
-import warnings
 from collections import OrderedDict
 from typing import Iterable
 
 import torch
 
+from networks import net_train_state, net_finetune_state
 from networks.basic_nn import BasicNN
 from networks.nets.pix2pix.pix2pix_d import Pix2Pix_D
 from networks.nets.pix2pix.pix2pix_g import Pix2Pix_G
@@ -51,6 +51,9 @@ class Pix2Pix(BasicNN):
         :param direction: 方向，'AtoB'意为从特征集预测到标签集，'BtoA'意为从标签集预测到特征集
         :param kwargs: BasicNN关键词参数
         """
+        self.__doc__ = (f"Pix2Pix的接口说明：\n{self.__init__.__doc__}" +
+                        f"生成器Pix2Pix_G的接口说明：\n{Pix2Pix_G.__init__.__doc__}" +
+                        f"分辨器Pix2Pix_D的接口说明：\n{Pix2Pix_D.__init__.__doc__}")
         self.direction = direction
         device = torch.device('cpu') if 'device' not in kwargs.keys() else kwargs['device']
         g_kwargs.update({"device": device if "device" not in g_kwargs.keys() else g_kwargs["device"]})
@@ -64,35 +67,48 @@ class Pix2Pix(BasicNN):
             assert "input_size" not in d_kwargs.keys(), f"{Pix2Pix_D.__name__}不支持赋值输入大小！"
             d_kwargs['input_size'] = (g_args[1] + g_args[2], *netG.input_size[2:])
             netD = Pix2Pix_D(g_args[1] + g_args[2], *d_args, **d_kwargs)
-            super(Pix2Pix, self).__init__(OrderedDict([
-                ('netG', netG), ('netD', netD)
-            ]), **kwargs)
+            super(Pix2Pix, self).__init__(OrderedDict([('netG', netG), ('netD', netD)]), **kwargs)
         else:
-            super(Pix2Pix, self).__init__(netG, **kwargs)
+            super(Pix2Pix, self).__init__(OrderedDict([('netG', netG)]), **kwargs)
 
-    def activate(self, is_train: bool,
+    def _get_optimizer(self, *o_args):
+        assert len(o_args) == 0, f"{self.__class__.__name__}不支持赋值优化器"
+        return [], self.netG.lr_names + self.netD.lr_names
+
+    def _get_lr_scheduler(self, *l_args):
+        assert len(l_args) == 0, f"{self.__class__.__name__}不接受学习率规划器参数！"
+        return []
+
+    def _get_ls_fn(self, *ls_args):
+        assert len(ls_args) == 0, f"{self.__class__.__name__}不接受损失函数参数！"
+        return [], []
+
+    def activate(self, usage: str,
                  o_args: Iterable, l_args: Iterable, tr_ls_args: Iterable,
-                 ts_ls_args: Iterable):
-        super().activate(is_train, o_args, l_args, tr_ls_args, ts_ls_args)
-        if is_train:
-            if len(self.optimizer_s) > 0:
-                warnings.warn(f"{self.__class__.__name__}不接受优化器参数！"
-                              f"将去除已赋值的优化器，并使用生成器和分辨器的学习率名称")
-                self.optimizer_s = []
-            self.lr_names = self.netG.lr_names + self.netD.lr_names
-            if len(self.scheduler_s) > 0:
-                warnings.warn(f"{self.__class__.__name__}不接受学习率规划器参数！"
-                              f"将去除已赋值的学习率规划器")
-                self.scheduler_s = []
-            if len(self.train_ls_fn_s) > 0:
-                warnings.warn(f"{self.__class__.__name__}不接受训练损失函数参数！"
-                              f"将去除已赋值的训练损失函数，并使用生成器和分辨器的训练损失函数名称")
-                self.train_ls_fn_s = []
+                 ts_ls_args: Iterable = None):
+        super(Pix2Pix, self).activate(usage, o_args, l_args, tr_ls_args, ts_ls_args)
+        # if is_train:
+        #     if len(self.optimizer_s) > 0:
+        #         warnings.warn(f"{self.__class__.__name__}不接受优化器参数！"
+        #                       f"将去除已赋值的优化器，并使用生成器和分辨器的学习率名称")
+        #         self.optimizer_s = []
+        #     self.lr_names = self.netG.lr_names + self.netD.lr_names
+        #     if len(self.scheduler_s) > 0:
+        #         warnings.warn(f"{self.__class__.__name__}不接受学习率规划器参数！"
+        #                       f"将去除已赋值的学习率规划器")
+        #         self.scheduler_s = []
+        #     if len(self.train_ls_fn_s) > 0:
+        #         warnings.warn(f"{self.__class__.__name__}不接受训练损失函数参数！"
+        #                       f"将去除已赋值的训练损失函数，并使用生成器和分辨器的训练损失函数名称")
+        #         self.train_ls_fn_s = []
+        #     self.train_ls_names = self.netG.train_ls_names + self.netD.train_ls_names
+        # if len(self.test_ls_fn_s) > 0:
+        #     warnings.warn(f"{self.__class__.__name__}不接受测试损失函数参数！"
+        #                   f"将去除已赋值的测试损失函数，并使用生成器和分辨器的测试损失函数名称")
+        #     self.test_ls_fn_s = []
+        # self.test_ls_names = self.netG.test_ls_names
+        if usage in [net_train_state, net_finetune_state]:
             self.train_ls_names = self.netG.train_ls_names + self.netD.train_ls_names
-        if len(self.test_ls_fn_s) > 0:
-            warnings.warn(f"{self.__class__.__name__}不接受测试损失函数参数！"
-                          f"将去除已赋值的测试损失函数，并使用生成器和分辨器的测试损失函数名称")
-            self.test_ls_fn_s = []
         self.test_ls_names = self.netG.test_ls_names
 
     def get_lr_groups(self):
@@ -111,23 +127,48 @@ class Pix2Pix(BasicNN):
         :param input: 输入特征批
         :return: 生成器预测图片批
         """
-        return self.netG(input)
+        ret = self.netG(input)
+        return ret
 
-    def forward_backward(self, X, y, backward=True):
+    # def forward_backward(self, X, y):
+    #     # 前向传播
+    #     assert X.shape == y.shape, (f"Pix2Pix要求输入的标签集数据与特征集数据形状相同，"
+    #                                 f"然而得到的输入特征集形状为{X.shape}，标签集形状为{y.shape}")
+    #     AtoB = self.direction == 'AtoB'
+    #     X, y = [X, y] if AtoB else [y, X]
+    #     pred = self(X)
+    #     if backward:
+    #         self.netD.requires_grad_(True)
+    #         _, D_ls = self.netD.forward_backward((X, pred), y)
+    #         self.netD.requires_grad_(False)
+    #         _, G_ls = self.netG.forward_backward((X, pred, self.netD), y)
+    #         ls_es = (*G_ls, *D_ls)
+    #     else:
+    #         with torch.no_grad():
+    #             _, G_ls = self.netG.forward_backward((X, pred, self.netD), y)
+    #             ls_es = (*G_ls, )
+    #     return pred, ls_es
+
+    def _train(self, X, y):
         # 前向传播
         assert X.shape == y.shape, (f"Pix2Pix要求输入的标签集数据与特征集数据形状相同，"
                                     f"然而得到的输入特征集形状为{X.shape}，标签集形状为{y.shape}")
         AtoB = self.direction == 'AtoB'
         X, y = [X, y] if AtoB else [y, X]
         pred = self(X)
-        if backward:
-            self.netD.requires_grad_(True)
-            _, D_ls = self.netD.forward_backward((X, pred), y, backward=backward)
-            self.netD.requires_grad_(False)
-            _, G_ls = self.netG.forward_backward((X, pred, self.netD), y, backward=backward)
-            ls_es = (*G_ls, *D_ls)
-        else:
-            with torch.no_grad():
-                _, G_ls = self.netG.forward_backward((X, pred, self.netD), y, backward=backward)
-                ls_es = (*G_ls, )
-        return pred, ls_es
+        self.netD.requires_grad_(True)
+        _, D_ls = self.netD.forward_backward((X, pred), y)
+        self.netD.requires_grad_(False)
+        _, G_ls = self.netG.forward_backward((X, pred, self.netD), y)
+        return pred, [*G_ls, *D_ls]
+
+    def _predict(self, X, y):
+        # 前向传播
+        assert X.shape == y.shape, (f"Pix2Pix要求输入的标签集数据与特征集数据形状相同，"
+                                    f"然而得到的输入特征集形状为{X.shape}，标签集形状为{y.shape}")
+        AtoB = self.direction == 'AtoB'
+        X, y = [X, y] if AtoB else [y, X]
+        pred = self(X)
+        _, G_ls = self.netG.forward_backward((X, pred, self.netD), y)
+        return pred, (*G_ls,)
+
