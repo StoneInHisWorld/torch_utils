@@ -62,6 +62,13 @@ def check_path(path: str, way_to_mkf=None):
 
 
 def check_para(name, value, val_range) -> bool:
+    """检查参数取值是否在允许范围内，不合法时发出警告。
+
+    :param name: 参数名称。
+    :param value: 参数当前取值。
+    :param val_range: 参数允许取值范围（容器类型）。
+    :return: 合法返回 True，不合法返回 False。
+    """
     if value in val_range:
         return True
     else:
@@ -71,6 +78,14 @@ def check_para(name, value, val_range) -> bool:
 
 def multithreading_pool(n_workers: int = 8, mute: bool = True, desc: str = '',
                         *tasks: Tuple[Callable, Tuple, dict]) -> Iterable:
+    """按给定并发数执行任务池并收集每个线程的返回结果。
+
+    :param n_workers: 最大并发线程数。
+    :param mute: 是否静默运行；False 时显示进度条。
+    :param desc: 进度条描述信息。
+    :param tasks: 任务元组序列，元素格式为 (func, args, kwargs)。
+    :return: 各任务执行结果列表（按任务完成收集）。
+    """
     results = []
     processors = []
     if mute:
@@ -122,6 +137,17 @@ def multithreading_pool(n_workers: int = 8, mute: bool = True, desc: str = '',
 def multithreading_map(data: Iterable and Sized, task: Callable,
                        mute: bool = True, n_workers: int = 8, desc: str = '',
                        *args, **kwargs):
+    """将数据切分后并行映射到任务函数，并按顺序汇总结果。
+
+    :param data: 可迭代且可求长度的数据集。
+    :param task: 执行映射的任务函数。
+    :param mute: 是否静默运行；False 时显示进度条。
+    :param n_workers: 最大并发线程数。
+    :param desc: 进度条描述信息。
+    :param args: 传递给 task 的附加位置参数。
+    :param kwargs: 传递给 task 的附加关键字参数。
+    :return: 映射结果列表。
+    """
     data_l = len(data)
     batch_l = math.ceil(data_l / n_workers)
     data = [data[i: min(i + batch_l, data_l)] for i in range(0, data_l, batch_l)]
@@ -175,10 +201,20 @@ def get_computer_name(computer):
 
 
 def is_multiprocessing(n_workers):
+    """根据工作线程数判断是否启用多进程/高并发模式。
+
+    :param n_workers: 工作线程数。
+    :return: 当线程数大于等于 5 时返回 True，否则返回 False。
+    """
     return n_workers >= 5
 
 
 def get_signature(module):
+    """提取可调用对象的参数签名并按参数类型分类返回。
+
+    :param module: 可调用对象（函数、方法或类）。
+    :return: 四元组 (仅位置参数, 位置或关键字参数, 仅关键字参数, 必填参数)。
+    """
     module_sig = inspect.signature(module)
     # 分类参数
     positional_only = []  # 仅位置参数
